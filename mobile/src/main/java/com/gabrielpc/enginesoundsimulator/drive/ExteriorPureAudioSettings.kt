@@ -9,7 +9,7 @@ import com.gabrielpc.enginesoundsimulator.AppPreferenceStores
  * This mirrors the transmission and shift global trims: it is a driver listening preference,
  * not an authored-bank change. The per-car ENGINE preset gain remains an independent multiplier.
  */
-data class ExteriorPureAudioSettings(val globalGain: Float = 0.5f)
+data class ExteriorPureAudioSettings(val globalGain: Float = 1.0f)
 
 internal class ExteriorPureAudioSettingsRepository(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences(
@@ -18,7 +18,7 @@ internal class ExteriorPureAudioSettingsRepository(context: Context) {
     )
 
     fun load(): ExteriorPureAudioSettings = ExteriorPureAudioSettings(
-        globalGain = preferences.getFloat("global_gain", 0.5f).coerceIn(0.25f, 1.0f),
+        globalGain = preferences.getFloat("global_gain", 1.0f).coerceIn(0.25f, 1.0f),
     )
 
     fun save(settings: ExteriorPureAudioSettings) {

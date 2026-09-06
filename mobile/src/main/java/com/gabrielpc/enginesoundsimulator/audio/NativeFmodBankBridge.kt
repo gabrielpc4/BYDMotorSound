@@ -60,6 +60,9 @@ internal class NativeFmodBankBridge {
 
     external fun setHostGains(engine: Float, effects: Float)
 
+    /** Identifies the loaded car bank so native code can apply per-car audio policies. */
+    external fun setLoadedProfileId(profileId: String)
+
     external fun setCategoryGains(transmission: Float, gearShift: Float, turbo: Float, backfire: Float)
 
     external fun setBackfireOnly(enabled: Boolean)
@@ -85,6 +88,9 @@ internal class NativeFmodBankBridge {
 
     /** Lower bound applied to FMOD engine/transmission throttle parameters. */
     external fun setMinimumAudioThrottle(minimum: Float)
+
+    /** Separate ramp durations for FMOD pedal throttle across the minimum→full span. */
+    external fun setPedalAudioThrottleRampMilliseconds(rampUpMs: Float, rampDownMs: Float)
 
     external fun setEventOverrides(mutedEvents: Array<String>, soloEvents: Array<String>)
 

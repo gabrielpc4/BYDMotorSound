@@ -209,7 +209,7 @@ android {
             create(name) {
                 dimension = "catalog"
                 applicationIdSuffix = ".$name"
-                resValue("string", "app_name", "Engine Sounds • ${name.replaceFirstChar(Char::uppercase)}")
+                resValue("string", "app_name", "${name.replaceFirstChar(Char::uppercase)} Cars • Engine Sounds")
                 buildConfigField("String", "CAR_CATALOG_GROUP", "\"$group\"")
                 buildConfigField("boolean", "EMBEDDED_BANKS", (bankDelivery == "embedded").toString())
             }

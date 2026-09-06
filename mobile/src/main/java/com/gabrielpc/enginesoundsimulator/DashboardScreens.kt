@@ -70,10 +70,10 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
@@ -1411,10 +1411,12 @@ private fun CarPickerSearchField(
 ) {
     var editingEnabled by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(editingEnabled) {
         if (editingEnabled) {
             focusRequester.requestFocus()
+            keyboardController?.show()
         }
     }
 
@@ -1431,7 +1433,7 @@ private fun CarPickerSearchField(
             value = query,
             onValueChange = onQueryChange,
             singleLine = true,
-            readOnly = !editingEnabled,
+            enabled = editingEnabled,
             textStyle = TextStyle(
                 color = White,
                 fontSize = 12.sp,
@@ -1440,22 +1442,7 @@ private fun CarPickerSearchField(
             cursorBrush = SolidColor(Cyan),
             modifier = Modifier
                 .fillMaxWidth()
-                .focusRequester(focusRequester)
-                .focusProperties {
-                    canFocus = editingEnabled
-                }
-                .then(
-                    if (!editingEnabled) {
-                        Modifier.clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                        ) {
-                            editingEnabled = true
-                        }
-                    } else {
-                        Modifier
-                    }
-                ),
+                .focusRequester(focusRequester),
             decorationBox = { innerTextField ->
                 Box(contentAlignment = Alignment.CenterStart) {
                     if (query.isEmpty()) {
@@ -1471,6 +1458,19 @@ private fun CarPickerSearchField(
                 }
             },
         )
+
+        if (!editingEnabled) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {
+                        editingEnabled = true
+                    },
+            )
+        }
     }
 }
 

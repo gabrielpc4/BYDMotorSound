@@ -7,6 +7,7 @@ import android.os.Process
 import android.util.Log
 import com.gabrielpc.enginesoundsimulator.diagnostics.DebugTelemetry
 import com.gabrielpc.enginesoundsimulator.drive.MinimumAudioThrottle
+import com.gabrielpc.enginesoundsimulator.drive.PedalAudioThrottleRampMilliseconds
 import com.gabrielpc.enginesoundsimulator.simulation.nativeFmodSpatialCoordinates
 import java.io.File
 import java.io.FileInputStream
@@ -66,17 +67,21 @@ class EngineAudioEngine(context: Context) {
     private val shiftSoundOverride = AtomicBoolean(false)
     private val shiftOverrideGain = AtomicReference(0.5f)
     private val globalTransmissionGain = AtomicReference(0.5f)
-    private val exteriorPureGlobalGain = AtomicReference(0.5f)
+    private val exteriorPureGlobalGain = AtomicReference(1.0f)
     private val shiftSoundEnabled = AtomicBoolean(true)
     private val transmissionAudioEnabled = AtomicBoolean(true)
     private val turboAudioEnabled = AtomicBoolean(true)
     private val backfireUseOriginal = AtomicBoolean(true)
     private val exteriorPureAudio = AtomicBoolean(false)
     private val minimumAudioThrottle = AtomicReference(MinimumAudioThrottle.DEFAULT)
+    private val pedalAudioThrottleRampUpMilliseconds = AtomicReference(PedalAudioThrottleRampMilliseconds.DEFAULT)
+    private val pedalAudioThrottleRampDownMilliseconds = AtomicReference(PedalAudioThrottleRampMilliseconds.DEFAULT)
     private val engineSampleDataReady = AtomicBoolean(false)
     private var sentBackfireOnly: Boolean? = null
     private var sentExteriorPureAudio: Boolean? = null
     private var sentMinimumAudioThrottle: Float? = null
+    private var sentPedalAudioThrottleRampUpMilliseconds: Int? = null
+    private var sentPedalAudioThrottleRampDownMilliseconds: Int? = null
 
     @Volatile
     private var focusChangeListener: ((AudioFocusEvent) -> Unit)? = null
@@ -179,6 +184,15 @@ class EngineAudioEngine(context: Context) {
 
     fun setMinimumAudioThrottle(minimum: Float) {
         minimumAudioThrottle.set(MinimumAudioThrottle.normalize(minimum))
+    }
+
+    fun setPedalAudioThrottleRampMilliseconds(rampUpMilliseconds: Int, rampDownMilliseconds: Int) {
+        pedalAudioThrottleRampUpMilliseconds.set(
+            PedalAudioThrottleRampMilliseconds.normalize(rampUpMilliseconds),
+        )
+        pedalAudioThrottleRampDownMilliseconds.set(
+            PedalAudioThrottleRampMilliseconds.normalize(rampDownMilliseconds),
+        )
     }
 
     fun setBackfireAllowedSamples(samples: Set<Int>) {
@@ -303,6 +317,8 @@ class EngineAudioEngine(context: Context) {
         sentBackfireOnly = null
         sentExteriorPureAudio = null
         sentMinimumAudioThrottle = null
+        sentPedalAudioThrottleRampUpMilliseconds = null
+        sentPedalAudioThrottleRampDownMilliseconds = null
         running.set(true)
         val runId = generation.incrementAndGet()
         val thread = Thread(
@@ -391,6 +407,7 @@ class EngineAudioEngine(context: Context) {
             }
             opened = true
             loadedBankProfileId.set(profile.id)
+            bridge.setLoadedProfileId(profile.id)
             engineSampleDataReady.set(bridge.engineSampleDataReady())
             Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
             lastTickNanos = System.nanoTime()
@@ -405,6 +422,14 @@ class EngineAudioEngine(context: Context) {
             val requestedMinimumAudioThrottle = minimumAudioThrottle.get()
             bridge.setMinimumAudioThrottle(requestedMinimumAudioThrottle)
             sentMinimumAudioThrottle = requestedMinimumAudioThrottle
+            val requestedRampUpMilliseconds = pedalAudioThrottleRampUpMilliseconds.get()
+            val requestedRampDownMilliseconds = pedalAudioThrottleRampDownMilliseconds.get()
+            bridge.setPedalAudioThrottleRampMilliseconds(
+                requestedRampUpMilliseconds.toFloat(),
+                requestedRampDownMilliseconds.toFloat(),
+            )
+            sentPedalAudioThrottleRampUpMilliseconds = requestedRampUpMilliseconds
+            sentPedalAudioThrottleRampDownMilliseconds = requestedRampDownMilliseconds
 
             while (isCurrent(runId)) {
                 val now = System.nanoTime()
@@ -535,6 +560,19 @@ class EngineAudioEngine(context: Context) {
                 if (requestedMinimumAudioThrottle != sentMinimumAudioThrottle) {
                     bridge.setMinimumAudioThrottle(requestedMinimumAudioThrottle)
                     sentMinimumAudioThrottle = requestedMinimumAudioThrottle
+                }
+                val requestedRampUpMilliseconds = pedalAudioThrottleRampUpMilliseconds.get()
+                val requestedRampDownMilliseconds = pedalAudioThrottleRampDownMilliseconds.get()
+                if (
+                    requestedRampUpMilliseconds != sentPedalAudioThrottleRampUpMilliseconds ||
+                    requestedRampDownMilliseconds != sentPedalAudioThrottleRampDownMilliseconds
+                ) {
+                    bridge.setPedalAudioThrottleRampMilliseconds(
+                        requestedRampUpMilliseconds.toFloat(),
+                        requestedRampDownMilliseconds.toFloat(),
+                    )
+                    sentPedalAudioThrottleRampUpMilliseconds = requestedRampUpMilliseconds
+                    sentPedalAudioThrottleRampDownMilliseconds = requestedRampDownMilliseconds
                 }
                 engineSampleDataReady.set(bridge.engineSampleDataReady())
                 val currentLimiterPulse = limiterPulseSerial.get()

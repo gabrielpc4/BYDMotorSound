@@ -385,6 +385,76 @@ bool parseGuid(const std::string& text, FMOD_GUID* output) {
     return true;
 }
 
+constexpr char kSkylineProfileId[] = "assetto-nissan-skyline-r34";
+constexpr char kSkylineBlockedOffmidSample[] = "rb26_ex_5_offmid";
+
+std::string lowercaseCopy(const char* name) {
+    std::string lowered(name == nullptr ? "" : name);
+    std::transform(
+        lowered.begin(),
+        lowered.end(),
+        lowered.begin(),
+        [](unsigned char character) {
+            return static_cast<char>(std::tolower(character));
+        }
+    );
+    return lowered;
+}
+
+bool isBlockedSkylineSubSound(const char* name) {
+    if (name == nullptr || name[0] == '\0') {
+        return false;
+    }
+    const std::string lowered = lowercaseCopy(name);
+    if (lowered.find("_pop_") != std::string::npos) {
+        return true;
+    }
+    return lowered.find(kSkylineBlockedOffmidSample) != std::string::npos;
+}
+
+void muteBlockedSkylineChannelsInGroup(FMOD::ChannelGroup* group) {
+    if (group == nullptr) {
+        return;
+    }
+
+    int channelCount = 0;
+    group->getNumChannels(&channelCount);
+    for (int index = 0; index < channelCount; ++index) {
+        FMOD::Channel* channel = nullptr;
+        if (group->getChannel(index, &channel) != FMOD_OK || channel == nullptr) {
+            continue;
+        }
+
+        FMOD::Sound* channelSound = nullptr;
+        if (channel->getCurrentSound(&channelSound) != FMOD_OK || channelSound == nullptr) {
+            continue;
+        }
+
+        char soundName[512]{};
+        if (channelSound->getName(soundName, sizeof(soundName)) != FMOD_OK) {
+            continue;
+        }
+
+        if (!isBlockedSkylineSubSound(soundName)) {
+            continue;
+        }
+
+        channel->setVolume(0.0f);
+        channel->setMute(true);
+        channel->stop();
+    }
+
+    int groupCount = 0;
+    group->getNumGroups(&groupCount);
+    for (int index = 0; index < groupCount; ++index) {
+        FMOD::ChannelGroup* child = nullptr;
+        if (group->getGroup(index, &child) == FMOD_OK) {
+            muteBlockedSkylineChannelsInGroup(child);
+        }
+    }
+}
+
+
 class FmodRuntime;
 
 struct EventSlot {
@@ -689,7 +759,8 @@ public:
             tractionPulseCount > 0,
             simulationFrameId
         );
-        const float effectiveThrottle = effectiveAudioThrottleLocked(cleanThrottle);
+        const float targetThrottle = effectiveAudioThrottleLocked(cleanThrottle);
+        const float effectiveThrottle = rampPedalAudioThrottleLocked(targetThrottle, cleanDt);
         applyPedalAudioThrottleLocked(effectiveThrottle);
         if (perspective != perspective_) {
             switchPerspectiveLocked(perspective);
@@ -825,6 +896,11 @@ public:
         applyEventOverridesLocked();
     }
 
+    void setLoadedProfileId(const std::string& profileId) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        loadedProfileId_ = profileId;
+    }
+
     void setCategoryGains(float transmissionGain, float gearShiftGain, float turboGain, float backfireGain) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!active_) return;
@@ -924,6 +1000,20 @@ public:
         minimumAudioThrottle_ = clamped;
         if (!active_) return;
         applyMinimumAudioThrottleLocked();
+    }
+
+    void setPedalAudioThrottleRampMilliseconds(float rampUpMs, float rampDownMs) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const float clampedUp = std::clamp(rampUpMs, 0.0f, 5000.0f);
+        const float clampedDown = std::clamp(rampDownMs, 0.0f, 5000.0f);
+        if (
+            pedalAudioThrottleRampUpSeconds_ == clampedUp / 1000.0f &&
+            pedalAudioThrottleRampDownSeconds_ == clampedDown / 1000.0f
+        ) {
+            return;
+        }
+        pedalAudioThrottleRampUpSeconds_ = clampedUp / 1000.0f;
+        pedalAudioThrottleRampDownSeconds_ = clampedDown / 1000.0f;
     }
 
     void setEventOverrides(
@@ -1050,6 +1140,9 @@ public:
         }
         if (type == FMOD_STUDIO_EVENT_CALLBACK_SOUND_PLAYED) {
             recent.callbackVoiceCount = std::min(recent.callbackVoiceCount + 1, 32767);
+            if (loadedProfileId_ == kSkylineProfileId && isBlockedSkylineSubSound(name)) {
+                muteBlockedSkylineSubSoundsInEventLocked(event);
+            }
             if (diagnosticsEnabled) {
                 voiceSerial = nextVoiceSerial_++;
                 recent.activeVoiceSerials.push_back(voiceSerial);
@@ -1247,6 +1340,7 @@ private:
         traceRpm_ = 0.0f;
         traceDrivetrainSpeed_ = 0.0f;
         traceThrottle_ = 0.0f;
+        smoothedPedalAudioThrottle_ = minimumAudioThrottle_;
         traceBoostNormalized_ = 0.0f;
         traceBoostAbsolute_ = 0.0f;
         traceBov_ = 0.0f;
@@ -1505,6 +1599,19 @@ private:
         return lastError_;
     }
 
+    void muteBlockedSkylineSubSoundsInEventLocked(EventSlot& event) {
+        if (event.instance == nullptr) {
+            return;
+        }
+
+        FMOD::ChannelGroup* root = nullptr;
+        if (event.instance->getChannelGroup(&root) != FMOD_OK || root == nullptr) {
+            return;
+        }
+
+        muteBlockedSkylineChannelsInGroup(root);
+    }
+
     void closeLocked() {
         if (alfaBackfireChannel_ != nullptr) {
             alfaBackfireChannel_->stop();
@@ -1541,6 +1648,7 @@ private:
         events_.clear();
         eventPaths_.clear();
         eventCatalog_.clear();
+        loadedProfileId_.clear();
         {
             std::lock_guard<std::mutex> callbackLock(callbackMutex_);
             recentSources_.clear();
@@ -1570,6 +1678,7 @@ private:
         limiterRunning_ = false;
         limiterDecay_ = 10.0f;
         tractionDecay_ = 10.0f;
+        smoothedPedalAudioThrottle_ = minimumAudioThrottle_;
         setDiagnosticsEnabledLocked(false);
         nextVoiceSerial_ = 1;
     }
@@ -1852,6 +1961,32 @@ private:
         return std::clamp(std::max(throttle, minimumAudioThrottle_), 0.0f, 1.0f);
     }
 
+    float rampPedalAudioThrottleLocked(float target, float dt) {
+        const float delta = target - smoothedPedalAudioThrottle_;
+        if (std::abs(delta) <= 1e-4f) {
+            smoothedPedalAudioThrottle_ = target;
+            return target;
+        }
+
+        const float rampSeconds = delta > 0.0f
+            ? pedalAudioThrottleRampUpSeconds_
+            : pedalAudioThrottleRampDownSeconds_;
+        if (rampSeconds <= 1e-4f) {
+            smoothedPedalAudioThrottle_ = target;
+            return target;
+        }
+
+        const float rampSpan = std::max(1e-4f, kFullLoadAudioThrottle - minimumAudioThrottle_);
+        const float maxStep = (dt / rampSeconds) * rampSpan;
+        if (delta > 0.0f) {
+            smoothedPedalAudioThrottle_ = std::min(target, smoothedPedalAudioThrottle_ + maxStep);
+        } else {
+            smoothedPedalAudioThrottle_ = std::max(target, smoothedPedalAudioThrottle_ - maxStep);
+        }
+
+        return smoothedPedalAudioThrottle_;
+    }
+
     void applyPedalAudioThrottleLocked(float throttle) {
         const std::string selectedEngine = perspectiveEventLocked("engine_int", "engine_ext");
         const std::string selectedTransmission = perspectiveEventLocked("transmission", "transmission_ext");
@@ -1861,7 +1996,9 @@ private:
     }
 
     void applyMinimumAudioThrottleLocked() {
-        applyPedalAudioThrottleLocked(effectiveAudioThrottleLocked(traceThrottle_));
+        const float target = effectiveAudioThrottleLocked(traceThrottle_);
+        smoothedPedalAudioThrottle_ = target;
+        applyPedalAudioThrottleLocked(smoothedPedalAudioThrottle_);
     }
 
     void applyAudioThrottlePolicyLocked() {
@@ -2268,6 +2405,7 @@ private:
     std::unordered_map<std::string, bool> soloEvents_;
     float hostEngineGain_ = 1.0f;
     float hostEffectsGain_ = 1.0f;
+    std::string loadedProfileId_;
     float transmissionGain_ = 1.0f;
     float gearShiftGain_ = 1.0f;
     float turboGain_ = 1.0f;
@@ -2301,7 +2439,10 @@ private:
     int perspective_ = 0;
     bool active_ = false;
     bool exteriorPureAudio_ = false;
-    float minimumAudioThrottle_ = 0.25f;
+    float minimumAudioThrottle_ = 0.75f;
+    float smoothedPedalAudioThrottle_ = 0.75f;
+    float pedalAudioThrottleRampUpSeconds_ = 0.1f;
+    float pedalAudioThrottleRampDownSeconds_ = 0.1f;
     bool hasTurbo_ = false;
     float idleRpm_ = 1000.0f;
     bool limiterRunning_ = false;
@@ -2523,6 +2664,13 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setHostGains(
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setLoadedProfileId(
+    JNIEnv* environment, jobject, jstring profileId
+) {
+    runtime.setLoadedProfileId(utfString(environment, profileId));
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setCategoryGains(
     JNIEnv*, jobject, jfloat transmission, jfloat gearShift, jfloat turbo, jfloat backfire
 ) {
@@ -2603,6 +2751,13 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setMinimumAud
     JNIEnv*, jobject, jfloat minimum
 ) {
     runtime.setMinimumAudioThrottle(minimum);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setPedalAudioThrottleRampMilliseconds(
+    JNIEnv*, jobject, jfloat rampUpMs, jfloat rampDownMs
+) {
+    runtime.setPedalAudioThrottleRampMilliseconds(rampUpMs, rampDownMs);
 }
 
 extern "C" JNIEXPORT jboolean JNICALL

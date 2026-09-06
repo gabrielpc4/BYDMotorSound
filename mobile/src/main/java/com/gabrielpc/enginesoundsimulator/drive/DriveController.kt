@@ -108,6 +108,8 @@ data class DriveSnapshot(
     val virtualForwardGearCount: Int = VirtualGearProfile.DEFAULT_VIRTUAL_GEARS,
     val exteriorPureAudio: Boolean = false,
     val minimumAudioThrottle: Float = MinimumAudioThrottle.DEFAULT,
+    val pedalAudioThrottleRampUpMilliseconds: Int = PedalAudioThrottleRampMilliseconds.DEFAULT,
+    val pedalAudioThrottleRampDownMilliseconds: Int = PedalAudioThrottleRampMilliseconds.DEFAULT,
     val cruisingShiftOffsetRpm: Int = CruisingShiftOffsetRpm.DEFAULT,
     val racingReturnThrottlePercent: Int = RacingReturnThrottlePercent.DEFAULT,
     val racingReturnHoldSeconds: Int = RacingReturnHoldSeconds.DEFAULT,
@@ -181,7 +183,7 @@ class DriveController(context: Context) {
     private val fmodUpdateRateHz = AtomicInteger(fmodUpdateRateRepository.load())
     private val virtualForwardGearCount = AtomicInteger(virtualGearCountRepository.load())
     private val exteriorPureAudio = AtomicBoolean(exteriorAudioModeRepository.load())
-    private val minimumAudioThrottle = AtomicReference(minimumAudioThrottleRepository.load())
+    private val minimumAudioThrottleSettings = AtomicReference(minimumAudioThrottleRepository.load())
     private val automaticTransmissionSettings = AtomicReference(automaticTransmissionSettingsRepository.load())
     private val favoriteCarIds = AtomicReference(carFavoritesRepository.load())
     /** Monotonic across the controller lifetime so audio-worker skips/repeats are measurable. */
@@ -233,6 +235,7 @@ class DriveController(context: Context) {
         audioEngine.setSoundProgram(selectedProfile.get(), selectedPerspective.get())
         audioMixGains.set(audioMixGainRepository.load(selectedProfile.get()))
         audioEngine.setCategoryGains(audioMixGains.get())
+        audioEngine.setHostGains(audioMixGains.get().engineHost, audioMixGains.get().effectsHost)
         backfireSettings.set(backfireSettingsRepository.load())
         shiftSoundSettings.set(shiftSoundSettingsRepository.load())
         transmissionSoundSettings.set(transmissionSoundSettingsRepository.load())
@@ -256,7 +259,7 @@ class DriveController(context: Context) {
         audioEngine.setTransmissionAudioEnabled(carEffectModes.get().transmissionEnabled)
         audioEngine.setTurboAudioEnabled(carEffectModes.get().turboEnabled)
         setExteriorPureAudio(exteriorPureAudio.get())
-        audioEngine.setMinimumAudioThrottle(minimumAudioThrottle.get())
+        applyMinimumAudioThrottleSettings(minimumAudioThrottleSettings.get())
         applyManualShiftSoundOverrideCoupling(manualShiftEnabled.get())
         simulation.updateAutomaticTransmissionSettings(automaticTransmissionSettings.get())
         initializeCarNavigation(selectedProfile.get().id)
@@ -282,8 +285,8 @@ class DriveController(context: Context) {
                 emptyList()
             },
             transmissionGain = audioMixGains.get().transmission,
-            engineHostGain = audioEngine.hostEngineGain(),
-            effectsHostGain = audioEngine.hostEffectsGain(),
+            engineHostGain = audioMixGains.get().engineHost,
+            effectsHostGain = audioMixGains.get().effectsHost,
             gearShiftGain = audioMixGains.get().gearShift,
             turboGain = audioMixGains.get().turbo,
             backfireGain = audioMixGains.get().backfire,
@@ -302,7 +305,9 @@ class DriveController(context: Context) {
             fmodUpdateRateHz = fmodUpdateRateHz.get(),
             virtualForwardGearCount = virtualForwardGearCount.get(),
             exteriorPureAudio = exteriorPureAudio.get(),
-            minimumAudioThrottle = minimumAudioThrottle.get(),
+            minimumAudioThrottle = minimumAudioThrottleSettings.get().minimum,
+            pedalAudioThrottleRampUpMilliseconds = minimumAudioThrottleSettings.get().rampUpMilliseconds,
+            pedalAudioThrottleRampDownMilliseconds = minimumAudioThrottleSettings.get().rampDownMilliseconds,
             favoriteCarIds = favoriteCarIds.get(),
             carAudioReady = isSelectedCarAudioReady(selectedProfile.get().id),
             userMessage = userMessage,
@@ -454,13 +459,49 @@ class DriveController(context: Context) {
         simulation.updateAutomaticTransmissionSettings(updated)
     }
 
-    fun setFmodHostGains(engine: Float, effects: Float) = audioEngine.setHostGains(engine, effects)
+    fun setFmodHostGains(engine: Float, effects: Float) {
+        val gains = audioMixGains.get().copy(
+            engineHost = engine.coerceIn(0.5f, 3.0f),
+            effectsHost = effects.coerceIn(0.5f, 4.0f),
+        )
+        audioMixGains.set(gains)
+        audioMixGainRepository.save(selectedProfile.get(), gains)
+        audioEngine.setHostGains(gains.engineHost, gains.effectsHost)
+    }
 
     fun setMinimumAudioThrottle(minimum: Float) {
-        val normalized = MinimumAudioThrottle.normalize(minimum)
-        minimumAudioThrottle.set(normalized)
-        minimumAudioThrottleRepository.save(normalized)
-        audioEngine.setMinimumAudioThrottle(normalized)
+        updateMinimumAudioThrottleSettings {
+            it.copy(minimum = MinimumAudioThrottle.normalize(minimum))
+        }
+    }
+
+    fun setPedalAudioThrottleRampUpMilliseconds(milliseconds: Int) {
+        updateMinimumAudioThrottleSettings {
+            it.copy(rampUpMilliseconds = PedalAudioThrottleRampMilliseconds.normalize(milliseconds))
+        }
+    }
+
+    fun setPedalAudioThrottleRampDownMilliseconds(milliseconds: Int) {
+        updateMinimumAudioThrottleSettings {
+            it.copy(rampDownMilliseconds = PedalAudioThrottleRampMilliseconds.normalize(milliseconds))
+        }
+    }
+
+    private fun updateMinimumAudioThrottleSettings(
+        transform: (MinimumAudioThrottleSettings) -> MinimumAudioThrottleSettings,
+    ) {
+        val updated = transform(minimumAudioThrottleSettings.get())
+        minimumAudioThrottleSettings.set(updated)
+        minimumAudioThrottleRepository.save(updated)
+        applyMinimumAudioThrottleSettings(updated)
+    }
+
+    private fun applyMinimumAudioThrottleSettings(settings: MinimumAudioThrottleSettings) {
+        audioEngine.setMinimumAudioThrottle(settings.minimum)
+        audioEngine.setPedalAudioThrottleRampMilliseconds(
+            settings.rampUpMilliseconds,
+            settings.rampDownMilliseconds,
+        )
     }
 
     fun setExteriorPureAudio(enabled: Boolean) {
@@ -520,11 +561,12 @@ class DriveController(context: Context) {
     fun setFmodCategoryGains(transmission: Float, gearShift: Float, turbo: Float, backfire: Float) {
         // These trims are intentionally per-car and survive normal APK updates. Reset All is the
         // explicit opt-in that clears them, so selecting another car never carries a hidden mix.
-        val gains = AudioMixGains(
-            transmission.coerceIn(0.5f, 3.0f),
-            gearShift.coerceIn(0.5f, 3.0f),
-            turbo.coerceIn(0.5f, 3.0f),
-            backfire.coerceIn(0.5f, 3.0f),
+        val current = audioMixGains.get()
+        val gains = current.copy(
+            transmission = transmission.coerceIn(0.5f, 3.0f),
+            gearShift = gearShift.coerceIn(0.5f, 3.0f),
+            turbo = turbo.coerceIn(0.5f, 3.0f),
+            backfire = backfire.coerceIn(0.5f, 3.0f),
         )
         audioMixGains.set(gains)
         audioMixGainRepository.save(selectedProfile.get(), gains)
@@ -590,7 +632,7 @@ class DriveController(context: Context) {
         transmissionSoundSettings.set(TransmissionSoundSettings())
         exteriorPureAudioSettings.set(ExteriorPureAudioSettings())
         virtualForwardGearCount.set(VirtualGearProfile.DEFAULT_VIRTUAL_GEARS)
-        minimumAudioThrottle.set(MinimumAudioThrottle.DEFAULT)
+        minimumAudioThrottleSettings.set(MinimumAudioThrottleSettings())
         automaticTransmissionSettings.set(AutomaticTransmissionSettings())
         simulation.updateVirtualGearCount(VirtualGearProfile.DEFAULT_VIRTUAL_GEARS)
         simulation.updateAutomaticTransmissionSettings(AutomaticTransmissionSettings())
@@ -611,7 +653,7 @@ class DriveController(context: Context) {
         audioEngine.setCategoryGains(AudioMixGains())
         audioEngine.setFmodUpdateRateHz(FmodUpdateRate.DEFAULT_HZ)
         audioEngine.setExteriorPureAudio(false)
-        audioEngine.setMinimumAudioThrottle(MinimumAudioThrottle.DEFAULT)
+        applyMinimumAudioThrottleSettings(MinimumAudioThrottleSettings())
         audioEngine.setHostGains(1.0f, 1.0f)
         simulation.reset()
         audioEngine.setSoundProgram(selectedProfile.get(), selectedPerspective.get())
@@ -886,6 +928,7 @@ class DriveController(context: Context) {
             // not part of the authored mix or a persistent vehicle preference.
             setBackfireOnly(false)
             audioEngine.setCategoryGains(audioMixGains.get())
+            audioEngine.setHostGains(audioMixGains.get().engineHost, audioMixGains.get().effectsHost)
             val telemetry = vehicleReader.snapshot()
             val driveInput = resolveDriveInput(
                 mode = inputMode.get(),
@@ -1244,6 +1287,7 @@ class DriveController(context: Context) {
                     selectedProfile.set(requestedProfile)
                     audioMixGains.set(audioMixGainRepository.load(requestedProfile))
                     audioEngine.setCategoryGains(audioMixGains.get())
+                    audioEngine.setHostGains(audioMixGains.get().engineHost, audioMixGains.get().effectsHost)
                     loadPhysics(requestedProfile)
                     simulation.reset()
                     selectedPerspective.set(EngineSoundPerspective.CABIN)
@@ -1282,6 +1326,7 @@ class DriveController(context: Context) {
                 selectedProfile.set(baseline.profile)
                 audioMixGains.set(audioMixGainRepository.load(baseline.profile))
                 audioEngine.setCategoryGains(audioMixGains.get())
+                audioEngine.setHostGains(audioMixGains.get().engineHost, audioMixGains.get().effectsHost)
                 loadPhysics(baseline.profile)
                 simulation.reset()
             }

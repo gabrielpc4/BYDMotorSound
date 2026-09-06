@@ -67,6 +67,7 @@ ORIGINAL_CARS = (
     ("assetto-mercedes-amg-gt3", "Mercedes-AMG GT3", "ks_mercedes_amg_gt3"),
     ("assetto-nissan-370z", "Nissan 370Z", "ks_nissan_370z"),
     ("assetto-nissan-gtr", "Nissan GT-R", "ks_nissan_gtr"),
+    ("assetto-nissan-skyline-r34", "Nissan Skyline GT-R R34", "ks_nissan_skyline_r34"),
     ("assetto-porsche-911-gt3-rs", "Porsche 911 GT3 RS", "ks_porsche_911_gt3_rs"),
     ("assetto-porsche-991-turbo-s", "Porsche 911 Turbo S (991)", "ks_porsche_991_turbo_s"),
     ("assetto-toyota-supra-mkiv", "Toyota Supra Mk IV", "ks_toyota_supra_mkiv"),
@@ -76,8 +77,7 @@ LEGACY_ORIGINAL_IDS = {source_id: (pack_id, display_name) for pack_id, display_n
 # Compact official-pack scope. These are intentional catalog exclusions: the
 # source installation remains untouched, while the app omits all Lotus cars,
 # keeps only RX-7 variants from Mazda, and omits clearly pre-2000 models. The
-# Supra and Skyline are packaged in the modded group even though their banks come
-# from the official installation.
+# Supra remains modded-only; Skyline is packaged in both original and modded catalogs.
 ORIGINAL_CAR_MODDED_GROUP = {
     "ks_nissan_skyline_r34": ("assetto-nissan-skyline-r34", "Nissan Skyline GT-R R34"),
 }
@@ -99,7 +99,6 @@ EXCLUDED_OFFICIAL_CAR_DIRECTORIES = {
     "bmw_m3_e92", "bmw_m3_e92_drift", "abarth500", "abarth500_s1",
     "ks_abarth_595ss", "ks_abarth_595ss_s1", "ks_abarth_595ss_s2",
     "ks_abarth500_assetto_corse",
-    "ks_nissan_skyline_r34",
     "ferrari_458", "ks_ruf_rt12r",
     "ks_audi_sport_quattro", "ks_audi_sport_quattro_rally",
 }
@@ -308,7 +307,17 @@ def canonical_physics_bytes(physics: dict[str, object]) -> bytes:
     return (json.dumps(physics, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
 
-def archive_matches_source(source: CarSource, physics: dict[str, object] | None, archive: Path) -> bool:
+def archive_name(source: CarSource, duplicate_pack_ids: set[str]) -> str:
+    if source.pack_id in duplicate_pack_ids:
+        return f"{source.pack_id}.{source.group}.bydbank"
+    return f"{source.pack_id}.bydbank"
+
+
+def archive_matches_source(
+    source: CarSource,
+    physics: dict[str, object] | None,
+    archive: Path,
+) -> bool:
     """Return true only when a retained archive still matches the source contract."""
     if not archive.is_file():
         return False
@@ -354,12 +363,17 @@ def file_entry(path: Path, archive_path: str) -> dict[str, object]:
     return {"path": archive_path, "bytes": path.stat().st_size, "sha256": sha256(path)}
 
 
-def build_archive(source: CarSource, physics: dict[str, object] | None, force: bool) -> dict[str, object]:
+def build_archive(
+    source: CarSource,
+    physics: dict[str, object] | None,
+    force: bool,
+    duplicate_pack_ids: set[str],
+) -> dict[str, object]:
     if source.requires_physics:
         if physics is None:
             raise RuntimeError(f"{source.pack_id}: selectable car package requires physics.json")
         validate_physics(source, physics)
-    archive = OUTPUT / f"{source.pack_id}.bydbank"
+    archive = OUTPUT / archive_name(source, duplicate_pack_ids)
     if archive_matches_source(source, physics, archive) and not force:
         return {
             "id": source.pack_id,
@@ -430,7 +444,12 @@ def main() -> int:
     original = discover_original_sources()
     modded = discover_modded_sources() + discover_installation_modded_sources()
     sources = original + modded
-    expected_archives = {f"{source.pack_id}.bydbank" for source in sources}
+    duplicate_pack_ids = {
+        pack_id
+        for pack_id in {source.pack_id for source in sources}
+        if sum(1 for source in sources if source.pack_id == pack_id) > 1
+    }
+    expected_archives = {archive_name(source, duplicate_pack_ids) for source in sources}
     expected_archives.update(("assetto-common.bydbank", "assetto-common-strings.bydbank"))
     for stale in OUTPUT.glob("*.bydbank"):
         if stale.name not in expected_archives:
@@ -439,7 +458,7 @@ def main() -> int:
     exceptions = []
     for source in sources:
         try:
-            packs.append(build_archive(source, load_physics(source), arguments.force))
+            packs.append(build_archive(source, load_physics(source), arguments.force, duplicate_pack_ids))
         except Exception as error:
             if source.active:
                 raise
@@ -459,7 +478,7 @@ def main() -> int:
             active=True,
             requires_physics=False,
         )
-        package = build_archive(source, None, arguments.force)
+        package = build_archive(source, None, arguments.force, duplicate_pack_ids)
         package["dependency"] = True
         packs.append(package)
     index = {

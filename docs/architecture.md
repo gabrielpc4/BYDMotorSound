@@ -73,8 +73,10 @@ policy layer which must not be mistaken for bank authoring:
 - engine events receive authored throttle at the full-load endpoint (`1.0`), so pedal position
   controls the drivetrain rather than attenuating or swapping those load layers;
 - transmission events receive an RPM-derived `throttle` parameter so bank-authored gain automation
-  reaches full level from 90% of the idle-to-limiter span and scales linearly down to minimum at idle;
-- embedded supercharger subsounds inside the engine event use the same RPM-derived load factor;
+  reaches full level from 90% of the idle-to-limiter span and scales linearly down to minimum at idle,
+  except in automatic cruising mode where load stays at the minimum suppression point;
+- embedded supercharger subsounds inside the engine event use the same RPM-derived load factor with
+  the same automatic-cruising suppression;
 - backfire also receives its authored full-load endpoint (`1.0`);
 - the diagnostic host defaults are engine gain `1.0` and effects gain `2.0`; per-car mixer trims
   multiply only transmission, gear-shift, and turbo event families;

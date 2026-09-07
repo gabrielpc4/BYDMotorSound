@@ -782,7 +782,8 @@ public:
         int backfireSampleIndex,
         bool tractionActive,
         int tractionPulseCount,
-        std::uint64_t simulationFrameId
+        std::uint64_t simulationFrameId,
+        bool suppressEffectsLoad
     ) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!active_ || studio_ == nullptr) {
@@ -813,7 +814,9 @@ public:
             simulationFrameId
         );
         const float engineThrottle = effectiveAudioThrottleLocked(kFullLoadAudioThrottle);
-        const float effectsLoadTarget = effectsLoadFromRpmLocked(cleanRpm);
+        const float effectsLoadTarget = suppressEffectsLoad
+            ? 0.0f
+            : effectsLoadFromRpmLocked(cleanRpm);
         const float effectsLoad = rampEffectsLoadLocked(effectsLoadTarget, cleanDt);
         applyEngineAudioThrottleLocked(engineThrottle);
         applyTransmissionAudioThrottleLocked(effectsLoad);
@@ -2845,7 +2848,8 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_update(
     jint backfireSampleIndex,
     jboolean tractionActive,
     jint tractionPulseCount,
-    jlong simulationFrameId
+    jlong simulationFrameId,
+    jboolean suppressEffectsLoad
 ) {
     return resultString(
         environment,
@@ -2871,7 +2875,8 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_update(
             backfireSampleIndex,
             tractionActive == JNI_TRUE,
             tractionPulseCount,
-            static_cast<std::uint64_t>(std::max<jlong>(0, simulationFrameId))
+            static_cast<std::uint64_t>(std::max<jlong>(0, simulationFrameId)),
+            suppressEffectsLoad == JNI_TRUE
         )
     );
 }

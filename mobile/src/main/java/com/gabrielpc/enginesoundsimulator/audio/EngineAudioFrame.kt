@@ -32,4 +32,6 @@ data class EngineAudioFrame(
     val bov: Double = 0.0,
     val bovDecaySeconds: Double = 10.0,
     val perspective: EngineSoundPerspective = EngineSoundPerspective.CABIN,
+    /** When true, transmission and supercharger use minimum FMOD load (automatic cruising). */
+    val suppressEffectsLoad: Boolean = false,
 )

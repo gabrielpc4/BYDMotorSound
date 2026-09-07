@@ -609,6 +609,7 @@ class EngineAudioEngine(context: Context) {
                     tractionActive = frame.tractionLimitActive,
                     tractionPulseCount = tractionPulseCount,
                     simulationFrameId = frame.simulationFrameId,
+                    suppressEffectsLoad = frame.suppressEffectsLoad,
                 )
                 if (measurePerformance) {
                     DebugTelemetry.recordAudioPerformance(

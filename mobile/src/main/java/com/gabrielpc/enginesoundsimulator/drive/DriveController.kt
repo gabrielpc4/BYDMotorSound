@@ -40,6 +40,7 @@ import com.gabrielpc.enginesoundsimulator.simulation.DrivetrainState
 import com.gabrielpc.enginesoundsimulator.simulation.EngineSimulation
 import com.gabrielpc.enginesoundsimulator.simulation.ShiftDirection
 import com.gabrielpc.enginesoundsimulator.simulation.SimulationMotionContinuity
+import com.gabrielpc.enginesoundsimulator.simulation.AutomaticTransmissionMode
 import com.gabrielpc.enginesoundsimulator.simulation.TransmissionPosition
 import com.gabrielpc.enginesoundsimulator.simulation.VirtualGearProfile
 import com.gabrielpc.enginesoundsimulator.simulation.resolveDriveInput
@@ -1307,6 +1308,9 @@ class DriveController(context: Context) {
                 bov = drivetrain.bov,
                 bovDecaySeconds = drivetrain.bovDecaySeconds,
                 perspective = selectedPerspective.get(),
+                suppressEffectsLoad = transmission.position == TransmissionPosition.DRIVE &&
+                    !manualShiftEnabled.get() &&
+                    drivetrain.automaticTransmissionMode == AutomaticTransmissionMode.CRUISING,
             ),
         )
         val selected = selectedProfile.get()

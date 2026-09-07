@@ -102,6 +102,7 @@ import com.gabrielpc.enginesoundsimulator.drive.ManualRedlineHoldSeconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingReturnHoldSeconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingReturnThrottlePercent
 import com.gabrielpc.enginesoundsimulator.drive.ExteriorPureAudioSettings
+import com.gabrielpc.enginesoundsimulator.drive.PedalAudioThrottleRampMilliseconds
 import com.gabrielpc.enginesoundsimulator.drive.ShiftSoundSettings
 import com.gabrielpc.enginesoundsimulator.drive.TransmissionSoundSettings
 import com.gabrielpc.enginesoundsimulator.simulation.VirtualGearProfile
@@ -451,6 +452,10 @@ internal fun SettingsScreen(
     onManualRedlineHoldSecondsChange: (Int) -> Unit,
     manualAutodownshiftRpm: Int,
     onManualAutodownshiftRpmChange: (Int) -> Unit,
+    pedalAudioThrottleRampUpMilliseconds: Int,
+    onPedalAudioThrottleRampUpMillisecondsChange: (Int) -> Unit,
+    pedalAudioThrottleRampDownMilliseconds: Int,
+    onPedalAudioThrottleRampDownMillisecondsChange: (Int) -> Unit,
     onPreviewBackfireSample: (Int) -> Unit,
 ) {
     var backfireTab by remember { mutableStateOf(false) }
@@ -476,6 +481,20 @@ internal fun SettingsScreen(
                 FmodUpdateRateControl(
                     rateHz = fmodUpdateRateHz,
                     onRateChange = onFmodUpdateRateChange,
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                )
+            }
+            SettingsGridRow {
+                PedalAudioThrottleRampSettingCard(
+                    title = "RAMP UP",
+                    valueMilliseconds = pedalAudioThrottleRampUpMilliseconds,
+                    onValueChange = onPedalAudioThrottleRampUpMillisecondsChange,
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                )
+                PedalAudioThrottleRampSettingCard(
+                    title = "RAMP DOWN",
+                    valueMilliseconds = pedalAudioThrottleRampDownMilliseconds,
+                    onValueChange = onPedalAudioThrottleRampDownMillisecondsChange,
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                 )
             }
@@ -845,6 +864,54 @@ private fun ShiftSoundOverrideControl(
             )
         }
         Switch(checked = enabled, onCheckedChange = onEnabledChange)
+    }
+}
+
+@Composable
+private fun PedalAudioThrottleRampSettingCard(
+    title: String,
+    valueMilliseconds: Int,
+    onValueChange: (Int) -> Unit,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+) {
+    val rampSteps = (PedalAudioThrottleRampMilliseconds.MAX - PedalAudioThrottleRampMilliseconds.MIN) /
+        PedalAudioThrottleRampMilliseconds.STEP - 1
+
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .border(1.dp, Line, RoundedCornerShape(8.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(title, color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
+            Text(
+                text = "$valueMilliseconds ms",
+                color = White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Black,
+            )
+        }
+        Text(
+            text = "Pedal audio throttle smoothing time when the pedal moves in this direction.",
+            color = Muted,
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
+        )
+        Slider(
+            value = valueMilliseconds.toFloat(),
+            onValueChange = { value ->
+                onValueChange(PedalAudioThrottleRampMilliseconds.normalize(value.roundToInt()))
+            },
+            valueRange = PedalAudioThrottleRampMilliseconds.MIN.toFloat()..
+                PedalAudioThrottleRampMilliseconds.MAX.toFloat(),
+            steps = rampSteps.coerceAtLeast(0),
+        )
     }
 }
 

@@ -114,7 +114,6 @@ import com.gabrielpc.enginesoundsimulator.drive.UserVisibleMessage
 import com.gabrielpc.enginesoundsimulator.drive.UserVisibleMessageSeverity
 import com.gabrielpc.enginesoundsimulator.drive.InputMode
 import com.gabrielpc.enginesoundsimulator.drive.MinimumAudioThrottle
-import com.gabrielpc.enginesoundsimulator.drive.PedalAudioThrottleRampMilliseconds
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankProfiles
 import com.gabrielpc.enginesoundsimulator.audio.CarSubtitleCatalog
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankResolver
@@ -501,8 +500,6 @@ private fun MotorSoundDashboard(
                                     DashboardEngineControls(
                                         state = state,
                                         onMinimumAudioThrottleChange = onMinimumAudioThrottleChange,
-                                        onPedalAudioThrottleRampUpMillisecondsChange = onPedalAudioThrottleRampUpMillisecondsChange,
-                                        onPedalAudioThrottleRampDownMillisecondsChange = onPedalAudioThrottleRampDownMillisecondsChange,
                                         onEngineExternalChange = onEngineExternalChange,
                                         onEnginePureChange = onEnginePureChange,
                                         modifier = Modifier.padding(bottom = 6.dp),
@@ -585,6 +582,10 @@ private fun MotorSoundDashboard(
                             onManualRedlineHoldSecondsChange = onManualRedlineHoldSecondsChange,
                             manualAutodownshiftRpm = state.manualAutodownshiftRpm,
                             onManualAutodownshiftRpmChange = onManualAutodownshiftRpmChange,
+                            pedalAudioThrottleRampUpMilliseconds = state.pedalAudioThrottleRampUpMilliseconds,
+                            onPedalAudioThrottleRampUpMillisecondsChange = onPedalAudioThrottleRampUpMillisecondsChange,
+                            pedalAudioThrottleRampDownMilliseconds = state.pedalAudioThrottleRampDownMilliseconds,
+                            onPedalAudioThrottleRampDownMillisecondsChange = onPedalAudioThrottleRampDownMillisecondsChange,
                             onPreviewBackfireSample = onPreviewBackfireSample,
                         )
                     }
@@ -1123,8 +1124,6 @@ private object DashboardClassicEffectLayout {
 private fun DashboardEngineControls(
     state: DriveSnapshot,
     onMinimumAudioThrottleChange: (Float) -> Unit,
-    onPedalAudioThrottleRampUpMillisecondsChange: (Int) -> Unit,
-    onPedalAudioThrottleRampDownMillisecondsChange: (Int) -> Unit,
     onEngineExternalChange: (Boolean) -> Unit,
     onEnginePureChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -1134,8 +1133,6 @@ private fun DashboardEngineControls(
     val rowHeight = 42.dp
     val rowGap = 7.dp
     val throttleSteps = ((MinimumAudioThrottle.MAX - MinimumAudioThrottle.MIN) / MinimumAudioThrottle.STEP).roundToInt() - 1
-    val rampSteps = (PedalAudioThrottleRampMilliseconds.MAX - PedalAudioThrottleRampMilliseconds.MIN) /
-        PedalAudioThrottleRampMilliseconds.STEP - 1
 
     Row(
         modifier = modifier,
@@ -1165,35 +1162,7 @@ private fun DashboardEngineControls(
                 },
                 valueRange = MinimumAudioThrottle.MIN..MinimumAudioThrottle.MAX,
                 steps = throttleSteps.coerceAtLeast(0),
-                modifier = Modifier.weight(1.35f),
-            )
-            DashboardPedalAudioSettingSlider(
-                label = "RAMP UP",
-                valueLabel = "${state.pedalAudioThrottleRampUpMilliseconds} ms",
-                value = state.pedalAudioThrottleRampUpMilliseconds.toFloat(),
-                onValueChange = { value ->
-                    onPedalAudioThrottleRampUpMillisecondsChange(
-                        PedalAudioThrottleRampMilliseconds.normalize(value.roundToInt()),
-                    )
-                },
-                valueRange = PedalAudioThrottleRampMilliseconds.MIN.toFloat()..
-                    PedalAudioThrottleRampMilliseconds.MAX.toFloat(),
-                steps = rampSteps.coerceAtLeast(0),
-                modifier = Modifier.weight(1f),
-            )
-            DashboardPedalAudioSettingSlider(
-                label = "RAMP DN",
-                valueLabel = "${state.pedalAudioThrottleRampDownMilliseconds} ms",
-                value = state.pedalAudioThrottleRampDownMilliseconds.toFloat(),
-                onValueChange = { value ->
-                    onPedalAudioThrottleRampDownMillisecondsChange(
-                        PedalAudioThrottleRampMilliseconds.normalize(value.roundToInt()),
-                    )
-                },
-                valueRange = PedalAudioThrottleRampMilliseconds.MIN.toFloat()..
-                    PedalAudioThrottleRampMilliseconds.MAX.toFloat(),
-                steps = rampSteps.coerceAtLeast(0),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
             )
         }
         Column(

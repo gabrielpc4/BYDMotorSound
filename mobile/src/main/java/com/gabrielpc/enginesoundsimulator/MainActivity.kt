@@ -153,8 +153,6 @@ private object DashboardLayoutDefaults {
     const val CANVAS_ASPECT_RATIO = 1920f / 990f
     /** Classic layout keeps the tach as a right-side overlay sized like the old 0.88 row weight. */
     const val TACHOMETER_OVERLAY_WIDTH_FRACTION = 0.88f / (1.12f + 0.88f)
-    /** Car preview and bottom controls stay in the old 1.12 row slot; only the tach floats over the rest. */
-    const val CLASSIC_MAIN_CONTENT_WIDTH_FRACTION = 1.12f / (1.12f + 0.88f)
 }
 
 class MainActivity : ComponentActivity() {
@@ -459,11 +457,7 @@ private fun MotorSoundDashboard(
                                 .weight(1f)
                                 .padding(horizontal = 34.dp, vertical = 6.dp),
                         ) {
-                            Column(
-                                modifier = Modifier
-                                    .width(maxWidth * DashboardLayoutDefaults.CLASSIC_MAIN_CONTENT_WIDTH_FRACTION)
-                                    .fillMaxHeight(),
-                            ) {
+                            Column(modifier = Modifier.fillMaxSize()) {
                                 CarStage(
                                     state = state,
                                     onPreviousCar = onPreviousCar,

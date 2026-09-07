@@ -540,8 +540,6 @@ internal fun SettingsScreen(
                 onOffsetRpmChange = onCruisingShiftOffsetRpmChange,
                 racingReturnThrottlePercent = racingReturnThrottlePercent,
                 onRacingReturnThrottlePercentChange = onRacingReturnThrottlePercentChange,
-                racingReturnHoldSeconds = racingReturnHoldSeconds,
-                onRacingReturnHoldSecondsChange = onRacingReturnHoldSecondsChange,
                 manualRedlineHoldSeconds = manualRedlineHoldSeconds,
                 onManualRedlineHoldSecondsChange = onManualRedlineHoldSecondsChange,
                 manualAutodownshiftRpm = manualAutodownshiftRpm,
@@ -667,8 +665,6 @@ private fun AutomaticTransmissionSettingsControl(
     onOffsetRpmChange: (Int) -> Unit,
     racingReturnThrottlePercent: Int,
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
-    racingReturnHoldSeconds: Int,
-    onRacingReturnHoldSecondsChange: (Int) -> Unit,
     manualRedlineHoldSeconds: Int,
     onManualRedlineHoldSecondsChange: (Int) -> Unit,
     manualAutodownshiftRpm: Int,
@@ -725,7 +721,7 @@ private fun AutomaticTransmissionSettingsControl(
             )
         }
         Text(
-            text = "Racing mode ends only after staying at or below this pedal level for the hold time below. Touching the throttle above this value resets the timer.",
+            text = "After braking in racing mode, the next acceleration decides the mode: at or below this pedal level returns to cruising; above it stays in racing.",
             color = Muted,
             fontSize = 12.sp,
             lineHeight = 16.sp,
@@ -746,30 +742,6 @@ private fun AutomaticTransmissionSettingsControl(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("RACING RETURN HOLD", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
-            Text(
-                text = "${racingReturnHoldSeconds}s",
-                color = White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Black,
-            )
-        }
-        Slider(
-            value = racingReturnHoldSeconds.toFloat(),
-            onValueChange = { value ->
-                val selectedSeconds = RacingReturnHoldSeconds.normalize(value.roundToInt())
-                if (selectedSeconds != racingReturnHoldSeconds) {
-                    onRacingReturnHoldSecondsChange(selectedSeconds)
-                }
-            },
-            valueRange = RacingReturnHoldSeconds.MIN.toFloat()..RacingReturnHoldSeconds.MAX.toFloat(),
-            steps = (RacingReturnHoldSeconds.MAX - RacingReturnHoldSeconds.MIN) / RacingReturnHoldSeconds.STEP - 1,
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
             Text("MANUAL REDLINE HOLD", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
             Text(
                 text = "${manualRedlineHoldSeconds}s",
@@ -779,7 +751,7 @@ private fun AutomaticTransmissionSettingsControl(
             )
         }
         Text(
-            text = "Manual mode returns to automatic racing after staying at or above redline for this long. The racing return settings above then control when cruising resumes.",
+            text = "Manual mode returns to automatic racing after staying at or above redline for this long. Braking in racing mode then uses the return throttle above to decide cruising on the next acceleration.",
             color = Muted,
             fontSize = 12.sp,
             lineHeight = 16.sp,

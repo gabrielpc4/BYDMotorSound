@@ -15,8 +15,8 @@ internal object AutomaticTransmissionPolicy {
     const val RACING_ENTER_MIN_THROTTLE = 0.40
     /** Emergency upshift once after holding the limiter this long, unless already in top gear. */
     const val EMERGENCY_UPSHIFT_HOLD_SECONDS = 1.5
-    /** Automatic racing ends immediately below this road speed with a light pedal. */
-    const val RACING_RETURN_MAX_SPEED_KMH = 30.0
+    /** Brake input that arms return-to-cruising on the next acceleration while racing. */
+    const val RACING_RETURN_ARM_MIN_BRAKE = 0.05
     /** Racing upshift sits this many RPM below the authored limiter. */
     const val UPSHIFT_MARGIN_BELOW_LIMITER_RPM = 150.0
     private const val MINIMUM_THRESHOLD_ABOVE_IDLE_RPM = 250.0

@@ -113,11 +113,10 @@ internal class AssettoDrivetrain(
     private var launchControlTachCycleStartRpm = physics.engine.idleRpm
     private var cruisingShiftOffsetRpm = 0
     private var racingReturnMaxThrottle = 0.30
-    private var racingReturnHoldSeconds = 10.0
     private var manualRedlineHoldSeconds = 1.0
     private var manualAutodownshiftRpm = 2_000.0
     private var automaticTransmissionMode = AutomaticTransmissionMode.CRUISING
-    private var lowThrottleElapsedSeconds = 0.0
+    private var racingReturnArmed = false
     private var manualRedlineElapsedSeconds = 0.0
     private var requestAutomaticShiftMode = false
     private var emergencyUpshiftElapsedSeconds = 0.0
@@ -341,7 +340,6 @@ internal class AssettoDrivetrain(
         val dt = f32(deltaSeconds.coerceIn(0.0001, 0.050))
         cruisingShiftOffsetRpm = automaticTransmissionConfig.cruisingShiftOffsetRpm.coerceAtLeast(0)
         racingReturnMaxThrottle = automaticTransmissionConfig.racingReturnMaxThrottle.coerceIn(0.0, 1.0)
-        racingReturnHoldSeconds = automaticTransmissionConfig.racingReturnHoldSeconds.coerceAtLeast(0.0)
         manualRedlineHoldSeconds = automaticTransmissionConfig.manualRedlineHoldSeconds.coerceAtLeast(0.0)
         manualAutodownshiftRpm = automaticTransmissionConfig.manualAutodownshiftRpm.coerceAtLeast(0.0)
         currentTransmissionPosition = transmissionPosition
@@ -385,6 +383,7 @@ internal class AssettoDrivetrain(
         )
         updateAutomaticTransmissionMode(
             rawGas = rawGas,
+            brake = cleanBrake,
             automaticShifting = automaticShifting,
             dt = dt,
         )
@@ -965,7 +964,7 @@ internal class AssettoDrivetrain(
 
     private fun resetAutomaticTransmissionMode() {
         automaticTransmissionMode = AutomaticTransmissionMode.CRUISING
-        lowThrottleElapsedSeconds = 0.0
+        racingReturnArmed = false
         racingStompPendingTargetGear = null
     }
 
@@ -1077,6 +1076,7 @@ internal class AssettoDrivetrain(
 
     private fun updateAutomaticTransmissionMode(
         rawGas: Double,
+        brake: Double,
         automaticShifting: Boolean,
         dt: Double,
     ) {
@@ -1097,7 +1097,7 @@ internal class AssettoDrivetrain(
             launchControlPhase == LaunchControlPhase.INACTIVE
         ) {
             automaticTransmissionMode = AutomaticTransmissionMode.RACING
-            lowThrottleElapsedSeconds = 0.0
+            racingReturnArmed = false
             if (gear > 1 && !shifting) {
                 val targetGear = computeRacingStompTargetGear(dt)
                 if (targetGear < gear) {
@@ -1107,22 +1107,18 @@ internal class AssettoDrivetrain(
         }
 
         if (automaticTransmissionMode == AutomaticTransmissionMode.RACING) {
-            val speedKmh = speedMetersPerSecond * 3.6
-            if (
-                speedKmh < AutomaticTransmissionPolicy.RACING_RETURN_MAX_SPEED_KMH &&
-                rawGas <= racingReturnMaxThrottle
-            ) {
-                automaticTransmissionMode = AutomaticTransmissionMode.CRUISING
-                lowThrottleElapsedSeconds = 0.0
-                racingStompPendingTargetGear = null
-            } else if (rawGas <= racingReturnMaxThrottle) {
-                lowThrottleElapsedSeconds += dt
-                if (lowThrottleElapsedSeconds >= racingReturnHoldSeconds) {
+            if (brake >= AutomaticTransmissionPolicy.RACING_RETURN_ARM_MIN_BRAKE) {
+                racingReturnArmed = true
+            }
+
+            if (racingReturnArmed && rawGas > 0.0) {
+                if (rawGas > racingReturnMaxThrottle) {
+                    racingReturnArmed = false
+                } else {
                     automaticTransmissionMode = AutomaticTransmissionMode.CRUISING
-                    lowThrottleElapsedSeconds = 0.0
+                    racingReturnArmed = false
+                    racingStompPendingTargetGear = null
                 }
-            } else {
-                lowThrottleElapsedSeconds = 0.0
             }
         }
     }
@@ -1172,7 +1168,7 @@ internal class AssettoDrivetrain(
             if (manualRedlineElapsedSeconds >= manualRedlineHoldSeconds) {
                 manualRedlineElapsedSeconds = 0.0
                 automaticTransmissionMode = AutomaticTransmissionMode.RACING
-                lowThrottleElapsedSeconds = 0.0
+                racingReturnArmed = false
                 requestAutomaticShiftMode = true
             }
         } else {

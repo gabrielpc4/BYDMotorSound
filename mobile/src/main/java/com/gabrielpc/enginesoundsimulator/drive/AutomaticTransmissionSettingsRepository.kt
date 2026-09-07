@@ -17,7 +17,7 @@ internal object CruisingShiftOffsetRpm {
     }
 }
 
-/** Maximum pedal travel allowed before racing-mode return-to-cruising timer resets. */
+/** Light-acceleration threshold used after braking in racing mode to return to cruising. */
 internal object RacingReturnThrottlePercent {
     const val MIN = 20
     const val MAX = 80

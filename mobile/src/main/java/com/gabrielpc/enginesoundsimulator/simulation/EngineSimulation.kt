@@ -97,6 +97,7 @@ class EngineSimulation {
     private var virtualGearCount = VirtualGearProfile.DEFAULT_VIRTUAL_GEARS
     private var virtualGearProfile: VirtualGearProfile? = null
     private var equalSpeedGearMapping: EqualSpeedGearMapping? = null
+    private var launchEqualSpeedGearMapping: EqualSpeedGearMapping? = null
     private var previousInputWasSimulated: Boolean? = null
     private var automaticTransmissionConfig = AutomaticTransmissionConfig()
 
@@ -107,6 +108,9 @@ class EngineSimulation {
         automaticTransmissionConfig = AutomaticTransmissionConfig.fromSettings(settings)
         if (previous.cruisingLogicEnabled != settings.cruisingLogicEnabled) {
             drivetrain?.applyCruisingLogicToggle(settings.cruisingLogicEnabled)
+        }
+        if (previous.sixGearOnLaunchEnabled != settings.sixGearOnLaunchEnabled && !settings.sixGearOnLaunchEnabled) {
+            drivetrain?.clearLaunchSixGearOverride()
         }
     }
 
@@ -214,8 +218,10 @@ class EngineSimulation {
 
     private fun rebuildGearMapping(activePhysics: AssettoPhysics) {
         val profile = VirtualGearProfile.from(activePhysics, virtualGearCount)
+        val launchProfile = VirtualGearProfile.from(activePhysics, VirtualGearProfile.MIN_VIRTUAL_GEARS)
         virtualGearProfile = profile
         equalSpeedGearMapping = EqualSpeedGearMapping.from(activePhysics, profile)
+        launchEqualSpeedGearMapping = EqualSpeedGearMapping.from(activePhysics, launchProfile)
     }
 
     internal fun updateBackfireSettings(settings: BackfireSettings) {
@@ -307,11 +313,25 @@ class EngineSimulation {
         val realOrDocumentedExtrapolatedPresentationSpeedKmh = realExtrapolatedPresentationSpeedKmh
             ?: documentedExtrapolatedPresentationSpeedKmh
         val drivetrainRawSpeedKmh = realOrDocumentedRawSpeedKmh
-        val fmodMapping = if (input.transmissionPosition == TransmissionPosition.DRIVE) {
+        activeDrivetrain.updateLaunchControl(
+            rawThrottle = input.throttle.coerceIn(0.0, 1.0),
+            brake = input.brake.coerceIn(0.0, 1.0),
+            enabled = input.transmissionPosition == TransmissionPosition.DRIVE,
+            sixGearOnLaunchEnabled = automaticTransmissionConfig.sixGearOnLaunchEnabled,
+        )
+        val fmodMapping = if (
+            activeDrivetrain.isLaunchSixGearOverrideActive() &&
+            launchEqualSpeedGearMapping != null
+        ) {
+            launchEqualSpeedGearMapping
+        } else {
+            equalSpeedGearMapping
+        }
+        val fmodMappingFrame = if (input.transmissionPosition == TransmissionPosition.DRIVE) {
             // Both input modes use the same internal FMOD speed mapping in D. It changes only
             // the road-speed-to-RPM conversion; the drivetrain still reads every shift and RPM
             // limit from the selected bank. P/N remains a pure free-rev path.
-            equalSpeedGearMapping
+            fmodMapping
         } else {
             // P/N must remain a true free-rev path. Never derive road-coupled FMOD speed while
             // the selector is outside D, even if the selector changes while still moving.

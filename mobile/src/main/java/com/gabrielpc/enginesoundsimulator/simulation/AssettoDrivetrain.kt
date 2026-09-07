@@ -39,6 +39,7 @@ internal class AssettoDrivetrainFrame(
     var requestAutomaticShiftMode: Boolean = false,
     var automaticTransmissionMode: AutomaticTransmissionMode = AutomaticTransmissionMode.CRUISING,
     var racingReturnArmed: Boolean = false,
+    var launchSixGearOverrideActive: Boolean = false,
 )
 
 /**
@@ -53,6 +54,9 @@ internal class AssettoDrivetrain(
     private var physics: AssettoPhysics,
     private var virtualGearProfile: VirtualGearProfile,
 ) {
+    private var launchSixGearProfile: VirtualGearProfile = buildLaunchSixGearProfile(physics)
+    private var sixGearOnLaunchEnabled = true
+    private var launchSixGearOverrideActive = false
     /**
      * Test branch behavior: keep the clutch disengaged in D so clutch-slip physics never fights
      * the driver, and always derive RPM from the mapped FMOD road speed in the current gear.
@@ -112,6 +116,7 @@ internal class AssettoDrivetrain(
     private var launchControlDisarmStartRpm = physics.engine.idleRpm
     private var launchControlTachCycleElapsedSeconds = 0.0
     private var launchControlTachCycleStartRpm = physics.engine.idleRpm
+    private var previousLaunchControlPhase = LaunchControlPhase.INACTIVE
     private var cruisingShiftOffsetRpm = 0
     private var racingReturnMaxThrottle = 0.30
     private var manualRedlineHoldSeconds = 1.0
@@ -132,6 +137,7 @@ internal class AssettoDrivetrain(
 
     fun updatePhysics(updated: AssettoPhysics) {
         physics = updated
+        launchSixGearProfile = buildLaunchSixGearProfile(updated)
         driven = drivenAxle(updated.drivetrain.vehicle)
         rpm = rpm.coerceIn(0.0, updated.engine.limiterRpm)
         gear = gear.coerceIn(0, virtualGearProfile.virtualForwardGearCount)
@@ -147,8 +153,33 @@ internal class AssettoDrivetrain(
 
     fun updateVirtualGearProfile(updated: VirtualGearProfile) {
         virtualGearProfile = updated
+        launchSixGearProfile = buildLaunchSixGearProfile(physics)
         gear = gear.coerceIn(0, updated.virtualForwardGearCount)
         landingRpmByGear = DoubleArray(updated.virtualForwardGearCount + 1)
+    }
+
+    internal fun updateLaunchControl(
+        rawThrottle: Double,
+        brake: Double,
+        enabled: Boolean,
+        sixGearOnLaunchEnabled: Boolean,
+    ) {
+        this.sixGearOnLaunchEnabled = sixGearOnLaunchEnabled
+        updateLaunchControlPhase(
+            rawThrottle = rawThrottle,
+            brake = brake,
+            enabled = enabled,
+        )
+        updateLaunchSixGearOverride(
+            rawThrottle = rawThrottle,
+            brake = brake,
+        )
+    }
+
+    internal fun isLaunchSixGearOverrideActive(): Boolean = launchSixGearOverrideActive
+
+    internal fun clearLaunchSixGearOverride() {
+        launchSixGearOverrideActive = false
     }
 
     fun updateBackfireSettings(updated: BackfireSettings) {
@@ -272,8 +303,8 @@ internal class AssettoDrivetrain(
         fmodDrivetrainSpeedMetersPerSecond = fmodDrivetrainSpeedKmh.coerceAtLeast(0.0) / 3.6
         previousFmodWheelSpeed = fmodDrivetrainSpeedMetersPerSecond / driven.radius
 
-        val targetGear = virtualGearProfile.gearForRoadSpeedKmh(cleanRoadKmh)
-            .coerceIn(1, virtualGearProfile.virtualForwardGearCount)
+        val targetGear = effectiveVirtualGearProfile().gearForRoadSpeedKmh(cleanRoadKmh)
+            .coerceIn(1, effectiveVirtualGearProfile().virtualForwardGearCount)
         gear = targetGear
         shiftTarget = targetGear
 
@@ -345,6 +376,10 @@ internal class AssettoDrivetrain(
         manualRedlineHoldSeconds = automaticTransmissionConfig.manualRedlineHoldSeconds.coerceAtLeast(0.0)
         manualAutodownshiftRpm = automaticTransmissionConfig.manualAutodownshiftRpm.coerceAtLeast(0.0)
         cruisingLogicEnabled = automaticTransmissionConfig.cruisingLogicEnabled
+        sixGearOnLaunchEnabled = automaticTransmissionConfig.sixGearOnLaunchEnabled
+        if (!sixGearOnLaunchEnabled) {
+            launchSixGearOverrideActive = false
+        }
         currentTransmissionPosition = transmissionPosition
         sessionElapsedMilliseconds += dt * 1_000.0
         externalVehicleSpeedMetersPerSecond?.let(::anchorVehicleSpeed)
@@ -377,19 +412,13 @@ internal class AssettoDrivetrain(
         var eventDirection = if (shifting) shiftDirection else 0
         val rawGas = throttle.coerceIn(0.0, 1.0)
         val cleanBrake = brake.coerceIn(0.0, 1.0)
-        updateLaunchControl(
-            rawThrottle = rawGas,
-            brake = cleanBrake,
-            // The launch sequence is deliberately available in automatic and manual modes.
-            // `automaticShifting` still controls only automatic gear decisions below.
-            enabled = launchControlEnabled && transmissionPosition == TransmissionPosition.DRIVE,
-        )
         updateAutomaticTransmissionMode(
             rawGas = rawGas,
             brake = cleanBrake,
             automaticShifting = automaticShifting,
             dt = dt,
         )
+        updateLaunchControlRpm(dt, rawGas)
         updateManualAutodownshift(
             automaticShifting = automaticShifting,
             dt = dt,
@@ -594,6 +623,7 @@ internal class AssettoDrivetrain(
         }
         lastFrame.automaticTransmissionMode = automaticTransmissionMode
         lastFrame.racingReturnArmed = racingReturnArmed
+        lastFrame.launchSixGearOverrideActive = launchSixGearOverrideActive
         lastFrame.requestAutomaticShiftMode = requestAutomaticShiftMode
         return lastFrame
     }
@@ -705,7 +735,7 @@ internal class AssettoDrivetrain(
             val upshiftRpm = effectiveUpshiftTriggerRpm()
             if (
                 automaticUpshiftAllowed(shiftRpm, upshiftRpm, gas) &&
-                gear < virtualGearProfile.virtualForwardGearCount &&
+                gear < effectiveVirtualGearProfile().virtualForwardGearCount &&
                 automaticGasCutoff <= 0.0
             ) {
                 request = 1
@@ -746,7 +776,7 @@ internal class AssettoDrivetrain(
     ): Boolean {
         if (direction == 0 || shifting) return false
         val target = gear + direction
-        val forwardGearCount = virtualGearProfile.virtualForwardGearCount
+        val forwardGearCount = effectiveVirtualGearProfile().virtualForwardGearCount
         if (target !in -1..forwardGearCount) return false
         if (direction < 0 && !downshiftAllowed(target, dt)) return false
 
@@ -817,7 +847,7 @@ internal class AssettoDrivetrain(
 
         val idle = physics.engine.idleRpm
         val upshiftRpm = upshiftTriggerRpmForGear()
-        val forwardGearCount = virtualGearProfile.virtualForwardGearCount
+        val forwardGearCount = effectiveVirtualGearProfile().virtualForwardGearCount
         val fmodMps = fmodDrivetrainSpeedMetersPerSecond
 
         val lowerFmodMps = if (currentGear == 1) {
@@ -1067,7 +1097,7 @@ internal class AssettoDrivetrain(
             return
         }
 
-        val topGear = virtualGearProfile.virtualForwardGearCount
+        val topGear = effectiveVirtualGearProfile().virtualForwardGearCount
         if (gear < 1 || gear >= topGear) {
             emergencyUpshiftElapsedSeconds = 0.0
             return
@@ -1238,15 +1268,61 @@ internal class AssettoDrivetrain(
     }
 
     private fun ratioForGear(gear: Int): Double {
-        if (gear in 1..virtualGearProfile.virtualForwardGearCount) {
-            return virtualGearProfile.ratioForVirtualGear(gear)
+        val profile = effectiveVirtualGearProfile()
+        if (gear in 1..profile.virtualForwardGearCount) {
+            return profile.ratioForVirtualGear(gear)
         }
 
         return physics.drivetrain.ratioForGear(gear)
     }
 
+    private fun effectiveVirtualGearProfile(): VirtualGearProfile {
+        if (launchSixGearOverrideActive) {
+            return launchSixGearProfile
+        }
+
+        return virtualGearProfile
+    }
+
+    private fun buildLaunchSixGearProfile(physics: AssettoPhysics): VirtualGearProfile {
+        return VirtualGearProfile.from(physics, VirtualGearProfile.MIN_VIRTUAL_GEARS)
+    }
+
+    private fun clampGearToLaunchProfile() {
+        val launchTopGear = launchSixGearProfile.virtualForwardGearCount
+        if (gear > launchTopGear && !shifting) {
+            setGearImmediately(launchTopGear)
+        }
+    }
+
+    private fun updateLaunchSixGearOverride(rawThrottle: Double, brake: Double) {
+        if (!sixGearOnLaunchEnabled) {
+            launchSixGearOverrideActive = false
+            return
+        }
+
+        if (
+            launchControlPhase == LaunchControlPhase.LAUNCHED &&
+            previousLaunchControlPhase != LaunchControlPhase.LAUNCHED
+        ) {
+            launchSixGearOverrideActive = true
+            clampGearToLaunchProfile()
+        }
+
+        if (!launchSixGearOverrideActive) {
+            return
+        }
+
+        val throttleReleased = rawThrottle < LaunchControl.THROTTLE_INTENT_THRESHOLD
+        val brakePressed = brake >= LaunchControl.ARM_BRAKE_THRESHOLD
+        if (throttleReleased || brakePressed) {
+            launchSixGearOverrideActive = false
+        }
+    }
+
     private fun resetLaunchControl() {
         launchControlPhase = LaunchControlPhase.INACTIVE
+        previousLaunchControlPhase = LaunchControlPhase.INACTIVE
         launchControlJitterPhase = 0.0
         launchControlArmedElapsedSeconds = 0.0
         launchControlArmedStartRpm = physics.engine.idleRpm
@@ -1254,14 +1330,16 @@ internal class AssettoDrivetrain(
         launchControlDisarmStartRpm = physics.engine.idleRpm
         launchControlTachCycleElapsedSeconds = 0.0
         launchControlTachCycleStartRpm = physics.engine.idleRpm
+        launchSixGearOverrideActive = false
     }
 
-    private fun updateLaunchControl(
+    private fun updateLaunchControlPhase(
         rawThrottle: Double,
         brake: Double,
         enabled: Boolean,
     ) {
         val previousPhase = launchControlPhase
+        previousLaunchControlPhase = previousPhase
         launchControlPhase = LaunchControl.advancePhase(
             phase = launchControlPhase,
             rawThrottle = rawThrottle,

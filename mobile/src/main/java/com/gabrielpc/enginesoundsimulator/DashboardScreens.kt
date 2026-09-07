@@ -451,6 +451,8 @@ internal fun SettingsScreen(
     onExteriorPureAudioSettingsChange: (ExteriorPureAudioSettings) -> Unit,
     virtualForwardGearCount: Int,
     onVirtualForwardGearCountChange: (Int) -> Unit,
+    sixGearOnLaunchEnabled: Boolean,
+    onSixGearOnLaunchEnabledChange: (Boolean) -> Unit,
     cruisingShiftOffsetRpm: Int,
     onCruisingShiftOffsetRpmChange: (Int) -> Unit,
     racingReturnThrottlePercent: Int,
@@ -534,6 +536,10 @@ internal fun SettingsScreen(
             VirtualForwardGearCountControl(
                 gearCount = virtualForwardGearCount,
                 onGearCountChange = onVirtualForwardGearCountChange,
+            )
+            SixGearOnLaunchControl(
+                enabled = sixGearOnLaunchEnabled,
+                onEnabledChange = onSixGearOnLaunchEnabledChange,
             )
             AutomaticTransmissionSettingsControl(
                 offsetRpm = cruisingShiftOffsetRpm,
@@ -656,6 +662,35 @@ private fun VirtualForwardGearCountControl(
             steps = VirtualGearProfile.MAX_VIRTUAL_GEARS - VirtualGearProfile.MIN_VIRTUAL_GEARS - 1,
         )
         VirtualGearDistributionChart(gearCount = gearCount)
+    }
+}
+
+@Composable
+private fun SixGearOnLaunchControl(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+) {
+    Column(
+        modifier = modifier
+            .border(1.dp, Line, RoundedCornerShape(8.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("6-GEAR ON LAUNCH", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
+            Switch(checked = enabled, onCheckedChange = onEnabledChange)
+        }
+        Text(
+            text = "During a launch-control start, temporarily use the 6-gear ratio profile until you release the throttle or press the brake.",
+            color = Muted,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+        )
     }
 }
 

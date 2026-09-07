@@ -75,6 +75,7 @@ internal object ManualAutodownshiftRpm {
 
 internal data class AutomaticTransmissionSettings(
     val cruisingLogicEnabled: Boolean = true,
+    val sixGearOnLaunchEnabled: Boolean = true,
     val cruisingShiftOffsetRpm: Int = CruisingShiftOffsetRpm.DEFAULT,
     val racingReturnThrottlePercent: Int = RacingReturnThrottlePercent.DEFAULT,
     val racingReturnHoldSeconds: Int = RacingReturnHoldSeconds.DEFAULT,
@@ -93,6 +94,7 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
         migrateLegacyOffsetIfNeeded()
         return AutomaticTransmissionSettings(
             cruisingLogicEnabled = preferences.getBoolean(KEY_CRUISING_LOGIC_ENABLED, true),
+            sixGearOnLaunchEnabled = preferences.getBoolean(KEY_SIX_GEAR_ON_LAUNCH_ENABLED, true),
             cruisingShiftOffsetRpm = CruisingShiftOffsetRpm.normalize(
                 preferences.getInt(KEY_CRUISING_SHIFT_OFFSET_RPM, CruisingShiftOffsetRpm.DEFAULT),
             ),
@@ -117,6 +119,7 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
     fun save(settings: AutomaticTransmissionSettings) {
         preferences.edit()
             .putBoolean(KEY_CRUISING_LOGIC_ENABLED, settings.cruisingLogicEnabled)
+            .putBoolean(KEY_SIX_GEAR_ON_LAUNCH_ENABLED, settings.sixGearOnLaunchEnabled)
             .putInt(KEY_CRUISING_SHIFT_OFFSET_RPM, CruisingShiftOffsetRpm.normalize(settings.cruisingShiftOffsetRpm))
             .putInt(
                 KEY_RACING_RETURN_THROTTLE_PERCENT,
@@ -166,6 +169,7 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
 
     private companion object {
         const val KEY_CRUISING_LOGIC_ENABLED = "cruising_logic_enabled"
+        const val KEY_SIX_GEAR_ON_LAUNCH_ENABLED = "six_gear_on_launch_enabled"
         const val KEY_CRUISING_SHIFT_OFFSET_RPM = "cruising_shift_offset_rpm"
         const val KEY_RACING_RETURN_THROTTLE_PERCENT = "racing_return_throttle_percent"
         const val KEY_RACING_RETURN_HOLD_SECONDS = "racing_return_hold_seconds"

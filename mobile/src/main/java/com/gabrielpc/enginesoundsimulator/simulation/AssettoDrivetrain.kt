@@ -38,6 +38,7 @@ internal class AssettoDrivetrainFrame(
     /** Manual mode held at redline long enough to request a return to automatic shifting. */
     var requestAutomaticShiftMode: Boolean = false,
     var automaticTransmissionMode: AutomaticTransmissionMode = AutomaticTransmissionMode.CRUISING,
+    var racingReturnArmed: Boolean = false,
 )
 
 /**
@@ -590,6 +591,7 @@ internal class AssettoDrivetrain(
             launchControlPhase = LaunchControlPhase.INACTIVE
         }
         lastFrame.automaticTransmissionMode = automaticTransmissionMode
+        lastFrame.racingReturnArmed = racingReturnArmed
         lastFrame.requestAutomaticShiftMode = requestAutomaticShiftMode
         return lastFrame
     }

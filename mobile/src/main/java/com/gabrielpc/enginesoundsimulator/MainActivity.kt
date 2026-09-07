@@ -2131,21 +2131,23 @@ private fun Tachometer(
 @Composable
 private fun AutomaticTransmissionModeLabel(
     mode: AutomaticTransmissionMode,
+    preparingCruising: Boolean,
     fontSize: androidx.compose.ui.unit.TextUnit = 12.sp,
 ) {
-    val isRacing = mode == AutomaticTransmissionMode.RACING
+    val label = when {
+        preparingCruising -> "P-CRUISING"
+        mode == AutomaticTransmissionMode.RACING -> "RACING"
+        else -> "CRUISING"
+    }
+    val color = when {
+        preparingCruising -> CyanSoft
+        mode == AutomaticTransmissionMode.RACING -> Amber
+        else -> CyanSoft
+    }
 
     Text(
-        text = if (isRacing) {
-            "RACING"
-        } else {
-            "CRUISING"
-        },
-        color = if (isRacing) {
-            Amber
-        } else {
-            CyanSoft
-        },
+        text = label,
+        color = color,
         fontSize = fontSize,
         fontWeight = FontWeight.Black,
         letterSpacing = 1.5.sp,
@@ -2326,6 +2328,7 @@ private fun TachometerGauge(
                     Spacer(Modifier.height(4.dp))
                     AutomaticTransmissionModeLabel(
                         mode = drivetrain.automaticTransmissionMode,
+                        preparingCruising = drivetrain.racingReturnArmed,
                         fontSize = 13.sp,
                     )
                 }

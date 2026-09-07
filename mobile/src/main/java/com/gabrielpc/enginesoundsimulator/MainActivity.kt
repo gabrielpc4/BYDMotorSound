@@ -1314,8 +1314,7 @@ private fun DashboardEffectControls(
     val rows = listOf(
         "POPS & BANGS" to EffectSoundKind.POPS_AND_BANGS,
         "SHIFT SOUNDS" to EffectSoundKind.SHIFT,
-        "TRANSMISSION" to EffectSoundKind.TRANSMISSION,
-    ) + if (state.hasTurbo) listOf("TURBO" to EffectSoundKind.TURBO) else emptyList()
+    )
     val rowHeight = 42.dp
     val rowGap = 7.dp
 
@@ -1336,8 +1335,7 @@ private fun DashboardEffectControls(
     }
 
     fun showsOverrideGain(kind: EffectSoundKind): Boolean {
-        return overrideEnabled(kind) &&
-            (kind == EffectSoundKind.POPS_AND_BANGS || kind == EffectSoundKind.SHIFT)
+        return overrideEnabled(kind)
     }
 
     Row(
@@ -1367,8 +1365,7 @@ private fun DashboardEffectControls(
                 val enabled = when (kind) {
                     EffectSoundKind.POPS_AND_BANGS -> state.popsAndBangsEnabled
                     EffectSoundKind.SHIFT -> state.shiftSoundsEnabled
-                    EffectSoundKind.TRANSMISSION -> state.transmissionEnabled
-                    EffectSoundKind.TURBO -> state.turboEnabled
+                    EffectSoundKind.TRANSMISSION, EffectSoundKind.TURBO -> true
                 }
                 DashboardSwitchCell(rowHeight, enabled, Line) {
                     onEnabledChange(kind, !enabled)
@@ -1383,12 +1380,8 @@ private fun DashboardEffectControls(
                 .padding(layout.columnPadding),
         ) {
             rows.forEach { (_, kind) ->
-                if (kind == EffectSoundKind.POPS_AND_BANGS || kind == EffectSoundKind.SHIFT) {
-                    val override = overrideEnabled(kind)
-                    DashboardOverrideColumnCell(override, true, { onOverrideChange(kind, !override) }, rowHeight)
-                } else {
-                    DashboardEmptyControlCell(rowHeight)
-                }
+                val override = overrideEnabled(kind)
+                DashboardOverrideColumnCell(override, true, { onOverrideChange(kind, !override) }, rowHeight)
             }
         }
         Column(
@@ -1399,13 +1392,9 @@ private fun DashboardEffectControls(
                 .padding(layout.columnPadding),
         ) {
             rows.forEach { (_, kind) ->
-                if (kind == EffectSoundKind.POPS_AND_BANGS || kind == EffectSoundKind.SHIFT) {
-                    val override = overrideEnabled(kind)
-                    DashboardSwitchCell(rowHeight, override, Line) {
-                        onOverrideChange(kind, !override)
-                    }
-                } else {
-                    DashboardEmptyControlCell(rowHeight)
+                val override = overrideEnabled(kind)
+                DashboardSwitchCell(rowHeight, override, Line) {
+                    onOverrideChange(kind, !override)
                 }
             }
         }

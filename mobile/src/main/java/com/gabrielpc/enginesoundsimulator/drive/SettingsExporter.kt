@@ -164,8 +164,6 @@ internal object SettingsExporter {
         return JSONObject().apply {
             put("popsAndBangsEnabled", modes.popsAndBangsEnabled)
             put("shiftSoundsEnabled", modes.shiftSoundsEnabled)
-            put("transmissionEnabled", modes.transmissionEnabled)
-            put("turboEnabled", modes.turboEnabled)
         }
     }
 

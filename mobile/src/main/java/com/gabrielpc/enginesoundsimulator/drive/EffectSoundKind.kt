@@ -7,8 +7,7 @@ enum class EffectSoundKind { POPS_AND_BANGS, SHIFT, TRANSMISSION, TURBO }
 internal fun CarEffectModes.withEnabled(kind: EffectSoundKind, enabled: Boolean): CarEffectModes = when (kind) {
     EffectSoundKind.POPS_AND_BANGS -> copy(popsAndBangsEnabled = enabled)
     EffectSoundKind.SHIFT -> copy(shiftSoundsEnabled = enabled)
-    EffectSoundKind.TRANSMISSION -> copy(transmissionEnabled = enabled)
-    EffectSoundKind.TURBO -> copy(turboEnabled = enabled)
+    EffectSoundKind.TRANSMISSION, EffectSoundKind.TURBO -> this
 }
 
 internal fun EffectSoundOverrideSettings.withOverride(kind: EffectSoundKind, override: Boolean): EffectSoundOverrideSettings = when (kind) {

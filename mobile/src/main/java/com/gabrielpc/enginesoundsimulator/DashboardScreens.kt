@@ -441,7 +441,7 @@ private fun MixerControlsPanel(
     onMixerSpecificGainsChange: (MixerCarSpecificGains) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var gainScope by remember { mutableStateOf(MixerGainScope.GLOBAL) }
+    var gainScope by remember { mutableStateOf(MixerGainScope.SPECIFIC) }
     val cardShape = RoundedCornerShape(8.dp)
     val cardModifier = modifier
         .fillMaxHeight()

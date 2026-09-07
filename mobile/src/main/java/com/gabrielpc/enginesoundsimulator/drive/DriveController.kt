@@ -97,8 +97,6 @@ data class DriveSnapshot(
     val popsAndBangsOverride: Boolean = false,
     val shiftSoundsEnabled: Boolean = true,
     val shiftSoundsOverride: Boolean = false,
-    val transmissionEnabled: Boolean = true,
-    val turboEnabled: Boolean = true,
     val hasTurbo: Boolean = false,
     val hasSupercharger: Boolean = false,
     val soundPerspective: EngineSoundPerspective = EngineSoundPerspective.CABIN,
@@ -287,8 +285,6 @@ class DriveController(context: Context) {
             popsAndBangsOverride = effectSoundOverrides.get().popsAndBangsOverride,
             shiftSoundsEnabled = carEffectModes.get().shiftSoundsEnabled,
             shiftSoundsOverride = effectSoundOverrides.get().shiftSoundsOverride,
-            transmissionEnabled = carEffectModes.get().transmissionEnabled,
-            turboEnabled = carEffectModes.get().turboEnabled,
             hasTurbo = activePhysics.get()?.engine?.turbos?.isNotEmpty() == true,
             hasSupercharger = resolveHasSupercharger(),
             fmodUpdateRateHz = fmodUpdateRateHz.get(),
@@ -598,8 +594,7 @@ class DriveController(context: Context) {
         when (kind) {
             EffectSoundKind.POPS_AND_BANGS -> audioEngine.setBackfireAudioEnabled(enabled)
             EffectSoundKind.SHIFT -> audioEngine.setShiftSoundEnabled(enabled)
-            EffectSoundKind.TRANSMISSION -> audioEngine.setTransmissionAudioEnabled(enabled)
-            EffectSoundKind.TURBO -> audioEngine.setTurboAudioEnabled(enabled)
+            EffectSoundKind.TRANSMISSION, EffectSoundKind.TURBO -> Unit
         }
     }
 
@@ -1052,8 +1047,8 @@ class DriveController(context: Context) {
         carEffectModes.set(modes)
         audioEngine.setBackfireAudioEnabled(modes.popsAndBangsEnabled)
         audioEngine.setShiftSoundEnabled(modes.shiftSoundsEnabled)
-        audioEngine.setTransmissionAudioEnabled(modes.transmissionEnabled)
-        audioEngine.setTurboAudioEnabled(modes.turboEnabled)
+        audioEngine.setTransmissionAudioEnabled(true)
+        audioEngine.setTurboAudioEnabled(true)
     }
 
     private fun loadPhysics(

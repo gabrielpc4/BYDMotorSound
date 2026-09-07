@@ -1445,7 +1445,7 @@ internal fun CarGridSelectionDialog(
                 .clip(RoundedCornerShape(14.dp))
                 .background(PanelBright)
                 .border(1.dp, Line, RoundedCornerShape(14.dp))
-                .padding(18.dp),
+                .padding(start = 18.dp, top = 9.dp, end = 18.dp),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(
@@ -1479,7 +1479,7 @@ internal fun CarGridSelectionDialog(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 10.dp, bottom = 8.dp),
+                            .padding(top = 10.dp),
                     ) {
                         listOf(
                             FmodBankProfiles.moddedCarsPackId to "MODDED CARS",
@@ -1504,8 +1504,6 @@ internal fun CarGridSelectionDialog(
                             }
                         }
                     }
-                } else {
-                    Spacer(modifier = Modifier.height(8.dp))
                 }
                 Box(modifier = Modifier.fillMaxSize()) {
                     LazyVerticalGrid(

@@ -8,7 +8,7 @@ import kotlin.math.roundToInt
 internal object MinimumAudioThrottle {
     const val MIN = 0.0f
     const val MAX = 1.0f
-    const val DEFAULT = 0.75f
+    const val DEFAULT = 1.0f
     const val STEP = 0.05f
 
     fun normalize(value: Float): Float {

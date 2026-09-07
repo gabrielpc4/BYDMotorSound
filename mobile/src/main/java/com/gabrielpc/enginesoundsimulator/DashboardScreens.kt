@@ -884,10 +884,6 @@ internal fun SettingsScreen(
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                 )
             }
-            MinimumAudioThrottleSettingCard(
-                minimum = minimumAudioThrottle,
-                onMinimumChange = onMinimumAudioThrottleChange,
-            )
             VirtualForwardGearCountControl(
                 gearCount = virtualForwardGearCount,
                 onGearCountChange = onVirtualForwardGearCountChange,
@@ -895,6 +891,8 @@ internal fun SettingsScreen(
                 onSixGearOnLaunchEnabledChange = onSixGearOnLaunchEnabledChange,
             )
             AutomaticTransmissionSettingsControl(
+                minimumAudioThrottle = minimumAudioThrottle,
+                onMinimumAudioThrottleChange = onMinimumAudioThrottleChange,
                 racingReturnThrottlePercent = racingReturnThrottlePercent,
                 onRacingReturnThrottlePercentChange = onRacingReturnThrottlePercentChange,
                 manualRedlineHoldSeconds = manualRedlineHoldSeconds,
@@ -1073,52 +1071,9 @@ private fun SixGearOnLaunchSetting(
 }
 
 @Composable
-private fun MinimumAudioThrottleSettingCard(
-    minimum: Float,
-    onMinimumChange: (Float) -> Unit,
-    modifier: Modifier = Modifier.fillMaxWidth(),
-) {
-    val throttleSteps = ((MinimumAudioThrottle.MAX - MinimumAudioThrottle.MIN) / MinimumAudioThrottle.STEP)
-        .roundToInt() - 1
-
-    Column(
-        modifier = modifier
-            .border(1.dp, Line, RoundedCornerShape(8.dp))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("MIN THROTTLE", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
-            Text(
-                text = String.format(Locale.US, "%.2f", minimum),
-                color = White,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Black,
-            )
-        }
-        Text(
-            text = "Lower bound applied to FMOD engine and transmission throttle parameters.",
-            color = Muted,
-            fontSize = 11.sp,
-            lineHeight = 15.sp,
-        )
-        Slider(
-            value = minimum,
-            onValueChange = { value ->
-                onMinimumChange(MinimumAudioThrottle.normalize(value))
-            },
-            valueRange = MinimumAudioThrottle.MIN..MinimumAudioThrottle.MAX,
-            steps = throttleSteps.coerceAtLeast(0),
-        )
-    }
-}
-
-@Composable
 private fun AutomaticTransmissionSettingsControl(
+    minimumAudioThrottle: Float,
+    onMinimumAudioThrottleChange: (Float) -> Unit,
     racingReturnThrottlePercent: Int,
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
     manualRedlineHoldSeconds: Int,
@@ -1133,6 +1088,35 @@ private fun AutomaticTransmissionSettingsControl(
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        val throttleSteps = ((MinimumAudioThrottle.MAX - MinimumAudioThrottle.MIN) / MinimumAudioThrottle.STEP)
+            .roundToInt() - 1
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("MIN THROTTLE", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
+            Text(
+                text = String.format(Locale.US, "%.2f", minimumAudioThrottle),
+                color = White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Black,
+            )
+        }
+        Text(
+            text = "Lower bound applied to FMOD engine and transmission throttle parameters.",
+            color = Muted,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+        )
+        Slider(
+            value = minimumAudioThrottle,
+            onValueChange = { value ->
+                onMinimumAudioThrottleChange(MinimumAudioThrottle.normalize(value))
+            },
+            valueRange = MinimumAudioThrottle.MIN..MinimumAudioThrottle.MAX,
+            steps = throttleSteps.coerceAtLeast(0),
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,

@@ -2649,8 +2649,8 @@ private:
     int perspective_ = 0;
     bool active_ = false;
     bool exteriorPureAudio_ = false;
-    float minimumAudioThrottle_ = 0.75f;
-    float smoothedPedalAudioThrottle_ = 0.75f;
+    float minimumAudioThrottle_ = 1.0f;
+    float smoothedPedalAudioThrottle_ = 1.0f;
     float pedalAudioThrottleRampUpSeconds_ = 0.1f;
     float pedalAudioThrottleRampDownSeconds_ = 0.1f;
     bool hasTurbo_ = false;

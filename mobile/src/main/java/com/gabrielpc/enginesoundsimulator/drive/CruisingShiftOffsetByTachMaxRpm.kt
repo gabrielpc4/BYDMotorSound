@@ -8,6 +8,16 @@ internal object CruisingShiftOffsetByTachMaxRpm {
     const val MAX = 5_000
     const val STEP = 1_000
 
+    /** Six stops (0..5000 RPM in 1000 RPM steps). Material3 needs `steps = stopCount - 2`. */
+    val stopCount: Int
+        get() = (MAX - MIN) / STEP + 1
+
+    val sliderSteps: Int
+        get() = (MAX - MIN) / STEP - 1
+
+    val lastStopIndex: Float
+        get() = (stopCount - 1).toFloat()
+
     val TIERS: List<Int> = listOf(7_000, 8_000, 9_000, 10_000, 12_000, 20_000)
 
     private val DEFAULT_OFFSETS: Map<Int, Int> = mapOf(

@@ -181,6 +181,8 @@ internal fun MixerDashboardScreen(
     onEventSolo: (String, Boolean) -> Unit,
     soundPerspective: EngineSoundPerspective,
     onSoundPerspectiveChange: (EngineSoundPerspective) -> Unit,
+    exteriorPureAudio: Boolean,
+    onExteriorPureAudioChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var knownSources by remember(soundPerspective, state.selectedCarId) { mutableStateOf(emptyMap<String, FmodSourceState>()) }
@@ -278,6 +280,8 @@ internal fun MixerDashboardScreen(
             MixerListeningPerspectiveSelector(
                 perspective = soundPerspective,
                 onPerspectiveSelected = onSoundPerspectiveChange,
+                exteriorPureAudio = exteriorPureAudio,
+                onExteriorPureAudioChange = onExteriorPureAudioChange,
             )
             Spacer(Modifier.height(8.dp))
             BoxWithConstraints(
@@ -392,6 +396,8 @@ internal fun MixerDashboardScreen(
 private fun MixerListeningPerspectiveSelector(
     perspective: EngineSoundPerspective,
     onPerspectiveSelected: (EngineSoundPerspective) -> Unit,
+    exteriorPureAudio: Boolean,
+    onExteriorPureAudioChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -423,6 +429,25 @@ private fun MixerListeningPerspectiveSelector(
                     .background(if (active) Cyan.copy(alpha = 0.14f) else Color.Transparent)
                     .clickable { onPerspectiveSelected(option) }
                     .padding(horizontal = 12.dp, vertical = 4.dp),
+            )
+        }
+        if (perspective == EngineSoundPerspective.EXTERIOR) {
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = "PURE",
+                color = if (exteriorPureAudio) {
+                    Cyan
+                } else {
+                    Muted
+                },
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp,
+            )
+            Spacer(Modifier.width(8.dp))
+            Switch(
+                checked = exteriorPureAudio,
+                onCheckedChange = onExteriorPureAudioChange,
             )
         }
     }
@@ -1157,8 +1182,7 @@ private fun CruisingShiftOffsetsByTachMaxRpmControl(
     onOffsetChange: (Int, Int) -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
-    val offsetSteps = (CruisingShiftOffsetByTachMaxRpm.MAX - CruisingShiftOffsetByTachMaxRpm.MIN) /
-        CruisingShiftOffsetByTachMaxRpm.STEP - 1
+    val offsetSteps = CruisingShiftOffsetByTachMaxRpm.sliderSteps
 
     Column(
         modifier = modifier

@@ -58,7 +58,7 @@ def format_brl_range(low: int, high: int | None = None) -> str:
 
 
 def format_weight_kg(value: int) -> str:
-    return f"{format_brl_amount(value)} kg"
+    return f"{value} Kg"
 
 
 def format_seconds(value: float) -> str:
@@ -190,7 +190,7 @@ def performance_subtitle_parts(
 
     torque_nm = parse_torque_nm(specs)
     if torque_nm is not None:
-        parts.append(f"{torque_nm_to_kgfm(torque_nm)} kgfm")
+        parts.append(f"{torque_nm_to_kgfm(torque_nm)} Kgfm")
 
     weight_kg = parse_weight_kg(specs)
     if weight_kg is not None:

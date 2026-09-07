@@ -58,6 +58,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -148,7 +149,6 @@ private val InfoBannerBody = Color(0xFF0B4545)
 /** Fixed dashboard layout values previously exposed through the calibration settings. */
 private object DashboardLayoutDefaults {
     const val UI_SCALE = 0.8f
-    const val TACHOMETER_SCALE = 0.8f
     const val CANVAS_ASPECT_RATIO = 1920f / 990f
     /** Classic layout keeps the tach as a right-side overlay sized like the old 0.88 row weight. */
     const val TACHOMETER_OVERLAY_WIDTH_FRACTION = 0.88f / (1.12f + 0.88f)
@@ -469,7 +469,10 @@ private fun MotorSoundDashboard(
                                 .padding(horizontal = 34.dp, vertical = 6.dp),
                         ) {
                             val carStageWidth = maxWidth * DashboardLayoutDefaults.CLASSIC_CAR_STAGE_WIDTH_FRACTION
-                            Column(modifier = Modifier.fillMaxSize()) {
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
                                 CarStage(
                                     state = state,
                                     onPreviousCar = onPreviousCar,
@@ -486,26 +489,19 @@ private fun MotorSoundDashboard(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.Bottom,
                                 ) {
-                                    Column(
+                                    DashboardClassicAudioControlsStack(
+                                        state = state,
+                                        onCruisingShiftOffsetForTachMaxRpmChange = onCruisingShiftOffsetForTachMaxRpmChange,
+                                        onEngineExternalChange = onEngineExternalChange,
+                                        onEnginePureChange = onEnginePureChange,
+                                        onCruisingLogicChange = onCruisingLogicChange,
+                                        onEffectOverrideChange = onEffectOverrideChange,
+                                        onOverrideGainChange = onOverrideGainChange,
                                         modifier = Modifier.padding(
                                             start = DashboardLayoutDefaults.classicContentStartPadding,
                                             bottom = 2.dp,
                                         ),
-                                    ) {
-                                        DashboardEngineControls(
-                                            state = state,
-                                            onCruisingShiftOffsetForTachMaxRpmChange = onCruisingShiftOffsetForTachMaxRpmChange,
-                                            onEngineExternalChange = onEngineExternalChange,
-                                            onEnginePureChange = onEnginePureChange,
-                                            onCruisingLogicChange = onCruisingLogicChange,
-                                            modifier = Modifier.padding(bottom = 6.dp),
-                                        )
-                                        DashboardEffectControls(
-                                            state = state,
-                                            onOverrideChange = onEffectOverrideChange,
-                                            onOverrideGainChange = onOverrideGainChange,
-                                        )
-                                    }
+                                    )
                                     ClassicDriveControls(
                                         state = state,
                                         onThrottle = onThrottle,
@@ -540,11 +536,7 @@ private fun MotorSoundDashboard(
                                     .align(Alignment.CenterEnd)
                                     .width(maxWidth * DashboardLayoutDefaults.TACHOMETER_OVERLAY_WIDTH_FRACTION)
                                     .fillMaxHeight()
-                                    .padding(start = 16.dp, bottom = 6.dp)
-                                    .graphicsLayer {
-                                        scaleX = DashboardLayoutDefaults.TACHOMETER_SCALE
-                                        scaleY = DashboardLayoutDefaults.TACHOMETER_SCALE
-                                    },
+                                    .padding(start = 16.dp, bottom = 6.dp),
                             )
                         }
                         DashboardMainScreen.MIXER -> MixerDashboardScreen(
@@ -564,6 +556,8 @@ private fun MotorSoundDashboard(
                             onMixerCarSpecificGainsChange = onMixerCarSpecificGainsChange,
                             onEventMute = onEventMute,
                             onEventSolo = onEventSolo,
+                            exteriorPureAudio = state.exteriorPureAudio,
+                            onExteriorPureAudioChange = onExteriorPureAudioChange,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f),
@@ -1086,62 +1080,48 @@ private val DASHBOARD_EFFECT_GAIN_PRESETS = listOf(
     DashboardEffectGainPreset("LOUDER", 3.0f),
 )
 
+private object DashboardEngineControlsLayout {
+    val columnGap = 8.dp
+    val columnPadding = 3.dp
+    val rowHeight = 42.dp
+    val cruisingOffsetSliderWidth = 168.dp
+}
+
 private object DashboardClassicEffectLayout {
-    val engineLabelColumnWidth = 88.dp
-    val effectLabelColumnWidth = 116.dp
-    val toggleColumnWidth = 82.dp
+    val effectLabelColumnWidth = 94.dp
     val presetColumnWidth = 105.dp
     val columnGap = 8.dp
     val columnPadding = 3.dp
-    val labelColumnPadding = 0.dp
-    val presetCount = 4
+}
 
-    private fun toggleColumnOuterWidth(): Dp = toggleColumnWidth + columnPadding * 2
-
-    private fun presetColumnOuterWidth(): Dp = presetColumnWidth + columnPadding * 2
-
-    val matrixWidthAfterLabel: Dp
-        get() {
-            var width = toggleColumnOuterWidth()
-            repeat(presetCount) { index ->
-                width += columnGap + presetColumnOuterWidth()
-            }
-            return width
-        }
-
-    val engineRowWidthBeforeSlider: Dp
-        get() {
-            var width = engineExternalLabelOuterWidth()
-            width += columnGap + toggleColumnOuterWidth()
-            width += columnGap + enginePureLabelOuterWidth()
-            width += columnGap + toggleColumnOuterWidth()
-            width += columnGap + engineCruisingLabelOuterWidth()
-            width += columnGap + toggleColumnOuterWidth()
-            width += columnGap
-            return width
-        }
-
-    /** Outer width for EXTERNAL label column (10sp text + horizontal padding). */
-    private fun engineExternalLabelOuterWidth(): Dp = 56.dp + columnPadding * 2
-
-    /** Outer width for PURE label column (10sp text + horizontal padding). */
-    private fun enginePureLabelOuterWidth(): Dp = 30.dp + columnPadding * 2
-
-    /** Outer width for CRUISING label column (10sp text + horizontal padding). */
-    private fun engineCruisingLabelOuterWidth(): Dp = 56.dp + columnPadding * 2
-
-    val minimumThrottleSliderWidth: Dp
-        get() = (matrixWidthAfterLabel - engineRowWidthBeforeSlider).coerceAtLeast(120.dp)
-
-    /** Slider sits immediately after the ENGINE label; trailing toggles stay aligned with LOUDER. */
-    val minimumThrottleSliderWidthAfterEngineLabel: Dp
-        get() {
-            val trailingControlsWidth = engineRowWidthBeforeSlider - columnGap
-            val gapCountAfterEngineLabel = 5
-            val labelWidthDelta = effectLabelColumnWidth - engineLabelColumnWidth
-            return (labelWidthDelta + matrixWidthAfterLabel - trailingControlsWidth - (columnGap * gapCountAfterEngineLabel))
-                .coerceAtLeast(120.dp)
-        }
+@Composable
+private fun DashboardClassicAudioControlsStack(
+    state: DriveSnapshot,
+    onCruisingShiftOffsetForTachMaxRpmChange: (Int, Int) -> Unit,
+    onEngineExternalChange: (Boolean) -> Unit,
+    onEnginePureChange: (Boolean) -> Unit,
+    onCruisingLogicChange: (Boolean) -> Unit,
+    onEffectOverrideChange: (EffectSoundKind, Boolean) -> Unit,
+    onOverrideGainChange: (EffectSoundKind, Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.wrapContentWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        DashboardEngineControls(
+            state = state,
+            onCruisingShiftOffsetForTachMaxRpmChange = onCruisingShiftOffsetForTachMaxRpmChange,
+            onEngineExternalChange = onEngineExternalChange,
+            onEnginePureChange = onEnginePureChange,
+            onCruisingLogicChange = onCruisingLogicChange,
+        )
+        DashboardEffectControls(
+            state = state,
+            onOverrideChange = onEffectOverrideChange,
+            onOverrideGainChange = onOverrideGainChange,
+        )
+    }
 }
 
 @Composable
@@ -1154,52 +1134,25 @@ private fun DashboardEngineControls(
     modifier: Modifier = Modifier,
 ) {
     val external = state.soundPerspective == com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective.EXTERIOR
-    val layout = DashboardClassicEffectLayout
-    val rowHeight = 42.dp
-    val rowGap = 7.dp
-    val cruisingOffsetSteps = (CruisingShiftOffsetByTachMaxRpm.MAX - CruisingShiftOffsetByTachMaxRpm.MIN) /
-        CruisingShiftOffsetByTachMaxRpm.STEP - 1
+    val layout = DashboardEngineControlsLayout
+    val rowHeight = layout.rowHeight
 
     Row(
-        modifier = modifier,
+        modifier = modifier.wrapContentWidth(),
         horizontalArrangement = Arrangement.spacedBy(layout.columnGap),
         verticalAlignment = Alignment.Bottom,
     ) {
         Box(
             modifier = Modifier
                 .height(rowHeight)
-                .width(layout.engineLabelColumnWidth)
-                .padding(start = layout.labelColumnPadding, bottom = 12.dp),
+                .wrapContentWidth()
+                .padding(bottom = 12.dp),
             contentAlignment = Alignment.BottomStart,
         ) {
             Text("ENGINE", color = Cyan, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
-        Row(
-            modifier = Modifier.width(layout.minimumThrottleSliderWidthAfterEngineLabel),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            DashboardPedalAudioSettingSlider(
-                label = "CRUISING OFFSET",
-                valueLabel = CruisingShiftOffsetByTachMaxRpm.formatOffsetLabel(state.cruisingShiftOffsetRpm),
-                value = CruisingShiftOffsetByTachMaxRpm.sliderValueFromOffset(state.cruisingShiftOffsetRpm),
-                onValueChange = { value ->
-                    val selectedOffset = CruisingShiftOffsetByTachMaxRpm.offsetFromSliderValue(value)
-                    if (selectedOffset != state.cruisingShiftOffsetRpm) {
-                        onCruisingShiftOffsetForTachMaxRpmChange(
-                            state.cruisingShiftOffsetTachMaxRpm,
-                            selectedOffset,
-                        )
-                    }
-                },
-                valueRange = CruisingShiftOffsetByTachMaxRpm.MIN.toFloat()..CruisingShiftOffsetByTachMaxRpm.MAX.toFloat(),
-                steps = cruisingOffsetSteps.coerceAtLeast(0),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
         Column(
             horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(rowGap),
             modifier = Modifier
                 .wrapContentWidth()
                 .padding(layout.columnPadding),
@@ -1208,9 +1161,8 @@ private fun DashboardEngineControls(
         }
         Column(
             horizontalAlignment = Alignment.Start,
-            verticalArrangement = Arrangement.spacedBy(rowGap),
             modifier = Modifier
-                .width(layout.toggleColumnWidth)
+                .wrapContentWidth()
                 .padding(layout.columnPadding),
         ) {
             DashboardSwitchCell(rowHeight, external, Line) {
@@ -1219,7 +1171,6 @@ private fun DashboardEngineControls(
         }
         Column(
             horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(rowGap),
             modifier = Modifier
                 .wrapContentWidth()
                 .padding(layout.columnPadding),
@@ -1228,9 +1179,8 @@ private fun DashboardEngineControls(
         }
         Column(
             horizontalAlignment = Alignment.Start,
-            verticalArrangement = Arrangement.spacedBy(rowGap),
             modifier = Modifier
-                .width(layout.toggleColumnWidth)
+                .wrapContentWidth()
                 .padding(layout.columnPadding),
         ) {
             DashboardSwitchCell(rowHeight, state.exteriorPureAudio, Line) {
@@ -1239,7 +1189,6 @@ private fun DashboardEngineControls(
         }
         Column(
             horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(rowGap),
             modifier = Modifier
                 .wrapContentWidth()
                 .padding(layout.columnPadding),
@@ -1248,50 +1197,92 @@ private fun DashboardEngineControls(
         }
         Column(
             horizontalAlignment = Alignment.Start,
-            verticalArrangement = Arrangement.spacedBy(rowGap),
             modifier = Modifier
-                .width(layout.toggleColumnWidth)
+                .wrapContentWidth()
                 .padding(layout.columnPadding),
         ) {
             DashboardSwitchCell(rowHeight, state.cruisingLogicEnabled, Line) {
                 onCruisingLogicChange(!state.cruisingLogicEnabled)
             }
         }
+        if (state.cruisingLogicEnabled) {
+            DashboardCruisingRpmOffsetSlider(
+                offsetRpm = state.cruisingShiftOffsetRpm,
+                onOffsetChange = { selectedOffset ->
+                    if (selectedOffset != state.cruisingShiftOffsetRpm) {
+                        onCruisingShiftOffsetForTachMaxRpmChange(
+                            state.cruisingShiftOffsetTachMaxRpm,
+                            selectedOffset,
+                        )
+                    }
+                },
+                modifier = Modifier.width(layout.cruisingOffsetSliderWidth),
+            )
+        }
     }
 }
 
 @Composable
-private fun DashboardPedalAudioSettingSlider(
-    label: String,
-    valueLabel: String,
-    value: Float,
-    onValueChange: (Float) -> Unit,
-    valueRange: ClosedFloatingPointRange<Float>,
-    steps: Int,
+private fun DashboardCruisingRpmOffsetSlider(
+    offsetRpm: Int,
+    onOffsetChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val stopCount = CruisingShiftOffsetByTachMaxRpm.stopCount
+    val lastStopIndex = CruisingShiftOffsetByTachMaxRpm.lastStopIndex
+    val normalizedOffset = CruisingShiftOffsetByTachMaxRpm.normalize(offsetRpm)
+    val stopIndex = ((CruisingShiftOffsetByTachMaxRpm.MAX - normalizedOffset) / CruisingShiftOffsetByTachMaxRpm.STEP)
+        .toFloat()
+        .coerceIn(0f, lastStopIndex)
+    val sliderColors = SliderDefaults.colors(
+        thumbColor = Cyan,
+        activeTrackColor = Cyan,
+        inactiveTrackColor = Line,
+        activeTickColor = Night,
+        inactiveTickColor = Cyan,
+        disabledThumbColor = Cyan,
+        disabledActiveTrackColor = Cyan,
+        disabledInactiveTrackColor = Line,
+        disabledActiveTickColor = Night,
+        disabledInactiveTickColor = Cyan,
+    )
+
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(label, color = CyanSoft, fontSize = 10.sp, fontWeight = FontWeight.Black)
             Text(
-                valueLabel,
+                text = "CRUISING RPM OFFSET",
+                color = Cyan,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Black,
+            )
+            Text(
+                text = CruisingShiftOffsetByTachMaxRpm.formatOffsetLabel(normalizedOffset),
                 color = White,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
             )
         }
         Slider(
-            value = value,
-            onValueChange = onValueChange,
-            valueRange = valueRange,
-            steps = steps,
+            value = stopIndex,
+            onValueChange = { rawIndex ->
+                val index = rawIndex.roundToInt().coerceIn(0, stopCount - 1)
+                val selectedOffset = CruisingShiftOffsetByTachMaxRpm.MAX - (index * CruisingShiftOffsetByTachMaxRpm.STEP)
+                val normalized = CruisingShiftOffsetByTachMaxRpm.normalize(selectedOffset)
+                if (normalized != normalizedOffset) {
+                    onOffsetChange(normalized)
+                }
+            },
+            valueRange = 0f..lastStopIndex,
+            steps = CruisingShiftOffsetByTachMaxRpm.sliderSteps.coerceAtLeast(0),
+            colors = sliderColors,
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
@@ -1305,8 +1296,8 @@ private fun DashboardEffectControls(
 ) {
     val layout = DashboardClassicEffectLayout
     val rows = listOf(
-        "Pops & Bangs" to EffectSoundKind.POPS_AND_BANGS,
-        "Shift Sounds" to EffectSoundKind.SHIFT,
+        "POPS & BANGS" to EffectSoundKind.POPS_AND_BANGS,
+        "SHIFT SOUNDS" to EffectSoundKind.SHIFT,
     )
     val rowHeight = 42.dp
     val rowGap = 7.dp
@@ -1328,14 +1319,12 @@ private fun DashboardEffectControls(
     }
 
     Row(
-        modifier = modifier,
+        modifier = modifier.wrapContentWidth(),
         horizontalArrangement = Arrangement.spacedBy(layout.columnGap),
     ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(rowGap),
-            modifier = Modifier
-                .width(layout.effectLabelColumnWidth)
-                .padding(layout.labelColumnPadding),
+            modifier = Modifier.width(layout.effectLabelColumnWidth),
         ) {
             rows.forEach { (label, _) ->
                 Box(Modifier.height(rowHeight), contentAlignment = Alignment.CenterStart) {
@@ -1352,7 +1341,7 @@ private fun DashboardEffectControls(
             horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.spacedBy(rowGap),
             modifier = Modifier
-                .width(layout.toggleColumnWidth)
+                .wrapContentWidth()
                 .padding(layout.columnPadding),
         ) {
             rows.forEach { (_, kind) ->
@@ -1665,6 +1654,11 @@ private fun CarPreviewLoadingOverlay(
     }
 }
 
+private object CarStageTypography {
+    const val nameFontSizeSp = 48f
+    const val subtitleFontSizeSp = 18f
+}
+
 @Composable
 private fun CarStage(
     state: DriveSnapshot,
@@ -1676,6 +1670,9 @@ private fun CarStage(
     modifier: Modifier = Modifier,
 ) {
     var carPickerExpanded by remember { mutableStateOf(false) }
+    val nameFontSizeSp = CarStageTypography.nameFontSizeSp
+    val subtitleFontSizeSp = CarStageTypography.subtitleFontSizeSp
+    val nameLineHeightSp = nameFontSizeSp * 1.235f
     val selectedProfile = remember(state.selectedCarId) { FmodBankProfiles.find(state.selectedCarId) }
     val selectedCarSubtitle = remember(selectedProfile.id) {
         CarSubtitleCatalog.forProfileId(selectedProfile.id)
@@ -1747,8 +1744,8 @@ private fun CarStage(
                 Text(
                     text = CarDisplayNameFormatter.format(state.selectedCarName).uppercase(),
                     color = White,
-                    fontSize = 34.sp,
-                    lineHeight = 42.sp,
+                    fontSize = nameFontSizeSp.sp,
+                    lineHeight = nameLineHeightSp.sp,
                     fontWeight = FontWeight.Black,
                     letterSpacing = 1.2.sp,
                 )
@@ -1760,7 +1757,7 @@ private fun CarStage(
                         Text(
                             text = "$horsepower HP",
                             color = CarSubtitleCatalog.horsepowerColor(horsepower),
-                            fontSize = 13.sp,
+                            fontSize = subtitleFontSizeSp.sp,
                             fontWeight = FontWeight.Black,
                             letterSpacing = 1.1.sp,
                         )
@@ -1769,16 +1766,16 @@ private fun CarStage(
                             Text(
                                 text = " · ",
                                 color = CyanSoft,
-                                fontSize = 12.sp,
+                                fontSize = subtitleFontSizeSp.sp,
                             )
                         }
                     }
 
                     if (selectedCarSubtitle.details.isNotBlank()) {
                         Text(
-                            text = selectedCarSubtitle.details.uppercase(),
+                            text = selectedCarSubtitle.details,
                             color = CyanSoft,
-                            fontSize = 12.sp,
+                            fontSize = subtitleFontSizeSp.sp,
                             letterSpacing = 1.1.sp,
                         )
                     }

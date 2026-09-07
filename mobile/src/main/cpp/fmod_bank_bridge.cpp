@@ -895,13 +895,19 @@ public:
         return {};
     }
 
-    void setHostGains(float engineGain, float effectsGain) {
+    void setHostGains(float engineInteriorGain, float engineExteriorGain, float effectsGain) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!active_) return;
-        const float engine = std::max(0.0f, engineGain);
+        const float engineInterior = std::max(0.0f, engineInteriorGain);
+        const float engineExterior = std::max(0.0f, engineExteriorGain);
         const float effects = std::max(0.0f, effectsGain);
-        if (engine == hostEngineGain_ && effects == hostEffectsGain_) return;
-        hostEngineGain_ = engine;
+        if (
+            engineInterior == hostEngineInteriorGain_ &&
+            engineExterior == hostEngineExteriorGain_ &&
+            effects == hostEffectsGain_
+        ) return;
+        hostEngineInteriorGain_ = engineInterior;
+        hostEngineExteriorGain_ = engineExterior;
         hostEffectsGain_ = effects;
         if (alfaBackfireChannel_ != nullptr) alfaBackfireChannel_->setVolume(hostEffectsGain_ * backfireGain_);
         applyEventOverridesLocked();
@@ -965,11 +971,6 @@ public:
         if (shiftSoundEnabled_ == enabled) return;
         shiftSoundEnabled_ = enabled;
         applyEventOverridesLocked();
-    }
-
-    void setShiftOverrideGain(float gain) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        shiftOverrideGain_ = std::max(0.0f, gain);
     }
 
     void setTransmissionAudioEnabled(bool enabled) {
@@ -1248,7 +1249,7 @@ private:
         const int index = upshift ? 0 : 1;
         if (core_->playSound(shiftSamples_[index], nullptr, true, &channel) != FMOD_OK || channel == nullptr) return;
         channel->setMode(FMOD_2D);
-        channel->setVolume(hostEffectsGain_ * gearShiftGain_ * shiftOverrideGain_);
+        channel->setVolume(hostEffectsGain_ * gearShiftGain_);
         channel->setPaused(false);
         shiftChannel_ = channel;
     }
@@ -1553,7 +1554,6 @@ private:
             const bool soloed = anySolo && !soloEvents_[pair.first];
             const bool disabledBackfire = !backfireAudioEnabled_ &&
                 (pair.first == "backfire_int" || pair.first == "backfire_ext");
-            const bool isEngine = pair.first == "engine_int" || pair.first == "engine_ext";
             const bool disabledShift = shiftSoundOverride_ &&
                 (pair.first == "gear_int" || pair.first == "gear_ext" || pair.first == "gear_grind");
             const bool disabledShiftAudio = !shiftSoundEnabled_ &&
@@ -1561,11 +1561,21 @@ private:
             const bool disabledTransmission = !transmissionAudioEnabled_ &&
                 (pair.first == "transmission" || pair.first == "transmission_ext");
             const bool disabledTurbo = !turboAudioEnabled_ && pair.first == "turbo";
-            const float baseGain = isEngine ? hostEngineGain_ : hostEffectsGain_;
+            const float baseGain = hostGainForEventLocked(pair.first);
             const float categoryGain = eventCategoryGain(pair.first);
             pair.second->instance->setVolume((disabledBackfire || disabledShift || disabledShiftAudio || disabledTransmission || disabledTurbo || muted || soloed) ? 0.0f : baseGain * categoryGain);
         }
         applyEmbeddedEngineChannelGainsLocked();
+    }
+
+    float hostGainForEventLocked(const std::string& eventName) const {
+        if (eventName == "engine_int") {
+            return hostEngineInteriorGain_;
+        }
+        if (eventName == "engine_ext") {
+            return hostEngineExteriorGain_;
+        }
+        return hostEffectsGain_;
     }
 
     bool limiterDedicatedEventHasAudibleVoicesLocked() const {
@@ -1619,7 +1629,7 @@ private:
         if (limiterDedicatedEventHasAudibleVoicesLocked()) {
             return 1.0f;
         }
-        const float engineHost = std::max(hostEngineGain_, 0.0001f);
+        const float engineHost = std::max(hostGainForEventLocked(eventName), 0.0001f);
         return (hostEffectsGain_ * limiterGain_) / engineHost;
     }
 
@@ -1942,8 +1952,7 @@ private:
         }
 
         // Host gain multiplies authored Studio automation; it does not replace a bank's mix.
-        const bool isEngine = event.name == "engine_int" || event.name == "engine_ext";
-        instance->setVolume((isEngine ? hostEngineGain_ : hostEffectsGain_) * eventCategoryGain(event.name));
+        instance->setVolume(hostGainForEventLocked(event.name) * eventCategoryGain(event.name));
         instance->setUserData(&event);
         instance->setCallback(
             eventCallback,
@@ -2536,7 +2545,8 @@ private:
     std::unordered_set<std::string> globalParameterFailuresReported_;
     std::unordered_map<std::string, bool> mutedEvents_;
     std::unordered_map<std::string, bool> soloEvents_;
-    float hostEngineGain_ = 1.0f;
+    float hostEngineInteriorGain_ = 1.0f;
+    float hostEngineExteriorGain_ = 1.0f;
     float hostEffectsGain_ = 2.0f;
     std::string loadedProfileId_;
     float transmissionGain_ = 1.0f;
@@ -2548,7 +2558,6 @@ private:
     bool backfireAudioEnabled_ = true;
     bool backfireUseOriginal_ = true;
     bool shiftSoundOverride_ = false;
-    float shiftOverrideGain_ = 0.5f;
     bool shiftSoundEnabled_ = true;
     bool transmissionAudioEnabled_ = true;
     bool turboAudioEnabled_ = true;
@@ -2792,9 +2801,9 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setEventOverr
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setHostGains(
-    JNIEnv*, jobject, jfloat engine, jfloat effects
+    JNIEnv*, jobject, jfloat engineInterior, jfloat engineExterior, jfloat effects
 ) {
-    runtime.setHostGains(engine, effects);
+    runtime.setHostGains(engineInterior, engineExterior, effects);
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -2837,12 +2846,6 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setShiftSound
     JNIEnv*, jobject, jboolean enabled
 ) {
     runtime.setShiftSoundEnabled(enabled == JNI_TRUE);
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setShiftOverrideGain(
-        JNIEnv*, jobject, jfloat gain) {
-    runtime.setShiftOverrideGain(gain);
 }
 
 extern "C" JNIEXPORT void JNICALL

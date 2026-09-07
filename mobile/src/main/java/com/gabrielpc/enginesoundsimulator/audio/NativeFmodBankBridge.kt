@@ -58,7 +58,7 @@ internal class NativeFmodBankBridge {
 
     external fun setDiagnosticsEnabled(enabled: Boolean)
 
-    external fun setHostGains(engine: Float, effects: Float)
+    external fun setHostGains(engineInterior: Float, engineExterior: Float, effects: Float)
 
     /** Identifies the loaded car bank so native code can apply per-car audio policies. */
     external fun setLoadedProfileId(profileId: String)
@@ -70,7 +70,6 @@ internal class NativeFmodBankBridge {
     external fun setShiftSoundOverride(enabled: Boolean)
 
     external fun setShiftSoundEnabled(enabled: Boolean)
-    external fun setShiftOverrideGain(gain: Float)
 
     external fun setTransmissionAudioEnabled(enabled: Boolean)
 

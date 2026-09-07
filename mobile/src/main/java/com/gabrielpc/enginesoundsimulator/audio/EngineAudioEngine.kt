@@ -54,7 +54,8 @@ class EngineAudioEngine(context: Context) {
     private val pendingShiftPulses = ConcurrentLinkedQueue<ShiftPulse>()
     private val rejectedShiftSerial = AtomicLong(0L)
     private val tractionPulseSerial = AtomicLong(0L)
-    private val hostEngineGain = AtomicReference(1.0f)
+    private val hostEngineInteriorGain = AtomicReference(1.0f)
+    private val hostEngineExteriorGain = AtomicReference(1.0f)
     private val hostEffectsGain = AtomicReference(DEFAULT_EFFECTS_HOST_GAIN)
     private val categoryGains = AtomicReference(AudioMixGains())
     private val nativeEventMutes = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
@@ -64,9 +65,6 @@ class EngineAudioEngine(context: Context) {
     private val backfireAudioEnabled = AtomicBoolean(true)
     private val backfireAllowedSamplesMask = AtomicInteger(0b111111)
     private val shiftSoundOverride = AtomicBoolean(false)
-    private val shiftOverrideGain = AtomicReference(0.5f)
-    private val globalTransmissionGain = AtomicReference(0.5f)
-    private val exteriorPureGlobalGain = AtomicReference(1.0f)
     private val shiftSoundEnabled = AtomicBoolean(true)
     private val transmissionAudioEnabled = AtomicBoolean(true)
     private val turboAudioEnabled = AtomicBoolean(true)
@@ -122,12 +120,15 @@ class EngineAudioEngine(context: Context) {
 
     fun isMixerDiagnosticsActive(): Boolean = mixerDiagnosticsActive.get()
 
-    fun setHostGains(engine: Float, effects: Float) {
-        hostEngineGain.set(engine.coerceAtLeast(0f))
+    fun setHostGains(engineInterior: Float, engineExterior: Float, effects: Float) {
+        hostEngineInteriorGain.set(engineInterior.coerceAtLeast(0f))
+        hostEngineExteriorGain.set(engineExterior.coerceAtLeast(0f))
         hostEffectsGain.set(effects.coerceAtLeast(0f))
     }
 
-    fun hostEngineGain(): Float = hostEngineGain.get()
+    fun hostEngineInteriorGain(): Float = hostEngineInteriorGain.get()
+
+    fun hostEngineExteriorGain(): Float = hostEngineExteriorGain.get()
 
     fun hostEffectsGain(): Float = hostEffectsGain.get()
 
@@ -150,23 +151,10 @@ class EngineAudioEngine(context: Context) {
     fun setBackfireAudioEnabled(enabled: Boolean) { backfireAudioEnabled.set(enabled) }
 
     fun setShiftSoundOverride(enabled: Boolean) { shiftSoundOverride.set(enabled) }
-    fun setShiftOverrideGain(gain: Float) { shiftOverrideGain.set(gain.coerceIn(0.25f, 1.0f)) }
 
-    /** Applies the persistent driver preference before a car's per-profile transmission trim. */
-    fun setGlobalTransmissionGain(gain: Float) { globalTransmissionGain.set(gain.coerceIn(0.25f, 1.0f)) }
+    private fun effectiveHostEngineInteriorGain(): Float = hostEngineInteriorGain.get()
 
-    fun setExteriorPureGlobalGain(gain: Float) {
-        exteriorPureGlobalGain.set(gain.coerceIn(0.25f, 1.0f))
-    }
-
-    private fun effectiveHostEngineGain(): Float {
-        val base = hostEngineGain.get()
-        if (!exteriorPureAudio.get()) {
-            return base
-        }
-
-        return base * exteriorPureGlobalGain.get()
-    }
+    private fun effectiveHostEngineExteriorGain(): Float = hostEngineExteriorGain.get()
 
     fun setShiftSoundEnabled(enabled: Boolean) { shiftSoundEnabled.set(enabled) }
 
@@ -360,13 +348,13 @@ class EngineAudioEngine(context: Context) {
         var consumedRejectedShift = rejectedShiftSerial.get()
         var consumedTractionPulse = tractionPulseSerial.get()
         var sentCategoryGains: AudioMixGains? = null
-        var sentHostEngineGain: Float? = null
+        var sentHostEngineInteriorGain: Float? = null
+        var sentHostEngineExteriorGain: Float? = null
         var sentHostEffectsGain: Float? = null
         var sentNativeEventOverridesVersion = -1L
         var sentBackfireAllowedSamplesMask = -1
         var sentBackfireAudioEnabled: Boolean? = null
         var sentShiftSoundOverride: Boolean? = null
-        var sentShiftOverrideGain = -1f
         var sentShiftSoundEnabled: Boolean? = null
         var sentTransmissionAudioEnabled: Boolean? = null
         var sentTurboAudioEnabled: Boolean? = null
@@ -465,34 +453,34 @@ class EngineAudioEngine(context: Context) {
                 var hostGainCalls = 0
                 var categoryGainCalls = 0
                 var overrideBatchCalls = 0
-                val requestedHostEngineGain = hostEngineGain.get()
                 val requestedHostEffectsGain = hostEffectsGain.get()
-                val effectiveHostEngineGain = effectiveHostEngineGain()
+                val effectiveHostEngineInteriorGain = effectiveHostEngineInteriorGain()
+                val effectiveHostEngineExteriorGain = effectiveHostEngineExteriorGain()
                 if (
-                    effectiveHostEngineGain != sentHostEngineGain ||
+                    effectiveHostEngineInteriorGain != sentHostEngineInteriorGain ||
+                    effectiveHostEngineExteriorGain != sentHostEngineExteriorGain ||
                     requestedHostEffectsGain != sentHostEffectsGain
                 ) {
-                    bridge.setHostGains(effectiveHostEngineGain, requestedHostEffectsGain)
-                    sentHostEngineGain = effectiveHostEngineGain
+                    bridge.setHostGains(
+                        effectiveHostEngineInteriorGain,
+                        effectiveHostEngineExteriorGain,
+                        requestedHostEffectsGain,
+                    )
+                    sentHostEngineInteriorGain = effectiveHostEngineInteriorGain
+                    sentHostEngineExteriorGain = effectiveHostEngineExteriorGain
                     sentHostEffectsGain = requestedHostEffectsGain
                     hostGainCalls = 1
                 }
                 val configuredGains = categoryGains.get()
-                // The global transmission preference is deliberately multiplied here, after the
-                // bank's authored automation and before native routing. It never rewrites a bank
-                // curve and preserves the per-car mixer gain as an independent second control.
-                val gains = configuredGains.copy(
-                    transmission = configuredGains.transmission * globalTransmissionGain.get(),
-                )
-                if (gains != sentCategoryGains) {
+                if (configuredGains != sentCategoryGains) {
                     bridge.setCategoryGains(
-                        gains.transmission,
-                        gains.gearShift,
-                        gains.turbo,
-                        gains.backfire,
-                        gains.limiter,
+                        configuredGains.transmission,
+                        configuredGains.gearShift,
+                        configuredGains.turbo,
+                        configuredGains.backfire,
+                        configuredGains.limiter,
                     )
-                    sentCategoryGains = gains
+                    sentCategoryGains = configuredGains
                     categoryGainCalls = 1
                 }
                 val requestedNativeEventOverridesVersion = nativeEventOverridesVersion.get()
@@ -521,11 +509,6 @@ class EngineAudioEngine(context: Context) {
                 if (requestedShiftSoundOverride != sentShiftSoundOverride) {
                     bridge.setShiftSoundOverride(requestedShiftSoundOverride)
                     sentShiftSoundOverride = requestedShiftSoundOverride
-                }
-                val requestedShiftOverrideGain = shiftOverrideGain.get()
-                if (requestedShiftOverrideGain != sentShiftOverrideGain) {
-                    bridge.setShiftOverrideGain(requestedShiftOverrideGain)
-                    sentShiftOverrideGain = requestedShiftOverrideGain
                 }
                 val requestedShiftSoundEnabled = shiftSoundEnabled.get()
                 if (requestedShiftSoundEnabled != sentShiftSoundEnabled) {

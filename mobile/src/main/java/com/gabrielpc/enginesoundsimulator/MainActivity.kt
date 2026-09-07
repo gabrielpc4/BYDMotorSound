@@ -107,9 +107,6 @@ import androidx.core.view.WindowInsetsCompat
 import com.gabrielpc.enginesoundsimulator.drive.DriveController
 import com.gabrielpc.enginesoundsimulator.drive.DriveSnapshot
 import com.gabrielpc.enginesoundsimulator.drive.BackfireSettings
-import com.gabrielpc.enginesoundsimulator.drive.ExteriorPureAudioSettings
-import com.gabrielpc.enginesoundsimulator.drive.ShiftSoundSettings
-import com.gabrielpc.enginesoundsimulator.drive.TransmissionSoundSettings
 import com.gabrielpc.enginesoundsimulator.drive.EffectSoundKind
 import com.gabrielpc.enginesoundsimulator.drive.UserVisibleMessage
 import com.gabrielpc.enginesoundsimulator.drive.UserVisibleMessageSeverity
@@ -249,9 +246,6 @@ class MainActivity : ComponentActivity() {
                         onMixerDiagnosticsActive = controller::setMixerDiagnosticsActive,
                         onCategoryGains = controller::setFmodCategoryGains,
                         onBackfireSettingsChange = controller::setBackfireSettings,
-                        onShiftSoundSettingsChange = controller::setShiftSoundSettings,
-                        onTransmissionSoundSettingsChange = controller::setTransmissionSoundSettings,
-                        onExteriorPureAudioSettingsChange = controller::setExteriorPureAudioSettings,
                         onPreviewBackfireSample = backfirePreviewPlayer::play,
                         onEventMute = controller::setFmodEventMute,
                         onEventSolo = controller::setFmodEventSolo,
@@ -354,9 +348,6 @@ private fun MotorSoundDashboard(
     onMixerDiagnosticsActive: (Boolean) -> Unit,
     onCategoryGains: (Float, Float, Float, Float) -> Unit,
     onBackfireSettingsChange: (BackfireSettings) -> Unit,
-    onShiftSoundSettingsChange: (ShiftSoundSettings) -> Unit,
-    onTransmissionSoundSettingsChange: (TransmissionSoundSettings) -> Unit,
-    onExteriorPureAudioSettingsChange: (ExteriorPureAudioSettings) -> Unit,
     onPreviewBackfireSample: (Int) -> Unit,
     onEventMute: (String, Boolean) -> Unit,
     onEventSolo: (String, Boolean) -> Unit,
@@ -574,16 +565,8 @@ private fun MotorSoundDashboard(
                             onResetAll = onResetAllPreferences,
                             fmodUpdateRateHz = state.fmodUpdateRateHz,
                             onFmodUpdateRateChange = onFmodUpdateRateChange,
-                            exteriorPureAudio = state.exteriorPureAudio,
-                            onExteriorPureAudioChange = onExteriorPureAudioChange,
                             backfireSettings = state.backfireSettings,
                             onBackfireSettingsChange = onBackfireSettingsChange,
-                            shiftSoundSettings = state.shiftSoundSettings,
-                            onShiftSoundSettingsChange = onShiftSoundSettingsChange,
-                            transmissionSoundSettings = state.transmissionSoundSettings,
-                            onTransmissionSoundSettingsChange = onTransmissionSoundSettingsChange,
-                            exteriorPureAudioSettings = state.exteriorPureAudioSettings,
-                            onExteriorPureAudioSettingsChange = onExteriorPureAudioSettingsChange,
                             virtualForwardGearCount = state.virtualForwardGearCount,
                             onVirtualForwardGearCountChange = onVirtualForwardGearCountChange,
                             sixGearOnLaunchEnabled = state.sixGearOnLaunchEnabled,

@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -42,6 +43,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
@@ -112,10 +114,7 @@ import com.gabrielpc.enginesoundsimulator.drive.ManualAutodownshiftRpm
 import com.gabrielpc.enginesoundsimulator.drive.ManualRedlineHoldSeconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingReturnHoldSeconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingReturnThrottlePercent
-import com.gabrielpc.enginesoundsimulator.drive.ExteriorPureAudioSettings
 import com.gabrielpc.enginesoundsimulator.drive.PedalAudioThrottleRampMilliseconds
-import com.gabrielpc.enginesoundsimulator.drive.ShiftSoundSettings
-import com.gabrielpc.enginesoundsimulator.drive.TransmissionSoundSettings
 import com.gabrielpc.enginesoundsimulator.simulation.VirtualGearProfile
 import com.gabrielpc.enginesoundsimulator.drive.AlfaBackfireSources
 import com.gabrielpc.enginesoundsimulator.simulation.DrivetrainState
@@ -146,6 +145,9 @@ internal fun DashboardMixerLauncherButton(
 }
 
 internal const val MIXER_SCREEN_HORIZONTAL_PADDING = 20
+
+/** Reserve scroll space so mixer sliders can scroll clear of the floating pedals row. */
+private val MIXER_PEDALS_OVERLAY_HEIGHT = 240.dp
 
 @Composable
 internal fun MixerDashboardScreen(
@@ -230,35 +232,40 @@ internal fun MixerDashboardScreen(
             }
     }
 
-    Column(
+    var mixerGains by remember(state.mixerGlobalGains) { mutableStateOf(state.mixerGlobalGains) }
+    Row(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = MIXER_SCREEN_HORIZONTAL_PADDING.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        MixerHeaderRow(
-            drivetrain = state.drivetrain,
-            transmissionPosition = state.transmissionPosition,
-            maxRpm = state.drivetrain.tachometerMaximumRpm,
-            redlineRpm = state.drivetrain.redlineRpm,
-            selectedCarId = state.selectedCarId,
-            selectedCarName = state.selectedCarName,
-            selectedCarPreviewAsset = state.selectedCarPreviewAsset,
-            favoriteCarIds = state.favoriteCarIds,
-            onSelectCar = onSelectCar,
-            onToggleCarFavorite = onToggleCarFavorite,
-        )
-        Spacer(Modifier.height(8.dp))
-        var mixerGains by remember(state.mixerGlobalGains) { mutableStateOf(state.mixerGlobalGains) }
-        Row(
+        Column(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                .weight(0.58f)
+                .fillMaxHeight(),
         ) {
+            MixerHeaderRow(
+                drivetrain = state.drivetrain,
+                transmissionPosition = state.transmissionPosition,
+                maxRpm = state.drivetrain.tachometerMaximumRpm,
+                redlineRpm = state.drivetrain.redlineRpm,
+                selectedCarId = state.selectedCarId,
+                selectedCarName = state.selectedCarName,
+                selectedCarPreviewAsset = state.selectedCarPreviewAsset,
+                favoriteCarIds = state.favoriteCarIds,
+                onSelectCar = onSelectCar,
+                onToggleCarFavorite = onToggleCarFavorite,
+            )
+            Spacer(Modifier.height(8.dp))
+            MixerListeningPerspectiveSelector(
+                perspective = soundPerspective,
+                onPerspectiveSelected = onSoundPerspectiveChange,
+            )
+            Spacer(Modifier.height(8.dp))
             BoxWithConstraints(
                 modifier = Modifier
-                    .weight(0.58f)
-                    .fillMaxHeight(),
+                    .weight(1f)
+                    .fillMaxWidth(),
             ) {
                 val columnCount = (maxWidth.value / 390f).toInt().coerceIn(1, 2)
                 LazyColumn(
@@ -306,51 +313,87 @@ internal fun MixerDashboardScreen(
                     }
                 }
             }
-            Column(
+        }
+        Box(
+            modifier = Modifier
+                .weight(0.42f)
+                .fillMaxHeight(),
+        ) {
+            MixerControlsPanel(
+                carEngineHostGain = state.engineHostGain,
+                carEffectsHostGain = state.effectsHostGain,
+                carTransmissionGain = state.transmissionGain,
+                carGearShiftGain = state.gearShiftGain,
+                carTurboGain = state.turboGain,
+                carBackfireGain = state.backfireGain,
+                carLimiterGain = state.limiterGain,
+                hasTurbo = state.hasTurbo,
+                mixerGains = mixerGains,
+                onMixerGainsChange = { updated ->
+                    mixerGains = updated
+                    onMixerGlobalGainsChange(updated)
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+            MixerDriveControls(
+                state = state,
+                onThrottle = onThrottle,
+                onBrake = onBrake,
+                onSimulatedRegen = onSimulatedRegen,
+                onToggleSimulatedPedalLatch = onToggleSimulatedPedalLatch,
+                onTransmissionPositionChange = onTransmissionPositionChange,
+                onManualUpshift = onManualUpshift,
+                onManualDownshift = onManualDownshift,
                 modifier = Modifier
-                    .weight(0.42f)
-                    .fillMaxHeight(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                MixerControlsPanel(
-                    perspective = soundPerspective,
-                    onPerspectiveSelected = onSoundPerspectiveChange,
-                    carEngineHostGain = state.engineHostGain,
-                    carEffectsHostGain = state.effectsHostGain,
-                    carTransmissionGain = state.transmissionGain,
-                    carGearShiftGain = state.gearShiftGain,
-                    carTurboGain = state.turboGain,
-                    carBackfireGain = state.backfireGain,
-                    carLimiterGain = state.limiterGain,
-                    hasTurbo = state.hasTurbo,
-                    mixerGains = mixerGains,
-                    onMixerGainsChange = { updated ->
-                        mixerGains = updated
-                        onMixerGlobalGainsChange(updated)
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                )
-                MixerPedalsPanel(
-                    state = state,
-                    onThrottle = onThrottle,
-                    onBrake = onBrake,
-                    onSimulatedRegen = onSimulatedRegen,
-                    onToggleSimulatedPedalLatch = onToggleSimulatedPedalLatch,
-                    onTransmissionPositionChange = onTransmissionPositionChange,
-                    onManualUpshift = onManualUpshift,
-                    onManualDownshift = onManualDownshift,
-                )
-            }
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 2.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MixerListeningPerspectiveSelector(
+    perspective: EngineSoundPerspective,
+    onPerspectiveSelected: (EngineSoundPerspective) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Panel.copy(alpha = 0.92f))
+            .border(1.dp, Line.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "LISTENING",
+            color = Muted,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp,
+        )
+        Spacer(Modifier.width(10.dp))
+        EngineSoundPerspective.entries.forEach { option ->
+            val active = option == perspective
+            Text(
+                text = option.displayName,
+                color = if (active) Cyan else Muted,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Black,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(if (active) Cyan.copy(alpha = 0.14f) else Color.Transparent)
+                    .clickable { onPerspectiveSelected(option) }
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+            )
         }
     }
 }
 
 @Composable
 private fun MixerControlsPanel(
-    perspective: EngineSoundPerspective,
-    onPerspectiveSelected: (EngineSoundPerspective) -> Unit,
     carEngineHostGain: Float,
     carEffectsHostGain: Float,
     carTransmissionGain: Float,
@@ -371,55 +414,27 @@ private fun MixerControlsPanel(
             .border(1.dp, Line, RoundedCornerShape(8.dp))
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "LISTENING",
-                color = Muted,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
-            )
-            Spacer(Modifier.width(10.dp))
-            EngineSoundPerspective.entries.forEach { option ->
-                val active = option == perspective
-                Text(
-                    text = option.displayName,
-                    color = if (active) Cyan else Muted,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Black,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(5.dp))
-                        .background(if (active) Cyan.copy(alpha = 0.14f) else Color.Transparent)
-                        .clickable { onPerspectiveSelected(option) }
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                )
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "GLOBAL MIX (× car dashboard)",
-            color = Muted,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 0.8.sp,
-        )
-        Spacer(Modifier.height(6.dp))
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = MIXER_PEDALS_OVERLAY_HEIGHT),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            MixerGlobalGainSlider("ENGINE", mixerGains.engineHost, carEngineHostGain) {
-                onMixerGainsChange(mixerGains.copy(engineHost = it))
+            MixerGlobalGainSlider("ENGINE INTERIOR", mixerGains.engineInterior, carEngineHostGain) {
+                onMixerGainsChange(mixerGains.copy(engineInterior = it))
+            }
+            MixerGlobalGainSlider("ENGINE EXTERIOR", mixerGains.engineExterior, carEngineHostGain) {
+                onMixerGainsChange(mixerGains.copy(engineExterior = it))
             }
             MixerGlobalGainSlider("EFFECTS", mixerGains.effectsHost, carEffectsHostGain) {
                 onMixerGainsChange(mixerGains.copy(effectsHost = it))
             }
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 4.dp),
+                color = Line,
+            )
             MixerGlobalGainSlider("TRANSMISSION", mixerGains.transmission, carTransmissionGain) {
                 onMixerGainsChange(mixerGains.copy(transmission = it))
             }
@@ -448,7 +463,11 @@ private fun MixerGlobalGainSlider(
     carValue: Float,
     onValueChange: (Float) -> Unit,
 ) {
-    val effectiveValue = carValue * globalValue
+    val snappedGlobalValue = MixerGlobalGains.snap(globalValue)
+    val effectiveValue = carValue * snappedGlobalValue
+    val stopIndex = MixerGlobalGains.stopIndex(snappedGlobalValue).toFloat()
+    val lastStopIndex = (MixerGlobalGains.STOPS.size - 1).toFloat()
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -463,63 +482,22 @@ private fun MixerGlobalGainSlider(
                 letterSpacing = 0.8.sp,
             )
             Text(
-                text = String.format(Locale.US, "%.1fx → %.1fx", globalValue, effectiveValue),
+                text = "${MixerGlobalGains.formatMultiplier(snappedGlobalValue)} → ${MixerGlobalGains.formatMultiplier(effectiveValue)}",
                 color = White,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
             )
         }
         Slider(
-            value = globalValue,
-            onValueChange = onValueChange,
-            valueRange = MixerGlobalGains.MIN..MixerGlobalGains.MAX,
-            steps = 4,
+            value = stopIndex,
+            onValueChange = { rawIndex ->
+                val index = rawIndex.roundToInt().coerceIn(0, MixerGlobalGains.STOPS.lastIndex)
+                onValueChange(MixerGlobalGains.stopValue(index))
+            },
+            valueRange = 0f..lastStopIndex,
+            steps = MixerGlobalGains.STOPS.size - 2,
             modifier = Modifier.fillMaxWidth(),
         )
-    }
-}
-
-@Composable
-private fun MixerPedalsPanel(
-    state: DriveSnapshot,
-    onThrottle: (Double) -> Unit,
-    onBrake: (Double) -> Unit,
-    onSimulatedRegen: (Double) -> Unit,
-    onToggleSimulatedPedalLatch: () -> Unit,
-    onTransmissionPositionChange: (TransmissionPosition) -> Unit,
-    onManualUpshift: () -> Unit,
-    onManualDownshift: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(Panel)
-            .border(1.dp, Line, RoundedCornerShape(8.dp))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        contentAlignment = Alignment.CenterEnd,
-    ) {
-        MixerDriveControls(
-            state = state,
-            onThrottle = onThrottle,
-            onBrake = onBrake,
-            onSimulatedRegen = onSimulatedRegen,
-            onToggleSimulatedPedalLatch = onToggleSimulatedPedalLatch,
-            onTransmissionPositionChange = onTransmissionPositionChange,
-            onManualUpshift = onManualUpshift,
-            onManualDownshift = onManualDownshift,
-        )
-    }
-}
-
-@Composable
-private fun GainControl(label: String, value: Float, onValueChange: (Float) -> Unit) {
-    Column(modifier = Modifier.width(300.dp)) {
-        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Text(label, color = CyanSoft, fontSize = 10.sp, fontWeight = FontWeight.Black)
-            Text(String.format(Locale.US, "%.1fx", value), color = White, fontSize = 10.sp)
-        }
-        Slider(value = value, onValueChange = onValueChange, valueRange = 0.5f..3.0f)
     }
 }
 
@@ -528,16 +506,8 @@ internal fun SettingsScreen(
     onResetAll: () -> Unit,
     fmodUpdateRateHz: Int,
     onFmodUpdateRateChange: (Int) -> Unit,
-    exteriorPureAudio: Boolean,
-    onExteriorPureAudioChange: (Boolean) -> Unit,
     backfireSettings: BackfireSettings,
     onBackfireSettingsChange: (BackfireSettings) -> Unit,
-    shiftSoundSettings: ShiftSoundSettings,
-    onShiftSoundSettingsChange: (ShiftSoundSettings) -> Unit,
-    transmissionSoundSettings: TransmissionSoundSettings,
-    onTransmissionSoundSettingsChange: (TransmissionSoundSettings) -> Unit,
-    exteriorPureAudioSettings: ExteriorPureAudioSettings,
-    onExteriorPureAudioSettingsChange: (ExteriorPureAudioSettings) -> Unit,
     virtualForwardGearCount: Int,
     onVirtualForwardGearCountChange: (Int) -> Unit,
     sixGearOnLaunchEnabled: Boolean,
@@ -595,33 +565,6 @@ internal fun SettingsScreen(
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                 )
             }
-            SettingsGridRow {
-                SettingsGainPresetCard(
-                    title = "SHIFT OVERRIDE GAIN",
-                    selectedGain = shiftSoundSettings.overrideGain,
-                    onGainSelected = { gain ->
-                        onShiftSoundSettingsChange(shiftSoundSettings.copy(overrideGain = gain))
-                    },
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                )
-                SettingsGainPresetCard(
-                    title = "TRANSMISSION GLOBAL GAIN",
-                    selectedGain = transmissionSoundSettings.globalGain,
-                    onGainSelected = { gain ->
-                        onTransmissionSoundSettingsChange(transmissionSoundSettings.copy(globalGain = gain))
-                    },
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                )
-                SettingsGainPresetCard(
-                    title = "PURE ENGINE GLOBAL GAIN",
-                    description = "Applied on top of the ENGINE preset gain only while Exterior Pure audio is active.",
-                    selectedGain = exteriorPureAudioSettings.globalGain,
-                    onGainSelected = { gain ->
-                        onExteriorPureAudioSettingsChange(exteriorPureAudioSettings.copy(globalGain = gain))
-                    },
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                )
-            }
             VirtualForwardGearCountControl(
                 gearCount = virtualForwardGearCount,
                 onGearCountChange = onVirtualForwardGearCountChange,
@@ -670,48 +613,6 @@ private fun SettingsGridRow(
 }
 
 @Composable
-private fun SettingsGainPresetCard(
-    title: String,
-    selectedGain: Float,
-    onGainSelected: (Float) -> Unit,
-    modifier: Modifier = Modifier.fillMaxWidth(),
-    description: String? = null,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxHeight()
-            .border(1.dp, Line, RoundedCornerShape(8.dp))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(title, color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
-        if (description != null) {
-            Text(description, color = Muted, fontSize = 11.sp)
-        }
-        Spacer(modifier = Modifier.weight(1f))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(0.25f, 0.5f, 1.0f).forEach { gain ->
-                Button(
-                    onClick = { onGainSelected(gain) },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (selectedGain == gain) Cyan else PanelBright,
-                    ),
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(vertical = 8.dp),
-                ) {
-                    Text(
-                        text = "${gain}x",
-                        color = if (selectedGain == gain) Night else White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Black,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun VirtualForwardGearCountControl(
     gearCount: Int,
     onGearCountChange: (Int) -> Unit,
@@ -727,56 +628,83 @@ private fun VirtualForwardGearCountControl(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.Top,
         ) {
-            Text("VIRTUAL FORWARD GEARS", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
-            Text(
-                text = "$gearCount gears",
-                color = White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Black,
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("VIRTUAL FORWARD GEARS", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    Text(
+                        text = "$gearCount gears",
+                        color = White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Black,
+                    )
+                }
+
+                Slider(
+                    value = gearCount.toFloat(),
+                    onValueChange = { value ->
+                        val selectedCount = value.roundToInt()
+
+                        if (selectedCount != gearCount) {
+                            onGearCountChange(selectedCount)
+                        }
+                    },
+                    valueRange = VirtualGearProfile.MIN_VIRTUAL_GEARS.toFloat()..VirtualGearProfile.MAX_VIRTUAL_GEARS.toFloat(),
+                    steps = VirtualGearProfile.MAX_VIRTUAL_GEARS - VirtualGearProfile.MIN_VIRTUAL_GEARS - 1,
+                )
+            }
+
+            SixGearOnLaunchSetting(
+                enabled = sixGearOnLaunchEnabled,
+                onEnabledChange = onSixGearOnLaunchEnabledChange,
+                modifier = Modifier.width(280.dp),
             )
         }
 
+        VirtualGearDistributionChart(
+            gearCount = gearCount,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun SixGearOnLaunchSetting(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text("6-GEAR ON LAUNCH", color = Cyan, fontSize = 13.sp, fontWeight = FontWeight.Black)
-                Text(
-                    text = "Launch control temporarily uses the 6-gear ratio profile until throttle lift or brake.",
-                    color = Muted,
-                    fontSize = 11.sp,
-                    lineHeight = 14.sp,
-                )
-            }
-
+            Text("6-GEAR ON LAUNCH", color = Cyan, fontSize = 13.sp, fontWeight = FontWeight.Black)
             Switch(
-                checked = sixGearOnLaunchEnabled,
-                onCheckedChange = onSixGearOnLaunchEnabledChange,
+                checked = enabled,
+                onCheckedChange = onEnabledChange,
             )
         }
 
-        Slider(
-            value = gearCount.toFloat(),
-            onValueChange = { value ->
-                val selectedCount = value.roundToInt()
-
-                if (selectedCount != gearCount) {
-                    onGearCountChange(selectedCount)
-                }
-            },
-            valueRange = VirtualGearProfile.MIN_VIRTUAL_GEARS.toFloat()..VirtualGearProfile.MAX_VIRTUAL_GEARS.toFloat(),
-            steps = VirtualGearProfile.MAX_VIRTUAL_GEARS - VirtualGearProfile.MIN_VIRTUAL_GEARS - 1,
+        Text(
+            text = "Launch control temporarily uses the 6-gear ratio profile until throttle lift or brake.",
+            color = Muted,
+            fontSize = 11.sp,
+            lineHeight = 14.sp,
         )
-
-        VirtualGearDistributionChart(gearCount = gearCount)
     }
 }
 
@@ -1104,9 +1032,6 @@ private fun BackfireSettingsPanel(
         }
         SettingsToggle("ALLOW BACKFIRE IN P / N", value.allowParkNeutralOverride) {
             onChange(value.copy(allowParkNeutralOverride = !value.allowParkNeutralOverride))
-        }
-        BackfireSlider("BACKFIRE GAIN", value.backfireGain.toDouble(), 1.0f..10.0f, suffix = "x", steps = 17) {
-            onChange(value.copy(backfireGain = it))
         }
         BackfireSlider("ARM THROTTLE", value.armThrottle, 0.05f..1.0f, steps = 17) {
             onChange(value.copy(armThrottle = it.toDouble()))
@@ -1632,7 +1557,7 @@ internal fun CarGridSelectionDialog(
                                     showFavoriteStarOnlyWhenFavorited = true,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(128.dp)
+                                        .heightIn(max = 128.dp)
                                         .clip(RoundedCornerShape(6.dp)),
                                 )
                                 Text(
@@ -1780,38 +1705,27 @@ private fun CarPreviewThumbnail(
     }
 
     val aspectRatio = preview?.aspectRatio ?: (16f / 9f)
-    val density = LocalDensity.current
 
     Box(
-        modifier = modifier.background(Color.Black.copy(alpha = 0.42f)),
+        modifier = modifier
+            .aspectRatio(aspectRatio)
+            .background(Color.Black.copy(alpha = 0.42f)),
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .aspectRatio(aspectRatio),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (preview != null) {
-                Image(
-                    bitmap = preview.image,
-                    contentDescription = contentDescription,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .sizeIn(
-                            maxWidth = with(density) { preview.image.width.toDp() },
-                            maxHeight = with(density) { preview.image.height.toDp() },
-                        ),
-                )
-            } else {
-                Image(
-                    painter = painterResource(R.drawable.apex_v10_car),
-                    contentDescription = contentDescription,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
+        if (preview != null) {
+            Image(
+                bitmap = preview.image,
+                contentDescription = contentDescription,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Image(
+                painter = painterResource(R.drawable.apex_v10_car),
+                contentDescription = contentDescription,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
 
         val shouldShowFavoriteStar = onToggleFavorite != null &&

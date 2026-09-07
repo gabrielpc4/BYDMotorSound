@@ -2,10 +2,14 @@ package com.gabrielpc.enginesoundsimulator.audio
 
 import android.content.Context
 import com.gabrielpc.enginesoundsimulator.AppPreferenceStores
+import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /** App-wide mixer multipliers applied on top of each car's dashboard mix settings. */
 data class MixerGlobalGains(
-    val engineHost: Float = 1.0f,
+    val engineInterior: Float = 1.0f,
+    val engineExterior: Float = 1.0f,
     val effectsHost: Float = 1.0f,
     val transmission: Float = 1.0f,
     val gearShift: Float = 1.0f,
@@ -14,23 +18,58 @@ data class MixerGlobalGains(
     val limiter: Float = 1.0f,
 ) {
     fun normalized(): MixerGlobalGains = copy(
-        engineHost = engineHost.coerceIn(MIN, MAX),
-        effectsHost = effectsHost.coerceIn(MIN, MAX),
-        transmission = transmission.coerceIn(MIN, MAX),
-        gearShift = gearShift.coerceIn(MIN, MAX),
-        turbo = turbo.coerceIn(MIN, MAX),
-        backfire = backfire.coerceIn(MIN, MAX),
-        limiter = limiter.coerceIn(MIN, MAX),
+        engineInterior = snap(engineInterior),
+        engineExterior = snap(engineExterior),
+        effectsHost = snap(effectsHost),
+        transmission = snap(transmission),
+        gearShift = snap(gearShift),
+        turbo = snap(turbo),
+        backfire = snap(backfire),
+        limiter = snap(limiter),
     )
 
     companion object {
-        const val MIN = 0.5f
-        const val MAX = 3.0f
+        val STOPS = floatArrayOf(0f, 0.12f, 0.25f, 0.5f, 1f, 2f, 3f, 5f)
+
+        const val MIN = 0f
+        const val MAX = 5f
+
+        fun snap(value: Float): Float {
+            return STOPS.minByOrNull { abs(it - value) } ?: 1f
+        }
+
+        fun stopIndex(value: Float): Int {
+            return STOPS.indices.minByOrNull { abs(STOPS[it] - value) } ?: defaultStopIndex()
+        }
+
+        fun stopValue(index: Int): Float {
+            return STOPS[index.coerceIn(0, STOPS.lastIndex)]
+        }
+
+        fun formatMultiplier(value: Float): String {
+            if (abs(value) < 0.001f) {
+                return "0x"
+            }
+
+            val snapped = snap(value)
+            if (abs(value - snapped) < 0.001f) {
+                return when (snapped) {
+                    0.12f -> "0.12x"
+                    0.25f -> "0.25x"
+                    else -> String.format(Locale.US, "%.1fx", snapped)
+                }
+            }
+
+            return String.format(Locale.US, "%.1fx", value)
+        }
+
+        private fun defaultStopIndex(): Int {
+            return STOPS.indexOfFirst { it == 1f }.coerceAtLeast(0)
+        }
     }
 }
 
 internal fun AudioMixGains.effectiveWith(mixerGlobal: MixerGlobalGains): AudioMixGains = copy(
-    engineHost = engineHost * mixerGlobal.engineHost,
     effectsHost = effectsHost * mixerGlobal.effectsHost,
     transmission = transmission * mixerGlobal.transmission,
     gearShift = gearShift * mixerGlobal.gearShift,
@@ -45,20 +84,25 @@ internal class MixerGlobalGainRepository(context: Context) {
         Context.MODE_PRIVATE,
     )
 
-    fun load(): MixerGlobalGains = MixerGlobalGains(
-        engineHost = read("engine_host"),
-        effectsHost = read("effects_host"),
-        transmission = read("transmission"),
-        gearShift = read("gear_shift"),
-        turbo = read("turbo"),
-        backfire = read("backfire"),
-        limiter = read("limiter"),
-    ).normalized()
+    fun load(): MixerGlobalGains {
+        val legacyEngineHost = preferences.getFloat("engine_host", 1.0f)
+        return MixerGlobalGains(
+            engineInterior = read("engine_interior", legacyEngineHost),
+            engineExterior = read("engine_exterior", legacyEngineHost),
+            effectsHost = read("effects_host"),
+            transmission = read("transmission"),
+            gearShift = read("gear_shift"),
+            turbo = read("turbo"),
+            backfire = read("backfire"),
+            limiter = read("limiter"),
+        ).normalized()
+    }
 
     fun save(gains: MixerGlobalGains) {
         val normalized = gains.normalized()
         preferences.edit()
-            .putFloat("engine_host", normalized.engineHost)
+            .putFloat("engine_interior", normalized.engineInterior)
+            .putFloat("engine_exterior", normalized.engineExterior)
             .putFloat("effects_host", normalized.effectsHost)
             .putFloat("transmission", normalized.transmission)
             .putFloat("gear_shift", normalized.gearShift)
@@ -72,5 +116,5 @@ internal class MixerGlobalGainRepository(context: Context) {
         preferences.edit().clear().commit()
     }
 
-    private fun read(key: String): Float = preferences.getFloat(key, 1.0f)
+    private fun read(key: String, default: Float = 1.0f): Float = preferences.getFloat(key, default)
 }

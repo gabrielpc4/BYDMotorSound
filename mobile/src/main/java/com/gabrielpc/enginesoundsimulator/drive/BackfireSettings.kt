@@ -16,7 +16,6 @@ data class BackfireSettings(
     val releaseDelaySeconds: Double = 0.0,
     val minimumRpm: Double = 5500.0,
     val maximumRpm: Double = 8000.0,
-    val backfireGain: Float = 1.0f,
     /** The four Alfa Romeo bank-derived samples retained for the validated sound profile. */
     val allowedSamples: Set<Int> = AlfaBackfireSources.indices.toSet(),
 ) {
@@ -26,7 +25,6 @@ data class BackfireSettings(
         releaseDelaySeconds = releaseDelaySeconds.coerceIn(0.0, 5.0),
         minimumRpm = minimumRpm.coerceIn(0.0, 16000.0),
         maximumRpm = maximumRpm.coerceIn(500.0, 12000.0),
-        backfireGain = backfireGain.coerceIn(1.0f, 10.0f),
         allowedSamples = allowedSamples.filter { it in AlfaBackfireSources.indices }.toSet().ifEmpty { setOf(1) },
     )
 }
@@ -52,7 +50,6 @@ internal class BackfireSettingsRepository(context: Context) {
             releaseDelaySeconds = preferences.getFloat("release_delay", defaults.releaseDelaySeconds.toFloat()).toDouble(),
             minimumRpm = preferences.getFloat("minimum_rpm", defaults.minimumRpm.toFloat()).toDouble(),
             maximumRpm = preferences.getFloat("maximum_rpm", defaults.maximumRpm.toFloat()).toDouble(),
-            backfireGain = preferences.getFloat("backfire_gain", defaults.backfireGain),
             allowedSamples = AlfaBackfireSources.indices.filterTo(linkedSetOf()) {
                 preferences.getBoolean("sample_$it", true)
             },
@@ -69,7 +66,6 @@ internal class BackfireSettingsRepository(context: Context) {
             .putFloat("release_delay", value.releaseDelaySeconds.toFloat())
             .putFloat("minimum_rpm", value.minimumRpm.toFloat())
             .putFloat("maximum_rpm", value.maximumRpm.toFloat())
-            .putFloat("backfire_gain", value.backfireGain)
             .apply {
                 AlfaBackfireSources.indices.forEach { putBoolean("sample_$it", it in value.allowedSamples) }
             }

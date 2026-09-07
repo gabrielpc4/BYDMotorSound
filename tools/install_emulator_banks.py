@@ -75,6 +75,22 @@ def staged_pack_count(package: str, group: str) -> int:
     )
 
 
+def fix_staged_ownership(package: str) -> None:
+    remote_root = f"/sdcard/Android/data/{package}/files/fmod-bank-import"
+    uid = adb("shell", "stat", "-c", "%U", f"/data/data/{package}", check=False).stdout.strip()
+    if not uid:
+        return
+    adb("root", check=False)
+    adb(
+        "shell",
+        "chown",
+        "-R",
+        f"{uid}:ext_data_rw",
+        remote_root,
+        check=False,
+    )
+
+
 def push_group(group: str, package: str, packs: list[dict[str, object]]) -> None:
     remote_group = f"/sdcard/Android/data/{package}/files/fmod-bank-import/{group}"
     adb("shell", "mkdir", "-p", remote_group)
@@ -88,6 +104,8 @@ def push_group(group: str, package: str, packs: list[dict[str, object]]) -> None
         remote = f"{remote_group}/{source.name}"
         print(f"  [{index}/{len(packs)}] {source.name}", flush=True)
         adb("push", str(source), remote)
+
+    fix_staged_ownership(package)
 
 
 def trigger_import(package: str) -> None:

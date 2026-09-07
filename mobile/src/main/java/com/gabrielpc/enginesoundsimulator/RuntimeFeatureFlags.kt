@@ -11,4 +11,7 @@ package com.gabrielpc.enginesoundsimulator
 internal object RuntimeFeatureFlags {
     /** The classic dashboard is the normal entry point; Mixer remains available from its button. */
     const val START_ON_MIXER = false
+
+    /** Enables supercharger-specific load rules, mixer category, and embedded-channel mute/solo. */
+    const val MIX_SUPERCHARGER = true
 }

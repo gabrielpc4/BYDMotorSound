@@ -19,14 +19,30 @@ internal object MinimumAudioThrottle {
 
 /** FMOD pedal throttle ramp duration from minimum to full load. */
 internal object PedalAudioThrottleRampMilliseconds {
-    const val MIN = 0
-    const val MAX = 500
+    val STOPS: IntArray = intArrayOf(0, 100, 500, 1_000, 2_000)
+
     const val DEFAULT = 100
-    const val STEP = 10
 
     fun normalize(value: Int): Int {
-        val stepped = ((value.toFloat() / STEP).roundToInt()) * STEP
-        return stepped.coerceIn(MIN, MAX)
+        return STOPS.minByOrNull { kotlin.math.abs(it - value) } ?: DEFAULT
+    }
+
+    fun stopIndex(value: Int): Int {
+        val normalized = normalize(value)
+        return STOPS.indexOf(normalized).coerceAtLeast(0)
+    }
+
+    fun stopValue(index: Int): Int {
+        return STOPS[index.coerceIn(0, STOPS.lastIndex)]
+    }
+
+    fun format(milliseconds: Int): String {
+        val normalized = normalize(milliseconds)
+        return if (normalized >= 1_000 && normalized % 1_000 == 0) {
+            "${normalized / 1_000}s"
+        } else {
+            "${normalized}ms"
+        }
     }
 }
 

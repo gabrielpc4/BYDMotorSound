@@ -34,10 +34,14 @@ constexpr int kFmodDspBlocks = 4;
 constexpr int kFmodLogicalChannelCap = 2048;
 constexpr int kFmodRealChannelCap = 256;
 constexpr int kPerspectiveExterior = 1;
+// When kMixSupercharger is false, transmission and embedded supercharger subsounds share one
+// RPM-derived load factor (muted together in automatic cruising). When true, supercharger gets
+// its own load policy and mixer pseudo-category mute/solo handling.
+constexpr bool kMixSupercharger = true;
 // Engine load layers stay at the authored full-load endpoint. Automatic cruising mutes
-// transmission only; supercharger always follows pedal (or RPM/binary rules below) unless
-// the mixer mutes it. In racing/manual, transmission follows RPM and supercharger is
-// on/off with any pedal. Otherwise transmission and supercharger both follow RPM.
+// transmission only when kMixSupercharger is true; otherwise both transmission and supercharger
+// load are suppressed. In racing/manual with kMixSupercharger, transmission follows RPM and
+// supercharger is on/off with any pedal.
 constexpr float kFullLoadAudioThrottle = 1.0f;
 constexpr float kEffectsFullGainRpmFraction = 0.9f;
 // Backfire is authored as a lift-off one-shot: its throttle automation fades it to roughly
@@ -414,17 +418,6 @@ bool isBlockedSkylineSubSound(const char* name) {
     return lowered.find(kSkylineBlockedOffmidSample) != std::string::npos;
 }
 
-bool isLimiterSoundName(const std::string& name) {
-    if (name.empty()) {
-        return false;
-    }
-    const std::string lowered = lowercaseCopy(name.c_str());
-    if (lowered == "limiter") {
-        return true;
-    }
-    return lowered.find("limiter") != std::string::npos;
-}
-
 bool isSuperchargerSoundName(const std::string& name) {
     if (name.empty()) {
         return false;
@@ -441,25 +434,16 @@ bool isSuperchargerSoundName(const std::string& name) {
     return false;
 }
 
-bool scanCarBankForSuperchargerSamples(const std::string& bankPath) {
-    std::ifstream input(bankPath, std::ios::binary);
-    if (!input.is_open()) {
-        return false;
-    }
-    static constexpr char kNeedle[] = "_supercharger";
-    std::array<char, 8192> buffer{};
-    std::string carry;
-    while (input.read(buffer.data(), static_cast<std::streamsize>(buffer.size())) || input.gcount() > 0) {
-        carry.append(buffer.data(), static_cast<std::size_t>(input.gcount()));
-        if (carry.find(kNeedle) != std::string::npos) {
-            return true;
-        }
-        if (carry.size() > sizeof(kNeedle) - 1) {
-            carry.erase(0, carry.size() - (sizeof(kNeedle) - 1));
-        }
-    }
-    return carry.find(kNeedle) != std::string::npos;
-}
+enum class EmbeddedSuperchargerState : std::uint8_t {
+    Probing,
+    Present,
+    Absent,
+};
+
+static constexpr float kSuperchargerProbeThrottleThreshold = 0.15f;
+static constexpr float kSuperchargerProbeReleaseThreshold = 0.05f;
+static constexpr float kSuperchargerProbeRpmMargin = 300.0f;
+static constexpr float kSuperchargerProbeMaxAccelSeconds = 4.0f;
 
 void muteBlockedSkylineChannelsInGroup(FMOD::ChannelGroup* group) {
     if (group == nullptr) {
@@ -721,10 +705,6 @@ public:
         }
 
         discoverEventsLocked(carBankPath);
-        hasEmbeddedSupercharger_.store(
-            scanCarBankForSuperchargerSamples(carBankPath),
-            std::memory_order_relaxed
-        );
         if (events_.find("engine_int") == events_.end() || events_.find("engine_ext") == events_.end()) {
             return failAndCloseLocked("The installed bank has no engine_int/engine_ext event pair.");
         }
@@ -826,7 +806,19 @@ public:
         float transmissionLoad = 0.0f;
         float superchargerLoad = 0.0f;
 
-        if (cruisingEffectsMuted_) {
+        if (!kMixSupercharger) {
+            if (cruisingEffectsMuted_) {
+                transmissionLoad = 0.0f;
+                superchargerLoad = 0.0f;
+                if (cruisingMuteStateChanged) {
+                    smoothedEffectsLoad_ = 0.0f;
+                }
+            } else {
+                const float rpmLoad = rampEffectsLoadLocked(effectsLoadFromRpmLocked(cleanRpm), cleanDt);
+                transmissionLoad = rpmLoad;
+                superchargerLoad = rpmLoad;
+            }
+        } else if (cruisingEffectsMuted_) {
             transmissionLoad = 0.0f;
             superchargerLoad = cleanThrottle;
             if (cruisingMuteStateChanged) {
@@ -844,16 +836,21 @@ public:
         effectsLoadFromRpm_ = superchargerLoad;
         applyTransmissionAudioThrottleLocked(transmissionLoad);
 
-        if (cruisingMuteStateChanged && !cruisingEffectsMuted_) {
-            applyEventOverridesLocked();
+        if (kMixSupercharger) {
+            if (cruisingMuteStateChanged && !cruisingEffectsMuted_) {
+                applyEventOverridesLocked();
+            }
+            if (cruisingEffectsMuted_) {
+                applyEventOverridesLocked();
+            }
         }
-        if (cruisingEffectsMuted_) {
-            applyEventOverridesLocked();
-        }
-        applyEmbeddedEngineChannelGainsLocked();
+
+        tickEmbeddedSuperchargerProbeLocked(cleanThrottle, cleanRpm, cleanDt);
 
         if (perspective != perspective_) {
             switchPerspectiveLocked(perspective);
+        } else {
+            applyEmbeddedEngineChannelGainsLocked();
         }
 
         const std::string selectedEngine = perspectiveEventLocked("engine_int", "engine_ext");
@@ -1244,6 +1241,7 @@ public:
                 isSuperchargerSoundName(name)
             ) {
                 hasEmbeddedSupercharger_.store(true, std::memory_order_relaxed);
+                embeddedSuperchargerState_ = EmbeddedSuperchargerState::Present;
             }
             recent.callbackVoiceCount = std::min(recent.callbackVoiceCount + 1, 32767);
             if (loadedProfileId_ == kSkylineProfileId && isBlockedSkylineSubSound(name)) {
@@ -1650,7 +1648,7 @@ private:
     void applyEventOverridesLocked() {
         bool anySolo = false;
         for (const auto& entry : soloEvents_) anySolo = anySolo || entry.second;
-        const bool superchargerSolo = anySolo && isPseudoCategorySoloedLocked("supercharger");
+        const bool superchargerSolo = kMixSupercharger && anySolo && isPseudoCategorySoloedLocked("supercharger");
         for (auto& pair : slots_) {
             const bool muted = mutedEvents_[pair.first];
             const bool soloed = anySolo && !soloEvents_[pair.first];
@@ -1662,7 +1660,7 @@ private:
                 (pair.first == "gear_int" || pair.first == "gear_ext" || pair.first == "gear_grind");
             const bool disabledTransmission = !transmissionAudioEnabled_ &&
                 (pair.first == "transmission" || pair.first == "transmission_ext");
-            const bool cruisingMutedTransmission = cruisingEffectsMuted_ &&
+            const bool cruisingMutedTransmission = kMixSupercharger && cruisingEffectsMuted_ &&
                 (pair.first == "transmission" || pair.first == "transmission_ext");
             const bool disabledTurbo = !turboAudioEnabled_ && pair.first == "turbo";
             const float baseGain = hostGainForEventLocked(pair.first);
@@ -1700,6 +1698,9 @@ private:
     }
 
     bool shouldSilenceSuperchargerLocked() const {
+        if (!kMixSupercharger) {
+            return false;
+        }
         if (isPseudoCategoryMutedLocked("supercharger")) {
             return true;
         }
@@ -1710,6 +1711,9 @@ private:
     }
 
     bool superchargerSoloActiveLocked() const {
+        if (!kMixSupercharger) {
+            return false;
+        }
         return anyEventSoloedLocked() && isPseudoCategorySoloedLocked("supercharger");
     }
 
@@ -1723,45 +1727,37 @@ private:
         return hostEffectsGain_;
     }
 
-    bool limiterDedicatedEventHasAudibleVoicesLocked() const {
-        const auto iterator = slots_.find("limiter");
-        if (iterator == slots_.end() || iterator->second->instance == nullptr) {
-            return false;
+    void tickEmbeddedSuperchargerProbeLocked(float throttle, float rpm, float dt) {
+        if (!kMixSupercharger || embeddedSuperchargerState_ != EmbeddedSuperchargerState::Probing) {
+            return;
         }
-        FMOD::ChannelGroup* root = nullptr;
-        if (iterator->second->instance->getChannelGroup(&root) != FMOD_OK || root == nullptr) {
-            return false;
+        if (hasEmbeddedSupercharger_.load(std::memory_order_relaxed)) {
+            embeddedSuperchargerState_ = EmbeddedSuperchargerState::Present;
+            return;
         }
-        return eventGroupHasAudibleVoicesLocked(root);
+
+        const bool accelerating =
+            throttle >= kSuperchargerProbeThrottleThreshold &&
+            rpm >= idleRpm_ + kSuperchargerProbeRpmMargin;
+
+        if (accelerating) {
+            superchargerProbeWasAccelerating_ = true;
+            superchargerProbeAccelSeconds_ += dt;
+        } else if (superchargerProbeWasAccelerating_ && throttle <= kSuperchargerProbeReleaseThreshold) {
+            embeddedSuperchargerState_ = EmbeddedSuperchargerState::Absent;
+        }
+
+        if (superchargerProbeAccelSeconds_ >= kSuperchargerProbeMaxAccelSeconds) {
+            embeddedSuperchargerState_ = EmbeddedSuperchargerState::Absent;
+        }
     }
 
-    bool eventGroupHasAudibleVoicesLocked(FMOD::ChannelGroup* group) const {
-        if (group == nullptr) {
-            return false;
-        }
-        int channelCount = 0;
-        if (group->getNumChannels(&channelCount) == FMOD_OK) {
-            for (int index = 0; index < channelCount; ++index) {
-                FMOD::Channel* channel = nullptr;
-                if (group->getChannel(index, &channel) != FMOD_OK || channel == nullptr) {
-                    continue;
-                }
-                float audibility = 0.0f;
-                if (channel->getAudibility(&audibility) == FMOD_OK && audibility > 0.001f) {
-                    return true;
-                }
-            }
-        }
-        int childCount = 0;
-        if (group->getNumGroups(&childCount) == FMOD_OK) {
-            for (int index = 0; index < childCount; ++index) {
-                FMOD::ChannelGroup* child = nullptr;
-                if (group->getGroup(index, &child) == FMOD_OK && eventGroupHasAudibleVoicesLocked(child)) {
-                    return true;
-                }
-            }
-        }
-        return false;
+    bool embeddedEngineChannelGainWorkNeededLocked() const {
+        return hasEmbeddedSupercharger_.load(std::memory_order_relaxed);
+    }
+
+    static bool approximatelyEmbeddedGainUnity(float value) {
+        return std::abs(value - 1.0f) <= 1e-4f;
     }
 
     float embeddedEngineChannelMultiplierLocked(const std::string& eventName, const std::string& soundName) const {
@@ -1778,13 +1774,7 @@ private:
         if (superchargerSoloActiveLocked()) {
             return 0.0f;
         }
-        if (!isLimiterSoundName(soundName)) {
-            return 1.0f;
-        }
-        if (limiterDedicatedEventHasAudibleVoicesLocked()) {
-            return 1.0f;
-        }
-        return (hostEffectsGain_ * limiterGain_) / engineHost;
+        return 1.0f;
     }
 
     void applyEmbeddedChannelGainLocked(FMOD::Channel* channel, float multiplier) {
@@ -1796,16 +1786,37 @@ private:
         if (channel->getVolume(&currentVolume) != FMOD_OK) {
             return;
         }
-        const float previousMultiplier = [&]() {
-            const auto iterator = embeddedChannelMultipliers_.find(channelKey);
+
+        const float clampedMultiplier = std::max(0.0f, multiplier);
+        const auto iterator = embeddedChannelMultipliers_.find(channelKey);
+        if (approximatelyEmbeddedGainUnity(clampedMultiplier)) {
             if (iterator == embeddedChannelMultipliers_.end()) {
-                return 1.0f;
+                if (currentVolume > 1e-4f) {
+                    return;
+                }
+            } else if (approximatelyEmbeddedGainUnity(iterator->second)) {
+                return;
             }
-            return std::max(iterator->second, 0.0001f);
-        }();
-        const float authoredVolume = currentVolume / previousMultiplier;
-        channel->setVolume(authoredVolume * multiplier);
-        embeddedChannelMultipliers_[channelKey] = multiplier;
+        }
+
+        if (clampedMultiplier <= 1e-4f) {
+            channel->setVolume(0.0f);
+            embeddedChannelMultipliers_.erase(channelKey);
+            return;
+        }
+
+        const bool recoveringFromMute = iterator == embeddedChannelMultipliers_.end() ||
+            iterator->second <= 1e-4f ||
+            currentVolume <= 1e-4f;
+        if (recoveringFromMute) {
+            channel->setVolume(clampedMultiplier);
+            embeddedChannelMultipliers_[channelKey] = clampedMultiplier;
+            return;
+        }
+
+        const float authoredVolume = currentVolume / iterator->second;
+        channel->setVolume(authoredVolume * clampedMultiplier);
+        embeddedChannelMultipliers_[channelKey] = clampedMultiplier;
     }
 
     void applyEmbeddedEngineChannelGainsInGroupLocked(
@@ -1830,9 +1841,13 @@ private:
                 if (sound->getName(soundName, sizeof(soundName)) != FMOD_OK || soundName[0] == '\0') {
                     std::strncpy(soundName, "<unnamed sound>", sizeof(soundName) - 1);
                 }
+                const std::string soundNameString(soundName);
+                if (!isSuperchargerSoundName(soundNameString) && !superchargerSoloActiveLocked()) {
+                    continue;
+                }
                 applyEmbeddedChannelGainLocked(
                     channel,
-                    embeddedEngineChannelMultiplierLocked(eventName, soundName)
+                    embeddedEngineChannelMultiplierLocked(eventName, soundNameString)
                 );
             }
         }
@@ -1848,17 +1863,22 @@ private:
     }
 
     void applyEmbeddedEngineChannelGainsLocked() {
-        for (const char* engineEventName : {"engine_int", "engine_ext"}) {
-            const auto iterator = slots_.find(engineEventName);
-            if (iterator == slots_.end() || iterator->second->instance == nullptr) {
-                continue;
-            }
-            FMOD::ChannelGroup* root = nullptr;
-            if (iterator->second->instance->getChannelGroup(&root) != FMOD_OK || root == nullptr) {
-                continue;
-            }
-            applyEmbeddedEngineChannelGainsInGroupLocked(engineEventName, root);
+        if (!embeddedEngineChannelGainWorkNeededLocked()) {
+            return;
         }
+        const std::string activeEngineEvent = perspectiveEventLocked("engine_int", "engine_ext");
+        if (activeEngineEvent.empty()) {
+            return;
+        }
+        const auto iterator = slots_.find(activeEngineEvent);
+        if (iterator == slots_.end() || iterator->second->instance == nullptr) {
+            return;
+        }
+        FMOD::ChannelGroup* root = nullptr;
+        if (iterator->second->instance->getChannelGroup(&root) != FMOD_OK || root == nullptr) {
+            return;
+        }
+        applyEmbeddedEngineChannelGainsInGroupLocked(activeEngineEvent, root);
     }
 
     float eventCategoryGain(const std::string& name) const {
@@ -1939,6 +1959,7 @@ private:
             }
         }
         slots_.clear();
+        embeddedChannelMultipliers_.clear();
         globalParameterNames_.clear();
         globalParameterFallbacksReported_.clear();
         globalParameterFailuresReported_.clear();
@@ -1972,6 +1993,9 @@ private:
         active_ = false;
         hasTurbo_ = false;
         hasEmbeddedSupercharger_.store(false, std::memory_order_relaxed);
+        embeddedSuperchargerState_ = EmbeddedSuperchargerState::Probing;
+        superchargerProbeWasAccelerating_ = false;
+        superchargerProbeAccelSeconds_ = 0.0f;
         superchargerGain_ = 1.0f;
         idleRpm_ = 1000.0f;
         limiterRpm_ = 7000.0f;
@@ -2357,6 +2381,7 @@ private:
         const std::string newEngine = perspectiveEventLocked("engine_int", "engine_ext");
         const std::string newTransmission = perspectiveEventLocked("transmission", "transmission_ext");
         if (oldEngine != newEngine) {
+            embeddedChannelMultipliers_.clear();
             stopEventLocked(oldEngine, FMOD_STUDIO_STOP_ALLOWFADEOUT);
             startEventLocked(newEngine);
         }
@@ -2368,7 +2393,7 @@ private:
         // keeps its current load factor (throttle- or RPM-driven).
         applyAudioThrottlePolicyLocked();
         applyTransmissionAudioThrottleLocked(smoothedEffectsLoad_);
-        if (cruisingEffectsMuted_) {
+        if (kMixSupercharger && cruisingEffectsMuted_) {
             applyEventOverridesLocked();
         }
         applyEmbeddedEngineChannelGainsLocked();
@@ -2754,6 +2779,9 @@ private:
     float limiterGain_ = 1.0f;
     float superchargerGain_ = 1.0f;
     std::atomic<bool> hasEmbeddedSupercharger_{false};
+    EmbeddedSuperchargerState embeddedSuperchargerState_ = EmbeddedSuperchargerState::Probing;
+    bool superchargerProbeWasAccelerating_ = false;
+    float superchargerProbeAccelSeconds_ = 0.0f;
     std::unordered_map<uintptr_t, float> embeddedChannelMultipliers_;
     bool backfireAudioEnabled_ = true;
     bool backfireUseOriginal_ = true;

@@ -103,6 +103,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.gabrielpc.enginesoundsimulator.RuntimeFeatureFlags
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankProfile
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankProfiles
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankResolver
@@ -625,7 +626,7 @@ private fun MixerControlsPanel(
                     },
                 )
             }
-            if (hasSupercharger) {
+            if (hasSupercharger && RuntimeFeatureFlags.MIX_SUPERCHARGER) {
                 MixerLayerGainSlider(
                     label = "SUPERCHARGER",
                     eventCategory = MixerEventCategory.SUPERCHARGER,
@@ -1411,8 +1412,8 @@ private fun PedalAudioThrottleRampSettingCard(
     onValueChange: (Int) -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
-    val rampSteps = (PedalAudioThrottleRampMilliseconds.MAX - PedalAudioThrottleRampMilliseconds.MIN) /
-        PedalAudioThrottleRampMilliseconds.STEP - 1
+    val stopIndex = PedalAudioThrottleRampMilliseconds.stopIndex(valueMilliseconds).toFloat()
+    val lastStopIndex = (PedalAudioThrottleRampMilliseconds.STOPS.size - 1).toFloat()
 
     Column(
         modifier = modifier
@@ -1428,7 +1429,7 @@ private fun PedalAudioThrottleRampSettingCard(
         ) {
             Text(title, color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
             Text(
-                text = "$valueMilliseconds ms",
+                text = PedalAudioThrottleRampMilliseconds.format(valueMilliseconds),
                 color = White,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Black,
@@ -1441,13 +1442,13 @@ private fun PedalAudioThrottleRampSettingCard(
             lineHeight = 15.sp,
         )
         Slider(
-            value = valueMilliseconds.toFloat(),
-            onValueChange = { value ->
-                onValueChange(PedalAudioThrottleRampMilliseconds.normalize(value.roundToInt()))
+            value = stopIndex,
+            onValueChange = { rawIndex ->
+                val index = rawIndex.roundToInt().coerceIn(0, PedalAudioThrottleRampMilliseconds.STOPS.lastIndex)
+                onValueChange(PedalAudioThrottleRampMilliseconds.stopValue(index))
             },
-            valueRange = PedalAudioThrottleRampMilliseconds.MIN.toFloat()..
-                PedalAudioThrottleRampMilliseconds.MAX.toFloat(),
-            steps = rampSteps.coerceAtLeast(0),
+            valueRange = 0f..lastStopIndex,
+            steps = (PedalAudioThrottleRampMilliseconds.STOPS.size - 2).coerceAtLeast(0),
         )
     }
 }

@@ -1,6 +1,7 @@
 package com.gabrielpc.enginesoundsimulator.drive
 
 import android.content.Context
+import com.gabrielpc.enginesoundsimulator.RuntimeFeatureFlags
 import com.gabrielpc.enginesoundsimulator.BuildConfig
 import android.os.Debug
 import android.os.Process
@@ -505,6 +506,10 @@ class DriveController(context: Context) {
     }
 
     private fun resolveHasSupercharger(): Boolean {
+        if (!RuntimeFeatureFlags.MIX_SUPERCHARGER) {
+            return false
+        }
+
         if (audioEngine.hasEmbeddedSupercharger()) {
             return true
         }
@@ -1328,11 +1333,14 @@ class DriveController(context: Context) {
                 suppressEffectsLoad = transmission.position == TransmissionPosition.DRIVE &&
                     !manualShiftEnabled.get() &&
                     drivetrain.automaticTransmissionMode == AutomaticTransmissionMode.CRUISING,
-                effectsLoadFromThrottle = manualShiftEnabled.get() ||
+                effectsLoadFromThrottle = RuntimeFeatureFlags.MIX_SUPERCHARGER &&
                     (
-                        transmission.position == TransmissionPosition.DRIVE &&
-                            !manualShiftEnabled.get() &&
-                            drivetrain.automaticTransmissionMode == AutomaticTransmissionMode.RACING
+                        manualShiftEnabled.get() ||
+                            (
+                                transmission.position == TransmissionPosition.DRIVE &&
+                                    !manualShiftEnabled.get() &&
+                                    drivetrain.automaticTransmissionMode == AutomaticTransmissionMode.RACING
+                                )
                         ),
             ),
         )

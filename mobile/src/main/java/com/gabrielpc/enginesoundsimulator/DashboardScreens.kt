@@ -90,6 +90,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -1520,6 +1521,8 @@ internal fun CarGridSelectionDialog(
                                 contentDescription = CarDisplayNameFormatter.format(profile.displayName),
                                 isFavorite = profile.id in favoriteCarIds,
                                 onToggleFavorite = { onToggleFavorite(profile.id) },
+                                favoriteStarPadding = 2.dp,
+                                showFavoriteStarOnlyWhenFavorited = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(128.dp)
@@ -1637,6 +1640,8 @@ private fun CarPreviewThumbnail(
     modifier: Modifier = Modifier,
     isFavorite: Boolean = false,
     onToggleFavorite: (() -> Unit)? = null,
+    favoriteStarPadding: Dp = 6.dp,
+    showFavoriteStarOnlyWhenFavorited: Boolean = false,
 ) {
     val installedPreviewPath = audioAssetResolver.previewFile(profile)?.path
     val preview = remember(profile.id, installedPreviewPath) {
@@ -1686,13 +1691,16 @@ private fun CarPreviewThumbnail(
             }
         }
 
-        if (onToggleFavorite != null) {
+        val shouldShowFavoriteStar = onToggleFavorite != null &&
+            (!showFavoriteStarOnlyWhenFavorited || isFavorite)
+
+        if (shouldShowFavoriteStar) {
             CarFavoriteStarButton(
                 isFavorite = isFavorite,
                 onToggle = onToggleFavorite,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(6.dp),
+                    .padding(favoriteStarPadding),
             )
         }
     }

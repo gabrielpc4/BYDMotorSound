@@ -160,6 +160,13 @@ private object DashboardLayoutDefaults {
 private object CarStageTapDefaults {
     val sideStripWidth = 58.dp
     val favoriteCornerHeight = 52.dp
+
+    const val debugTapZones = true
+
+    val debugPreviousColor = Color(0xFFE53935)
+    val debugNextColor = Color(0xFF43A047)
+    val debugPickerColor = Color(0xFF1E88E5)
+    val debugFavoriteColor = Color(0xFFFDD835)
 }
 
 class MainActivity : ComponentActivity() {
@@ -1813,11 +1820,18 @@ private fun CarStage(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = CarStageTapDefaults.sideStripWidth)
+                        .then(
+                            if (CarStageTapDefaults.debugTapZones) {
+                                Modifier.background(CarStageTapDefaults.debugPickerColor)
+                            } else {
+                                Modifier
+                            },
+                        )
                         .clickable { carPickerExpanded = true },
                 )
 
                 CarPreviewLoadingOverlay(
-                    visible = showCarAudioLoading,
+                    visible = showCarAudioLoading && !CarStageTapDefaults.debugTapZones,
                     onOpenCarPicker = { carPickerExpanded = true },
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -1826,16 +1840,26 @@ private fun CarStage(
                     label = "‹",
                     contentDescription = "Previous car",
                     onClick = onPreviousCar,
+                    debugColor = CarStageTapDefaults.debugPreviousColor,
                     modifier = Modifier.align(Alignment.CenterStart),
                 )
                 CarSelectorSideTapZone(
                     label = "›",
                     contentDescription = "Next car",
                     onClick = onNextCar,
+                    debugColor = CarStageTapDefaults.debugNextColor,
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
                         .padding(top = CarStageTapDefaults.favoriteCornerHeight),
                 )
+                if (CarStageTapDefaults.debugTapZones) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .size(CarStageTapDefaults.favoriteCornerHeight)
+                            .background(CarStageTapDefaults.debugFavoriteColor),
+                    )
+                }
                 CarFavoriteStarButton(
                     isFavorite = state.selectedCarId in state.favoriteCarIds,
                     onToggle = { onToggleCarFavorite(state.selectedCarId) },
@@ -1935,12 +1959,20 @@ private fun CarSelectorSideTapZone(
     label: String,
     contentDescription: String,
     onClick: () -> Unit,
+    debugColor: Color = Color.Transparent,
     modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
             .fillMaxHeight()
             .width(CarStageTapDefaults.sideStripWidth)
+            .then(
+                if (CarStageTapDefaults.debugTapZones) {
+                    Modifier.background(debugColor)
+                } else {
+                    Modifier
+                },
+            )
             .clickable(
                 onClick = onClick,
                 indication = null,
@@ -1949,7 +1981,17 @@ private fun CarSelectorSideTapZone(
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {
-        CarSelectorArrowGlyph(label = label)
+        if (!CarStageTapDefaults.debugTapZones) {
+            CarSelectorArrowGlyph(label = label)
+        } else {
+            Text(
+                text = label,
+                color = White,
+                fontSize = 42.sp,
+                fontWeight = FontWeight.Light,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
 

@@ -157,6 +157,11 @@ private object DashboardLayoutDefaults {
     const val CLASSIC_CAR_STAGE_WIDTH_FRACTION = 1.12f / (1.12f + 0.88f)
 }
 
+private object CarStageTapDefaults {
+    val sideStripWidth = 58.dp
+    val favoriteCornerHeight = 52.dp
+}
+
 class MainActivity : ComponentActivity() {
     private val controller: DriveController
         get() = (application as EngineSoundsApplication).driveController
@@ -1787,11 +1792,7 @@ private fun CarStage(
                 .fillMaxWidth()
                 .weight(1f),
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable { carPickerExpanded = true },
-            ) {
+            Box(modifier = Modifier.fillMaxSize()) {
                 if (preview != null) {
                     Image(
                         bitmap = preview,
@@ -1808,10 +1809,32 @@ private fun CarStage(
                     )
                 }
 
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = CarStageTapDefaults.sideStripWidth)
+                        .clickable { carPickerExpanded = true },
+                )
+
                 CarPreviewLoadingOverlay(
                     visible = showCarAudioLoading,
                     onOpenCarPicker = { carPickerExpanded = true },
                     modifier = Modifier.fillMaxSize(),
+                )
+
+                CarSelectorSideTapZone(
+                    label = "‹",
+                    contentDescription = "Previous car",
+                    onClick = onPreviousCar,
+                    modifier = Modifier.align(Alignment.CenterStart),
+                )
+                CarSelectorSideTapZone(
+                    label = "›",
+                    contentDescription = "Next car",
+                    onClick = onNextCar,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(top = CarStageTapDefaults.favoriteCornerHeight),
                 )
                 CarFavoriteStarButton(
                     isFavorite = state.selectedCarId in state.favoriteCarIds,
@@ -1819,22 +1842,6 @@ private fun CarStage(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(8.dp),
-                )
-                CarSelectorArrow(
-                    label = "‹",
-                    contentDescription = "Previous car",
-                    onClick = onPreviousCar,
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(start = 8.dp),
-                )
-                CarSelectorArrow(
-                    label = "›",
-                    contentDescription = "Next car",
-                    onClick = onNextCar,
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 8.dp),
                 )
             }
         }
@@ -1924,21 +1931,39 @@ internal fun TransmissionShifter(
 }
 
 @Composable
-private fun CarSelectorArrow(
+private fun CarSelectorSideTapZone(
     label: String,
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Button(
-        onClick = onClick,
-        modifier = modifier.size(58.dp).semantics { this.contentDescription = contentDescription },
-        shape = CircleShape,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = Color(0xFF111111).copy(alpha = 0.92f),
-            contentColor = White,
-        ),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .width(CarStageTapDefaults.sideStripWidth)
+            .clickable(
+                onClick = onClick,
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+            )
+            .semantics { this.contentDescription = contentDescription },
+        contentAlignment = Alignment.Center,
+    ) {
+        CarSelectorArrowGlyph(label = label)
+    }
+}
+
+@Composable
+private fun CarSelectorArrowGlyph(
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .size(CarStageTapDefaults.sideStripWidth)
+            .clip(CircleShape)
+            .background(Color(0xFF111111).copy(alpha = 0.92f)),
+        contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,

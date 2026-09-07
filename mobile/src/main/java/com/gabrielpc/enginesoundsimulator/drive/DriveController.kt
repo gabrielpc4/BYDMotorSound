@@ -109,6 +109,7 @@ data class DriveSnapshot(
     val exteriorPureAudio: Boolean = false,
     val minimumAudioThrottle: Float = MinimumAudioThrottle.DEFAULT,
     val cruisingLogicEnabled: Boolean = true,
+    val sixGearOnLaunchEnabled: Boolean = true,
     val pedalAudioThrottleRampUpMilliseconds: Int = PedalAudioThrottleRampMilliseconds.DEFAULT,
     val pedalAudioThrottleRampDownMilliseconds: Int = PedalAudioThrottleRampMilliseconds.DEFAULT,
     val cruisingShiftOffsetRpm: Int = CruisingShiftOffsetRpm.DEFAULT,
@@ -450,6 +451,12 @@ class DriveController(context: Context) {
         }
     }
 
+    fun setSixGearOnLaunchEnabled(enabled: Boolean) {
+        updateAutomaticTransmissionSettings {
+            it.copy(sixGearOnLaunchEnabled = enabled)
+        }
+    }
+
     private fun updateAutomaticTransmissionSettings(
         transform: (AutomaticTransmissionSettings) -> AutomaticTransmissionSettings,
     ) {
@@ -725,6 +732,27 @@ class DriveController(context: Context) {
     }
 
     fun selectNextCar() {
+        synchronized(lifecycleLock) {
+            val installed = installedProfiles()
+            if (installed.isEmpty()) {
+                return
+            }
+
+            val currentId = selectedProfile.get().id
+            val currentIndex = installed.indexOfFirst { profile -> profile.id == currentId }.coerceAtLeast(0)
+            val nextProfile = installed[(currentIndex + 1) % installed.size]
+
+            truncateCarNavigationForwardHistory()
+            if (carNavigationHistory[carNavigationIndex] != nextProfile.id) {
+                carNavigationHistory.add(nextProfile.id)
+                carNavigationIndex = carNavigationHistory.lastIndex
+            }
+            randomCycleVisitedCarIds.add(nextProfile.id)
+            applySelectedCar(nextProfile)
+        }
+    }
+
+    fun selectShuffleCar() {
         synchronized(lifecycleLock) {
             val installed = installedProfiles()
             if (installed.isEmpty()) {
@@ -1277,6 +1305,7 @@ class DriveController(context: Context) {
                 soundPerspective = selectedPerspective.get(),
                 virtualForwardGearCount = virtualForwardGearCount.get(),
                 cruisingLogicEnabled = automaticTransmissionSettings.get().cruisingLogicEnabled,
+                sixGearOnLaunchEnabled = automaticTransmissionSettings.get().sixGearOnLaunchEnabled,
                 cruisingShiftOffsetRpm = automaticTransmissionSettings.get().cruisingShiftOffsetRpm,
                 racingReturnThrottlePercent = automaticTransmissionSettings.get().racingReturnThrottlePercent,
                 racingReturnHoldSeconds = automaticTransmissionSettings.get().racingReturnHoldSeconds,

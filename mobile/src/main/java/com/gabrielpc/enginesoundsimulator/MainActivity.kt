@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -230,6 +231,7 @@ class MainActivity : ComponentActivity() {
                         onToggleManualShiftMode = controller::toggleManualShiftMode,
                         onMediaShiftButton = controller::handleMediaShiftButton,
                         onVirtualForwardGearCountChange = controller::setVirtualForwardGearCount,
+                        onSixGearOnLaunchEnabledChange = controller::setSixGearOnLaunchEnabled,
                         onCruisingShiftOffsetRpmChange = controller::setCruisingShiftOffsetRpm,
                         onRacingReturnThrottlePercentChange = controller::setRacingReturnThrottlePercent,
                         onRacingReturnHoldSecondsChange = controller::setRacingReturnHoldSeconds,
@@ -255,6 +257,7 @@ class MainActivity : ComponentActivity() {
                         onEventSolo = controller::setFmodEventSolo,
                         onPreviousCar = controller::selectPreviousCar,
                         onNextCar = controller::selectNextCar,
+                        onShuffleCar = controller::selectShuffleCar,
                         onSelectCar = controller::selectCar,
                         onToggleCarFavorite = controller::toggleCarFavorite,
                         onSoundPerspectiveChange = controller::setSoundPerspective,
@@ -334,6 +337,7 @@ private fun MotorSoundDashboard(
     onToggleManualShiftMode: () -> Unit,
     onMediaShiftButton: (Int) -> Boolean,
     onVirtualForwardGearCountChange: (Int) -> Unit,
+    onSixGearOnLaunchEnabledChange: (Boolean) -> Unit,
     onCruisingShiftOffsetRpmChange: (Int) -> Unit,
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
     onRacingReturnHoldSecondsChange: (Int) -> Unit,
@@ -359,6 +363,7 @@ private fun MotorSoundDashboard(
     onEventSolo: (String, Boolean) -> Unit,
     onPreviousCar: () -> Unit,
     onNextCar: () -> Unit,
+    onShuffleCar: () -> Unit,
     onSelectCar: (String) -> Unit,
     onToggleCarFavorite: (String) -> Unit,
     onSoundPerspectiveChange: (com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective) -> Unit,
@@ -473,6 +478,7 @@ private fun MotorSoundDashboard(
                                     state = state,
                                     onPreviousCar = onPreviousCar,
                                     onNextCar = onNextCar,
+                                    onShuffleCar = onShuffleCar,
                                     onSelectCar = onSelectCar,
                                     onToggleCarFavorite = onToggleCarFavorite,
                                     modifier = Modifier
@@ -580,6 +586,8 @@ private fun MotorSoundDashboard(
                             onExteriorPureAudioSettingsChange = onExteriorPureAudioSettingsChange,
                             virtualForwardGearCount = state.virtualForwardGearCount,
                             onVirtualForwardGearCountChange = onVirtualForwardGearCountChange,
+                            sixGearOnLaunchEnabled = state.sixGearOnLaunchEnabled,
+                            onSixGearOnLaunchEnabledChange = onSixGearOnLaunchEnabledChange,
                             cruisingShiftOffsetRpm = state.cruisingShiftOffsetRpm,
                             onCruisingShiftOffsetRpmChange = onCruisingShiftOffsetRpmChange,
                             racingReturnThrottlePercent = state.racingReturnThrottlePercent,
@@ -1770,6 +1778,7 @@ private fun CarStage(
     state: DriveSnapshot,
     onPreviousCar: () -> Unit,
     onNextCar: () -> Unit,
+    onShuffleCar: () -> Unit,
     onSelectCar: (String) -> Unit,
     onToggleCarFavorite: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -1868,14 +1877,22 @@ private fun CarStage(
                 onClick = onPreviousCar,
                 modifier = Modifier.align(Alignment.CenterStart),
             )
-            CarSelectorSideTapZone(
-                label = "›",
-                contentDescription = "Next car",
-                onClick = onNextCar,
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(top = CarStageTapDefaults.favoriteCornerHeight),
-            )
+            Column(
+                modifier = Modifier.align(Alignment.CenterEnd),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                CarSelectorSideIconZone(
+                    imageVector = Icons.Filled.Shuffle,
+                    contentDescription = "Shuffle car",
+                    onClick = onShuffleCar,
+                )
+                CarSelectorSideTapZone(
+                    label = "›",
+                    contentDescription = "Next car",
+                    onClick = onNextCar,
+                )
+            }
             CarFavoriteStarButton(
                 isFavorite = state.selectedCarId in state.favoriteCarIds,
                 onToggle = { onToggleCarFavorite(state.selectedCarId) },
@@ -1967,6 +1984,35 @@ internal fun TransmissionShifter(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun CarSelectorSideIconZone(
+    imageVector: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .size(CarStageTapDefaults.sideStripWidth)
+            .clip(CircleShape)
+            .background(Color(0xFF111111).copy(alpha = 0.92f))
+            .clickable(
+                onClick = onClick,
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+            )
+            .semantics { this.contentDescription = contentDescription },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = imageVector,
+            contentDescription = null,
+            tint = White,
+            modifier = Modifier.size(24.dp),
+        )
     }
 }
 

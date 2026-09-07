@@ -115,7 +115,7 @@ import com.gabrielpc.enginesoundsimulator.audio.FmodSourceState
 import com.gabrielpc.enginesoundsimulator.audio.FmodUpdateRate
 import com.gabrielpc.enginesoundsimulator.drive.DriveSnapshot
 import com.gabrielpc.enginesoundsimulator.drive.BackfireSettings
-import com.gabrielpc.enginesoundsimulator.drive.CruisingShiftOffsetRpm
+import com.gabrielpc.enginesoundsimulator.drive.MinimumAudioThrottle
 import com.gabrielpc.enginesoundsimulator.drive.ManualAutodownshiftRpm
 import com.gabrielpc.enginesoundsimulator.drive.ManualRedlineHoldSeconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingReturnHoldSeconds
@@ -830,8 +830,8 @@ internal fun SettingsScreen(
     onVirtualForwardGearCountChange: (Int) -> Unit,
     sixGearOnLaunchEnabled: Boolean,
     onSixGearOnLaunchEnabledChange: (Boolean) -> Unit,
-    cruisingShiftOffsetRpm: Int,
-    onCruisingShiftOffsetRpmChange: (Int) -> Unit,
+    minimumAudioThrottle: Float,
+    onMinimumAudioThrottleChange: (Float) -> Unit,
     racingReturnThrottlePercent: Int,
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
     racingReturnHoldSeconds: Int,
@@ -884,6 +884,10 @@ internal fun SettingsScreen(
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                 )
             }
+            MinimumAudioThrottleSettingCard(
+                minimum = minimumAudioThrottle,
+                onMinimumChange = onMinimumAudioThrottleChange,
+            )
             VirtualForwardGearCountControl(
                 gearCount = virtualForwardGearCount,
                 onGearCountChange = onVirtualForwardGearCountChange,
@@ -891,8 +895,6 @@ internal fun SettingsScreen(
                 onSixGearOnLaunchEnabledChange = onSixGearOnLaunchEnabledChange,
             )
             AutomaticTransmissionSettingsControl(
-                offsetRpm = cruisingShiftOffsetRpm,
-                onOffsetRpmChange = onCruisingShiftOffsetRpmChange,
                 racingReturnThrottlePercent = racingReturnThrottlePercent,
                 onRacingReturnThrottlePercentChange = onRacingReturnThrottlePercentChange,
                 manualRedlineHoldSeconds = manualRedlineHoldSeconds,
@@ -1071,9 +1073,52 @@ private fun SixGearOnLaunchSetting(
 }
 
 @Composable
+private fun MinimumAudioThrottleSettingCard(
+    minimum: Float,
+    onMinimumChange: (Float) -> Unit,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+) {
+    val throttleSteps = ((MinimumAudioThrottle.MAX - MinimumAudioThrottle.MIN) / MinimumAudioThrottle.STEP)
+        .roundToInt() - 1
+
+    Column(
+        modifier = modifier
+            .border(1.dp, Line, RoundedCornerShape(8.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("MIN THROTTLE", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
+            Text(
+                text = String.format(Locale.US, "%.2f", minimum),
+                color = White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Black,
+            )
+        }
+        Text(
+            text = "Lower bound applied to FMOD engine and transmission throttle parameters.",
+            color = Muted,
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
+        )
+        Slider(
+            value = minimum,
+            onValueChange = { value ->
+                onMinimumChange(MinimumAudioThrottle.normalize(value))
+            },
+            valueRange = MinimumAudioThrottle.MIN..MinimumAudioThrottle.MAX,
+            steps = throttleSteps.coerceAtLeast(0),
+        )
+    }
+}
+
+@Composable
 private fun AutomaticTransmissionSettingsControl(
-    offsetRpm: Int,
-    onOffsetRpmChange: (Int) -> Unit,
     racingReturnThrottlePercent: Int,
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
     manualRedlineHoldSeconds: Int,
@@ -1088,36 +1133,6 @@ private fun AutomaticTransmissionSettingsControl(
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("CRUISING SHIFT OFFSET", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
-            Text(
-                text = "$offsetRpm RPM",
-                color = White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Black,
-            )
-        }
-        Text(
-            text = "Automatic mode starts in cruising: up/down thresholds are lowered by this amount from the relocated racing upshift/downshift points near the limiter. Pressing above 40% throttle switches to racing and downshifts to the gear that would land within the manual-autodownshift offset below redline at the current speed.",
-            color = Muted,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
-        )
-        Slider(
-            value = offsetRpm.toFloat(),
-            onValueChange = { value ->
-                val selectedOffset = CruisingShiftOffsetRpm.normalize(value.roundToInt())
-                if (selectedOffset != offsetRpm) {
-                    onOffsetRpmChange(selectedOffset)
-                }
-            },
-            valueRange = CruisingShiftOffsetRpm.MIN.toFloat()..CruisingShiftOffsetRpm.MAX.toFloat(),
-            steps = (CruisingShiftOffsetRpm.MAX - CruisingShiftOffsetRpm.MIN) / CruisingShiftOffsetRpm.STEP - 1,
-        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,

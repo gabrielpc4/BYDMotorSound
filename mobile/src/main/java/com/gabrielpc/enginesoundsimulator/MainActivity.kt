@@ -111,7 +111,7 @@ import com.gabrielpc.enginesoundsimulator.drive.EffectSoundKind
 import com.gabrielpc.enginesoundsimulator.drive.UserVisibleMessage
 import com.gabrielpc.enginesoundsimulator.drive.UserVisibleMessageSeverity
 import com.gabrielpc.enginesoundsimulator.drive.InputMode
-import com.gabrielpc.enginesoundsimulator.drive.MinimumAudioThrottle
+import com.gabrielpc.enginesoundsimulator.drive.CruisingShiftOffsetRpm
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankProfiles
 import com.gabrielpc.enginesoundsimulator.audio.CarSubtitleCatalog
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankResolver
@@ -492,7 +492,7 @@ private fun MotorSoundDashboard(
                                     ) {
                                         DashboardEngineControls(
                                             state = state,
-                                            onMinimumAudioThrottleChange = onMinimumAudioThrottleChange,
+                                            onCruisingShiftOffsetRpmChange = onCruisingShiftOffsetRpmChange,
                                             onEngineExternalChange = onEngineExternalChange,
                                             onEnginePureChange = onEnginePureChange,
                                             onCruisingLogicChange = onCruisingLogicChange,
@@ -577,8 +577,8 @@ private fun MotorSoundDashboard(
                             onVirtualForwardGearCountChange = onVirtualForwardGearCountChange,
                             sixGearOnLaunchEnabled = state.sixGearOnLaunchEnabled,
                             onSixGearOnLaunchEnabledChange = onSixGearOnLaunchEnabledChange,
-                            cruisingShiftOffsetRpm = state.cruisingShiftOffsetRpm,
-                            onCruisingShiftOffsetRpmChange = onCruisingShiftOffsetRpmChange,
+                            minimumAudioThrottle = state.minimumAudioThrottle,
+                            onMinimumAudioThrottleChange = onMinimumAudioThrottleChange,
                             racingReturnThrottlePercent = state.racingReturnThrottlePercent,
                             onRacingReturnThrottlePercentChange = onRacingReturnThrottlePercentChange,
                             racingReturnHoldSeconds = state.racingReturnHoldSeconds,
@@ -1143,7 +1143,7 @@ private object DashboardClassicEffectLayout {
 @Composable
 private fun DashboardEngineControls(
     state: DriveSnapshot,
-    onMinimumAudioThrottleChange: (Float) -> Unit,
+    onCruisingShiftOffsetRpmChange: (Int) -> Unit,
     onEngineExternalChange: (Boolean) -> Unit,
     onEnginePureChange: (Boolean) -> Unit,
     onCruisingLogicChange: (Boolean) -> Unit,
@@ -1153,7 +1153,8 @@ private fun DashboardEngineControls(
     val layout = DashboardClassicEffectLayout
     val rowHeight = 42.dp
     val rowGap = 7.dp
-    val throttleSteps = ((MinimumAudioThrottle.MAX - MinimumAudioThrottle.MIN) / MinimumAudioThrottle.STEP).roundToInt() - 1
+    val cruisingOffsetSteps = (CruisingShiftOffsetRpm.MAX - CruisingShiftOffsetRpm.MIN) /
+        CruisingShiftOffsetRpm.STEP - 1
 
     Row(
         modifier = modifier,
@@ -1175,14 +1176,17 @@ private fun DashboardEngineControls(
             verticalAlignment = Alignment.Bottom,
         ) {
             DashboardPedalAudioSettingSlider(
-                label = "MIN THROTTLE",
-                valueLabel = String.format(Locale.US, "%.2f", state.minimumAudioThrottle),
-                value = state.minimumAudioThrottle,
+                label = "CRUISING OFFSET",
+                valueLabel = "${state.cruisingShiftOffsetRpm} RPM",
+                value = state.cruisingShiftOffsetRpm.toFloat(),
                 onValueChange = { value ->
-                    onMinimumAudioThrottleChange(MinimumAudioThrottle.normalize(value))
+                    val selectedOffset = CruisingShiftOffsetRpm.normalize(value.roundToInt())
+                    if (selectedOffset != state.cruisingShiftOffsetRpm) {
+                        onCruisingShiftOffsetRpmChange(selectedOffset)
+                    }
                 },
-                valueRange = MinimumAudioThrottle.MIN..MinimumAudioThrottle.MAX,
-                steps = throttleSteps.coerceAtLeast(0),
+                valueRange = CruisingShiftOffsetRpm.MIN.toFloat()..CruisingShiftOffsetRpm.MAX.toFloat(),
+                steps = cruisingOffsetSteps.coerceAtLeast(0),
                 modifier = Modifier.fillMaxWidth(),
             )
         }

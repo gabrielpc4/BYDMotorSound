@@ -182,7 +182,7 @@ class DriveController(context: Context) {
     private val audioMixGains = AtomicReference(AudioMixGains())
     private val fmodUpdateRateHz = AtomicInteger(fmodUpdateRateRepository.load())
     private val virtualForwardGearCount = AtomicInteger(virtualGearCountRepository.load())
-    private val exteriorPureAudio = AtomicBoolean(exteriorAudioModeRepository.load())
+    private val exteriorPureAudio = AtomicBoolean(false)
     private val minimumAudioThrottleSettings = AtomicReference(minimumAudioThrottleRepository.load())
     private val automaticTransmissionSettings = AtomicReference(automaticTransmissionSettingsRepository.load())
     private val favoriteCarIds = AtomicReference(carFavoritesRepository.load())
@@ -232,33 +232,19 @@ class DriveController(context: Context) {
         simulation.manualShiftEnabled = manualShiftEnabled.get()
         audioEngine.setFocusChangeListener(::handleAudioFocusChange)
         audioEngine.setFmodUpdateRateHz(fmodUpdateRateHz.get())
+        applyCarAudioPreferences(selectedProfile.get())
         audioEngine.setSoundProgram(selectedProfile.get(), selectedPerspective.get())
-        audioMixGains.set(audioMixGainRepository.load(selectedProfile.get()))
-        audioEngine.setCategoryGains(audioMixGains.get())
-        audioEngine.setHostGains(audioMixGains.get().engineHost, audioMixGains.get().effectsHost)
         backfireSettings.set(backfireSettingsRepository.load())
         shiftSoundSettings.set(shiftSoundSettingsRepository.load())
         transmissionSoundSettings.set(transmissionSoundSettingsRepository.load())
         exteriorPureAudioSettings.set(exteriorPureAudioSettingsRepository.load())
-        carEffectModes.set(carEffectModesRepository.load(selectedProfile.get()))
-        val modes = carEffectModes.get()
-        shiftSoundSettings.set(
-            shiftSoundSettingsRepository.load().copy(overrideEnabled = modes.shiftSoundsOverride),
-        )
         simulation.updateBackfireSettings(backfireSettings.get())
-        simulation.setUseOriginalBackfire(!modes.popsAndBangsOverride)
+        simulation.setUseOriginalBackfire(!carEffectModes.get().popsAndBangsOverride)
         simulation.updateVirtualGearCount(virtualForwardGearCount.get())
         audioEngine.setBackfireAllowedSamples(backfireSettings.get().allowedSamples)
-        audioEngine.setBackfireAudioEnabled(modes.popsAndBangsEnabled)
-        audioEngine.setBackfireUseOriginal(!modes.popsAndBangsOverride)
-        audioEngine.setShiftSoundEnabled(modes.shiftSoundsEnabled)
-        audioEngine.setShiftSoundOverride(modes.shiftSoundsOverride)
         audioEngine.setShiftOverrideGain(shiftSoundSettings.get().overrideGain)
         audioEngine.setGlobalTransmissionGain(transmissionSoundSettings.get().globalGain)
         audioEngine.setExteriorPureGlobalGain(exteriorPureAudioSettings.get().globalGain)
-        audioEngine.setTransmissionAudioEnabled(carEffectModes.get().transmissionEnabled)
-        audioEngine.setTurboAudioEnabled(carEffectModes.get().turboEnabled)
-        setExteriorPureAudio(exteriorPureAudio.get())
         applyMinimumAudioThrottleSettings(minimumAudioThrottleSettings.get())
         applyManualShiftSoundOverrideCoupling(manualShiftEnabled.get())
         simulation.updateAutomaticTransmissionSettings(automaticTransmissionSettings.get())
@@ -275,6 +261,7 @@ class DriveController(context: Context) {
 
     fun snapshot(): DriveSnapshot {
         val base = latest
+        val selected = selectedProfile.get()
         return base.copy(
             engineSoundEnabled = audioEngine.isAudioActive(),
             audioMuted = audioMuted.get(),
@@ -284,6 +271,12 @@ class DriveController(context: Context) {
             } else {
                 emptyList()
             },
+            selectedCarId = selected.id,
+            selectedCarName = selected.displayName,
+            selectedCarPreviewAsset = selected.previewAssetName,
+            selectedCarIndex = installedProfiles().indexOf(selected),
+            availableCarCount = installedProfiles().size,
+            soundPerspective = selectedPerspective.get(),
             transmissionGain = audioMixGains.get().transmission,
             engineHostGain = audioMixGains.get().engineHost,
             effectsHostGain = audioMixGains.get().effectsHost,
@@ -309,7 +302,7 @@ class DriveController(context: Context) {
             pedalAudioThrottleRampUpMilliseconds = minimumAudioThrottleSettings.get().rampUpMilliseconds,
             pedalAudioThrottleRampDownMilliseconds = minimumAudioThrottleSettings.get().rampDownMilliseconds,
             favoriteCarIds = favoriteCarIds.get(),
-            carAudioReady = isSelectedCarAudioReady(selectedProfile.get().id),
+            carAudioReady = isSelectedCarAudioReady(selected.id),
             userMessage = userMessage,
         )
     }
@@ -505,9 +498,10 @@ class DriveController(context: Context) {
     }
 
     fun setExteriorPureAudio(enabled: Boolean) {
+        val profile = selectedProfile.get()
         if (!enabled) {
+            exteriorAudioModeRepository.save(profile, false)
             exteriorPureAudio.set(false)
-            exteriorAudioModeRepository.save(false)
             audioEngine.setExteriorPureAudio(false)
             return
         }
@@ -516,8 +510,8 @@ class DriveController(context: Context) {
             setSoundPerspective(EngineSoundPerspective.EXTERIOR)
         }
 
+        exteriorAudioModeRepository.save(profile, true)
         exteriorPureAudio.set(true)
-        exteriorAudioModeRepository.save(true)
         audioEngine.setExteriorPureAudio(true)
     }
 
@@ -910,25 +904,10 @@ class DriveController(context: Context) {
         synchronized(lifecycleLock) {
             selectedProfile.set(profile)
             selectedCarRepository.save(profile)
-            selectedPerspective.set(soundPerspectiveRepository.load(profile))
-            audioMixGains.set(audioMixGainRepository.load(profile))
-            val modes = carEffectModesRepository.load(profile)
-            carEffectModes.set(modes)
-            shiftSoundSettings.set(
-                shiftSoundSettingsRepository.load().copy(overrideEnabled = modes.shiftSoundsOverride),
-            )
-            audioEngine.setBackfireAudioEnabled(modes.popsAndBangsEnabled)
-            audioEngine.setBackfireUseOriginal(!modes.popsAndBangsOverride)
-            simulation.setUseOriginalBackfire(!modes.popsAndBangsOverride)
-            audioEngine.setShiftSoundEnabled(modes.shiftSoundsEnabled)
-            audioEngine.setShiftSoundOverride(modes.shiftSoundsOverride)
-            audioEngine.setTransmissionAudioEnabled(modes.transmissionEnabled)
-            audioEngine.setTurboAudioEnabled(modes.turboEnabled)
+            applyCarAudioPreferences(profile)
             // This is intentionally reset per car because it is a temporary listening filter,
             // not part of the authored mix or a persistent vehicle preference.
             setBackfireOnly(false)
-            audioEngine.setCategoryGains(audioMixGains.get())
-            audioEngine.setHostGains(audioMixGains.get().engineHost, audioMixGains.get().effectsHost)
             val telemetry = vehicleReader.snapshot()
             val driveInput = resolveDriveInput(
                 mode = inputMode.get(),
@@ -947,6 +926,46 @@ class DriveController(context: Context) {
                 forceReload = forceAudioReload,
             )
         }
+    }
+
+    /**
+     * Reloads every dashboard control that is stored per car before FMOD switches banks.
+     * Centralizing this prevents stale EXTERNAL / PURE / OVERRIDE / gain presets from leaking
+     * across vehicle changes.
+     */
+    private fun applyCarAudioPreferences(
+        profile: FmodBankProfile,
+        perspectiveOverride: EngineSoundPerspective? = null,
+    ) {
+        val perspective = perspectiveOverride ?: soundPerspectiveRepository.load(profile)
+        selectedPerspective.set(perspective)
+
+        val savedPure = exteriorAudioModeRepository.load(profile)
+        val effectivePure = savedPure && perspective == EngineSoundPerspective.EXTERIOR
+        if (savedPure && !effectivePure) {
+            exteriorAudioModeRepository.save(profile, false)
+        }
+        exteriorPureAudio.set(effectivePure)
+        audioEngine.setExteriorPureAudio(effectivePure)
+
+        val gains = audioMixGainRepository.load(profile)
+        audioMixGains.set(gains)
+        audioEngine.setCategoryGains(gains)
+        audioEngine.setHostGains(gains.engineHost, gains.effectsHost)
+
+        val modes = carEffectModesRepository.load(profile)
+        carEffectModes.set(modes)
+        shiftSoundSettings.set(
+            shiftSoundSettingsRepository.load().copy(overrideEnabled = modes.shiftSoundsOverride),
+        )
+        audioEngine.setBackfireAudioEnabled(modes.popsAndBangsEnabled)
+        audioEngine.setBackfireUseOriginal(!modes.popsAndBangsOverride)
+        simulation.setUseOriginalBackfire(!modes.popsAndBangsOverride)
+        audioEngine.setShiftSoundEnabled(modes.shiftSoundsEnabled)
+        audioEngine.setShiftSoundOverride(modes.shiftSoundsOverride)
+        audioEngine.setShiftOverrideGain(shiftSoundSettings.get().overrideGain)
+        audioEngine.setTransmissionAudioEnabled(modes.transmissionEnabled)
+        audioEngine.setTurboAudioEnabled(modes.turboEnabled)
     }
 
     private fun loadPhysics(
@@ -1285,14 +1304,11 @@ class DriveController(context: Context) {
             synchronized(lifecycleLock) {
                 if (requestedProfile.id != selectedProfile.get().id) {
                     selectedProfile.set(requestedProfile)
-                    audioMixGains.set(audioMixGainRepository.load(requestedProfile))
-                    audioEngine.setCategoryGains(audioMixGains.get())
-                    audioEngine.setHostGains(audioMixGains.get().engineHost, audioMixGains.get().effectsHost)
+                    applyCarAudioPreferences(requestedProfile)
                     loadPhysics(requestedProfile)
                     simulation.reset()
-                    selectedPerspective.set(EngineSoundPerspective.CABIN)
-                    audioEngine.setSoundProgram(requestedProfile, EngineSoundPerspective.CABIN)
                     consumedDebugScenarioShiftSerial = 0L
+                    audioEngine.setSoundProgram(requestedProfile, selectedPerspective.get())
                 }
             }
         }
@@ -1300,6 +1316,10 @@ class DriveController(context: Context) {
             ?: EngineSoundPerspective.CABIN
         if (requestedPerspective != selectedPerspective.get()) {
             selectedPerspective.set(requestedPerspective)
+            val pure = exteriorAudioModeRepository.load(selectedProfile.get()) &&
+                requestedPerspective == EngineSoundPerspective.EXTERIOR
+            exteriorPureAudio.set(pure)
+            audioEngine.setExteriorPureAudio(pure)
             audioEngine.setSoundProgram(selectedProfile.get(), requestedPerspective)
         }
         if (scenario.forceAuthoredBankEffects) {
@@ -1324,25 +1344,14 @@ class DriveController(context: Context) {
         synchronized(lifecycleLock) {
             if (baseline.profile.id != selectedProfile.get().id) {
                 selectedProfile.set(baseline.profile)
-                audioMixGains.set(audioMixGainRepository.load(baseline.profile))
-                audioEngine.setCategoryGains(audioMixGains.get())
-                audioEngine.setHostGains(audioMixGains.get().engineHost, audioMixGains.get().effectsHost)
                 loadPhysics(baseline.profile)
                 simulation.reset()
             }
-            if (baseline.perspective != selectedPerspective.get()) {
-                selectedPerspective.set(baseline.perspective)
-            }
+            applyCarAudioPreferences(
+                profile = baseline.profile,
+                perspectiveOverride = baseline.perspective,
+            )
             audioEngine.setSoundProgram(selectedProfile.get(), selectedPerspective.get())
-            val restoredModes = carEffectModesRepository.load(selectedProfile.get())
-            carEffectModes.set(restoredModes)
-            audioEngine.setBackfireAudioEnabled(restoredModes.popsAndBangsEnabled)
-            audioEngine.setBackfireUseOriginal(!restoredModes.popsAndBangsOverride)
-            simulation.setUseOriginalBackfire(!restoredModes.popsAndBangsOverride)
-            audioEngine.setShiftSoundEnabled(restoredModes.shiftSoundsEnabled)
-            audioEngine.setShiftSoundOverride(restoredModes.shiftSoundsOverride)
-            audioEngine.setTransmissionAudioEnabled(restoredModes.transmissionEnabled)
-            audioEngine.setTurboAudioEnabled(restoredModes.turboEnabled)
         }
     }
 

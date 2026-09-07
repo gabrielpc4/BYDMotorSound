@@ -1738,121 +1738,122 @@ private fun CarStage(
     val selectedCarSubtitle = remember(selectedProfile.id) {
         CarSubtitleCatalog.forProfileId(selectedProfile.id)
     }
-    Box(modifier = modifier) {
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 28.dp, top = 26.dp),
-        ) {
-            Text(
-                text = CarDisplayNameFormatter.format(state.selectedCarName).uppercase(),
-                color = White,
-                fontSize = 34.sp,
-                lineHeight = 42.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 1.2.sp,
-            )
-            Text(
-                text = selectedCarSubtitle.uppercase(),
-                color = CyanSoft,
-                fontSize = 12.sp,
-                letterSpacing = 1.1.sp,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-
-        val context = LocalContext.current
-        var loadingTimedOut by remember(state.selectedCarId) { mutableStateOf(false) }
-        LaunchedEffect(state.selectedCarId, state.carAudioReady) {
-            if (state.carAudioReady) {
-                loadingTimedOut = false
-                return@LaunchedEffect
-            }
-
+    val context = LocalContext.current
+    var loadingTimedOut by remember(state.selectedCarId) { mutableStateOf(false) }
+    LaunchedEffect(state.selectedCarId, state.carAudioReady) {
+        if (state.carAudioReady) {
             loadingTimedOut = false
-            delay(CAR_ENGINE_AUDIO_LOAD_TIMEOUT_MS)
-            loadingTimedOut = true
+            return@LaunchedEffect
         }
-        val showCarAudioLoading = !state.carAudioReady && !loadingTimedOut
-        val carPreviewModifier = Modifier
-            .fillMaxWidth(0.88f)
-            .fillMaxHeight(0.65f)
-            .align(Alignment.Center)
-            .offset(y = (-46).dp)
-        val audioResolver = remember(context) { FmodBankResolver(context.applicationContext) }
-        val installedPreviewPath = audioResolver.previewFile(selectedProfile)?.path
-        val preview = remember(state.selectedCarId, installedPreviewPath) {
-            runCatching {
-                audioResolver.openCarPreviewInput(selectedProfile)?.use { input ->
-                    requireNotNull(BitmapFactory.decodeStream(input)).asImageBitmap()
+
+        loadingTimedOut = false
+        delay(CAR_ENGINE_AUDIO_LOAD_TIMEOUT_MS)
+        loadingTimedOut = true
+    }
+    val showCarAudioLoading = !state.carAudioReady && !loadingTimedOut
+    val audioResolver = remember(context) { FmodBankResolver(context.applicationContext) }
+    val installedPreviewPath = audioResolver.previewFile(selectedProfile)?.path
+    val preview = remember(state.selectedCarId, installedPreviewPath) {
+        runCatching {
+            audioResolver.openCarPreviewInput(selectedProfile)?.use { input ->
+                requireNotNull(BitmapFactory.decodeStream(input)).asImageBitmap()
+            }
+        }.getOrNull()
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(start = 28.dp, top = 26.dp, end = 8.dp),
+    ) {
+        Text(
+            text = CarDisplayNameFormatter.format(state.selectedCarName).uppercase(),
+            color = White,
+            fontSize = 34.sp,
+            lineHeight = 42.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 1.2.sp,
+        )
+        Text(
+            text = selectedCarSubtitle.uppercase(),
+            color = CyanSoft,
+            fontSize = 12.sp,
+            letterSpacing = 1.1.sp,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+        ) {
+            val previewModifier = Modifier
+                .fillMaxWidth(0.88f)
+                .fillMaxHeight(0.88f)
+                .align(Alignment.Center)
+
+            if (preview != null) {
+                Box(
+                    modifier = previewModifier.clickable { carPickerExpanded = true },
+                ) {
+                    Image(
+                        bitmap = preview,
+                        contentDescription = CarDisplayNameFormatter.format(state.selectedCarName),
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    CarPreviewLoadingOverlay(
+                        visible = showCarAudioLoading,
+                        onOpenCarPicker = { carPickerExpanded = true },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    CarFavoriteStarButton(
+                        isFavorite = state.selectedCarId in state.favoriteCarIds,
+                        onToggle = { onToggleCarFavorite(state.selectedCarId) },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp),
+                    )
                 }
-            }.getOrNull()
-        }
-        if (preview != null) {
-            Box(
-                modifier = carPreviewModifier.clickable { carPickerExpanded = true },
-            ) {
-                Image(
-                    bitmap = preview,
-                    contentDescription = CarDisplayNameFormatter.format(state.selectedCarName),
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                CarPreviewLoadingOverlay(
-                    visible = showCarAudioLoading,
-                    onOpenCarPicker = { carPickerExpanded = true },
-                    modifier = Modifier.fillMaxSize(),
-                )
-                CarFavoriteStarButton(
-                    isFavorite = state.selectedCarId in state.favoriteCarIds,
-                    onToggle = { onToggleCarFavorite(state.selectedCarId) },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp),
-                )
+            } else {
+                Box(
+                    modifier = previewModifier
+                        .clickable { carPickerExpanded = true },
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.apex_v10_car),
+                        contentDescription = CarDisplayNameFormatter.format(state.selectedCarName),
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    CarPreviewLoadingOverlay(
+                        visible = showCarAudioLoading,
+                        onOpenCarPicker = { carPickerExpanded = true },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    CarFavoriteStarButton(
+                        isFavorite = state.selectedCarId in state.favoriteCarIds,
+                        onToggle = { onToggleCarFavorite(state.selectedCarId) },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp),
+                    )
+                }
             }
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.84f)
-                    .fillMaxHeight(0.62f)
-                    .align(Alignment.Center)
-                    .offset(y = (-46).dp)
-                    .clickable { carPickerExpanded = true },
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.apex_v10_car),
-                    contentDescription = CarDisplayNameFormatter.format(state.selectedCarName),
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                CarPreviewLoadingOverlay(
-                    visible = showCarAudioLoading,
-                    onOpenCarPicker = { carPickerExpanded = true },
-                    modifier = Modifier.fillMaxSize(),
-                )
-                CarFavoriteStarButton(
-                    isFavorite = state.selectedCarId in state.favoriteCarIds,
-                    onToggle = { onToggleCarFavorite(state.selectedCarId) },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp),
-                )
-            }
-        }
 
-        if (carPickerExpanded) {
-            CarGridSelectionDialog(
-                selectedCarId = state.selectedCarId,
-                favoriteCarIds = state.favoriteCarIds,
-                onSelectCar = onSelectCar,
-                onToggleFavorite = onToggleCarFavorite,
-                onDismiss = { carPickerExpanded = false },
-            )
+            CarSelectorArrow("‹", "Previous car", onPreviousCar, Modifier.align(Alignment.CenterStart))
+            CarSelectorArrow("›", "Next car", onNextCar, Modifier.align(Alignment.CenterEnd))
         }
+    }
 
-        CarSelectorArrow("‹", "Previous car", onPreviousCar, Modifier.align(Alignment.CenterStart))
-        CarSelectorArrow("›", "Next car", onNextCar, Modifier.align(Alignment.CenterEnd))
+    if (carPickerExpanded) {
+        CarGridSelectionDialog(
+            selectedCarId = state.selectedCarId,
+            favoriteCarIds = state.favoriteCarIds,
+            onSelectCar = onSelectCar,
+            onToggleFavorite = onToggleCarFavorite,
+            onDismiss = { carPickerExpanded = false },
+        )
     }
 }
 

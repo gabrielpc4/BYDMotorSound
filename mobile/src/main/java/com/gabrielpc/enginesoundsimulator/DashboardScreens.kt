@@ -247,7 +247,7 @@ internal fun MixerDashboardScreen(
     }
 
     var mixerGains by remember(state.mixerGlobalGains) { mutableStateOf(state.mixerGlobalGains) }
-    var mixerSpecificGains by remember(state.selectedCarId, state.mixerCarSpecificGains) {
+    var mixerSpecificGains by remember(state.selectedCarId, soundPerspective, state.mixerCarSpecificGains) {
         mutableStateOf(state.mixerCarSpecificGains)
     }
     Row(
@@ -327,6 +327,7 @@ internal fun MixerDashboardScreen(
                 .fillMaxHeight(),
         ) {
             MixerControlsPanel(
+                soundPerspective = soundPerspective,
                 carEngineHostGain = state.engineHostGain,
                 carEffectsHostGain = state.effectsHostGain,
                 carTransmissionGain = state.transmissionGain,
@@ -434,6 +435,7 @@ private fun MixerListeningPerspectiveSelector(
 
 @Composable
 private fun MixerControlsPanel(
+    soundPerspective: EngineSoundPerspective,
     carEngineHostGain: Float,
     carEffectsHostGain: Float,
     carTransmissionGain: Float,
@@ -481,6 +483,7 @@ private fun MixerControlsPanel(
         ) {
             MixerGainScopeSelector(
                 scope = gainScope,
+                listeningPerspective = soundPerspective,
                 onScopeSelected = { gainScope = it },
             )
             if (gainScope == MixerGainScope.SPECIFIC) {
@@ -703,33 +706,49 @@ private fun layerValueForScope(
 @Composable
 private fun MixerGainScopeSelector(
     scope: MixerGainScope,
+    listeningPerspective: EngineSoundPerspective,
     onScopeSelected: (MixerGainScope) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    Column(
         modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(
-            text = "MIX",
-            color = Muted,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp,
-        )
-        Spacer(Modifier.width(10.dp))
-        MixerGainScope.entries.forEach { option ->
-            val active = option == scope
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
-                text = option.displayName,
-                color = if (active) Cyan else Muted,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Black,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(if (active) Cyan.copy(alpha = 0.14f) else Color.Transparent)
-                    .clickable { onScopeSelected(option) }
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                text = "MIX",
+                color = Muted,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+            )
+            Spacer(Modifier.width(10.dp))
+            MixerGainScope.entries.forEach { option ->
+                val active = option == scope
+                Text(
+                    text = option.displayName,
+                    color = if (active) Cyan else Muted,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(if (active) Cyan.copy(alpha = 0.14f) else Color.Transparent)
+                        .clickable { onScopeSelected(option) }
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                )
+            }
+        }
+
+        if (scope == MixerGainScope.SPECIFIC) {
+            Text(
+                text = "Per-car profile for ${listeningPerspective.displayName}",
+                color = Amber,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp,
             )
         }
     }

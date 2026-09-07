@@ -7,6 +7,7 @@ import com.gabrielpc.enginesoundsimulator.audio.AudioMixGainRepository
 import com.gabrielpc.enginesoundsimulator.audio.AudioMixGains
 import com.gabrielpc.enginesoundsimulator.audio.CarEffectModes
 import com.gabrielpc.enginesoundsimulator.audio.CarEffectModesRepository
+import com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective
 import com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspectiveRepository
 import com.gabrielpc.enginesoundsimulator.audio.ExteriorAudioModeRepository
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankProfiles
@@ -83,7 +84,23 @@ internal object SettingsExporter {
                     put("displayName", profile.displayName)
                     put("packGroup", profile.packGroup)
                     put("dashboardMixGains", audioMixGainsToJson(audioMixGainRepository.load(profile)))
-                    put("mixerSpecificGains", mixerCarSpecificGainsToJson(mixerCarSpecificGainRepository.load(profile)))
+                    put(
+                        "mixerSpecificGains",
+                        JSONObject().apply {
+                            put(
+                                "cabin",
+                                mixerCarSpecificGainsToJson(
+                                    mixerCarSpecificGainRepository.load(profile, EngineSoundPerspective.CABIN),
+                                ),
+                            )
+                            put(
+                                "exterior",
+                                mixerCarSpecificGainsToJson(
+                                    mixerCarSpecificGainRepository.load(profile, EngineSoundPerspective.EXTERIOR),
+                                ),
+                            )
+                        },
+                    )
                     put("effectModes", carEffectModesToJson(carEffectModesRepository.load(profile)))
                     put("engineSoundPerspective", soundPerspectiveRepository.load(profile).name)
                     put("exteriorPureAudio", exteriorAudioModeRepository.load(profile))

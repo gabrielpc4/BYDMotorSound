@@ -34,8 +34,10 @@ constexpr int kFmodDspBlocks = 4;
 constexpr int kFmodLogicalChannelCap = 2048;
 constexpr int kFmodRealChannelCap = 256;
 constexpr int kPerspectiveExterior = 1;
-// Engine load layers stay at the authored full-load endpoint. Transmission and embedded
-// supercharger subsounds follow RPM: minimum at idle, full gain from 90% of idle-to-limiter.
+// Engine load layers stay at the authored full-load endpoint. Automatic cruising mutes
+// transmission only; supercharger always follows pedal (or RPM/binary rules below) unless
+// the mixer mutes it. In racing/manual, transmission follows RPM and supercharger is
+// on/off with any pedal. Otherwise transmission and supercharger both follow RPM.
 constexpr float kFullLoadAudioThrottle = 1.0f;
 constexpr float kEffectsFullGainRpmFraction = 0.9f;
 // Backfire is authored as a lift-off one-shot: its throttle automation fades it to roughly
@@ -783,7 +785,8 @@ public:
         bool tractionActive,
         int tractionPulseCount,
         std::uint64_t simulationFrameId,
-        bool suppressEffectsLoad
+        bool suppressEffectsLoad,
+        bool effectsLoadFromThrottle
     ) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!active_ || studio_ == nullptr) {
@@ -813,15 +816,42 @@ public:
             tractionPulseCount > 0,
             simulationFrameId
         );
+        const bool shouldMuteCruisingEffects = suppressEffectsLoad;
+        const bool cruisingMuteStateChanged = shouldMuteCruisingEffects != cruisingEffectsMuted_;
+        cruisingEffectsMuted_ = shouldMuteCruisingEffects;
+
         const float engineThrottle = effectiveAudioThrottleLocked(kFullLoadAudioThrottle);
-        const float effectsLoadTarget = suppressEffectsLoad
-            ? 0.0f
-            : effectsLoadFromRpmLocked(cleanRpm);
-        const float effectsLoad = rampEffectsLoadLocked(effectsLoadTarget, cleanDt);
         applyEngineAudioThrottleLocked(engineThrottle);
-        applyTransmissionAudioThrottleLocked(effectsLoad);
-        effectsLoadFromRpm_ = effectsLoad;
+
+        float transmissionLoad = 0.0f;
+        float superchargerLoad = 0.0f;
+
+        if (cruisingEffectsMuted_) {
+            transmissionLoad = 0.0f;
+            superchargerLoad = cleanThrottle;
+            if (cruisingMuteStateChanged) {
+                smoothedEffectsLoad_ = 0.0f;
+            }
+        } else if (effectsLoadFromThrottle) {
+            transmissionLoad = rampEffectsLoadLocked(effectsLoadFromRpmLocked(cleanRpm), cleanDt);
+            superchargerLoad = cleanThrottle > 0.0f ? 1.0f : 0.0f;
+        } else {
+            const float rpmLoad = rampEffectsLoadLocked(effectsLoadFromRpmLocked(cleanRpm), cleanDt);
+            transmissionLoad = rpmLoad;
+            superchargerLoad = rpmLoad;
+        }
+
+        effectsLoadFromRpm_ = superchargerLoad;
+        applyTransmissionAudioThrottleLocked(transmissionLoad);
+
+        if (cruisingMuteStateChanged && !cruisingEffectsMuted_) {
+            applyEventOverridesLocked();
+        }
+        if (cruisingEffectsMuted_) {
+            applyEventOverridesLocked();
+        }
         applyEmbeddedEngineChannelGainsLocked();
+
         if (perspective != perspective_) {
             switchPerspectiveLocked(perspective);
         }
@@ -1620,6 +1650,7 @@ private:
     void applyEventOverridesLocked() {
         bool anySolo = false;
         for (const auto& entry : soloEvents_) anySolo = anySolo || entry.second;
+        const bool superchargerSolo = anySolo && isPseudoCategorySoloedLocked("supercharger");
         for (auto& pair : slots_) {
             const bool muted = mutedEvents_[pair.first];
             const bool soloed = anySolo && !soloEvents_[pair.first];
@@ -1631,12 +1662,55 @@ private:
                 (pair.first == "gear_int" || pair.first == "gear_ext" || pair.first == "gear_grind");
             const bool disabledTransmission = !transmissionAudioEnabled_ &&
                 (pair.first == "transmission" || pair.first == "transmission_ext");
+            const bool cruisingMutedTransmission = cruisingEffectsMuted_ &&
+                (pair.first == "transmission" || pair.first == "transmission_ext");
             const bool disabledTurbo = !turboAudioEnabled_ && pair.first == "turbo";
             const float baseGain = hostGainForEventLocked(pair.first);
             const float categoryGain = eventCategoryGain(pair.first);
-            pair.second->instance->setVolume((disabledBackfire || disabledShift || disabledShiftAudio || disabledTransmission || disabledTurbo || muted || soloed) ? 0.0f : baseGain * categoryGain);
+            const bool isEngineEvent = pair.first == "engine_int" || pair.first == "engine_ext";
+            const bool muteVolume = disabledBackfire || disabledShift || disabledShiftAudio ||
+                disabledTransmission || disabledTurbo || cruisingMutedTransmission || muted || soloed;
+            const bool keepEngineAliveForSuperchargerSolo = superchargerSolo && isEngineEvent;
+            pair.second->instance->setVolume(
+                (muteVolume && !keepEngineAliveForSuperchargerSolo)
+                    ? 0.0f
+                    : baseGain * categoryGain
+            );
         }
         applyEmbeddedEngineChannelGainsLocked();
+    }
+
+    bool anyEventSoloedLocked() const {
+        for (const auto& entry : soloEvents_) {
+            if (entry.second) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool isPseudoCategoryMutedLocked(const char* key) const {
+        const auto iterator = mutedEvents_.find(key);
+        return iterator != mutedEvents_.end() && iterator->second;
+    }
+
+    bool isPseudoCategorySoloedLocked(const char* key) const {
+        const auto iterator = soloEvents_.find(key);
+        return iterator != soloEvents_.end() && iterator->second;
+    }
+
+    bool shouldSilenceSuperchargerLocked() const {
+        if (isPseudoCategoryMutedLocked("supercharger")) {
+            return true;
+        }
+        if (anyEventSoloedLocked() && !isPseudoCategorySoloedLocked("supercharger")) {
+            return true;
+        }
+        return false;
+    }
+
+    bool superchargerSoloActiveLocked() const {
+        return anyEventSoloedLocked() && isPseudoCategorySoloedLocked("supercharger");
     }
 
     float hostGainForEventLocked(const std::string& eventName) const {
@@ -1696,7 +1770,13 @@ private:
         }
         const float engineHost = std::max(hostGainForEventLocked(eventName), 0.0001f);
         if (isSuperchargerSoundName(soundName)) {
+            if (shouldSilenceSuperchargerLocked()) {
+                return 0.0f;
+            }
             return (hostEffectsGain_ * superchargerGain_ * effectsLoadFromRpm_) / engineHost;
+        }
+        if (superchargerSoloActiveLocked()) {
+            return 0.0f;
         }
         if (!isLimiterSoundName(soundName)) {
             return 1.0f;
@@ -1901,6 +1981,7 @@ private:
         smoothedEngineAudioThrottle_ = minimumAudioThrottle_;
         smoothedEffectsLoad_ = 0.0f;
         effectsLoadFromRpm_ = 0.0f;
+        cruisingEffectsMuted_ = false;
         setDiagnosticsEnabledLocked(false);
         nextVoiceSerial_ = 1;
     }
@@ -2284,9 +2365,13 @@ private:
             startEventLocked(newTransmission);
         }
         // Reapply the engine full-load endpoint after a cabin/exterior transition. Transmission
-        // keeps its current RPM-driven load factor.
+        // keeps its current load factor (throttle- or RPM-driven).
         applyAudioThrottlePolicyLocked();
         applyTransmissionAudioThrottleLocked(smoothedEffectsLoad_);
+        if (cruisingEffectsMuted_) {
+            applyEventOverridesLocked();
+        }
+        applyEmbeddedEngineChannelGainsLocked();
         applySpatialAttributesLocked();
     }
 
@@ -2675,6 +2760,7 @@ private:
     bool shiftSoundOverride_ = false;
     bool shiftSoundEnabled_ = true;
     bool transmissionAudioEnabled_ = true;
+    bool cruisingEffectsMuted_ = false;
     bool turboAudioEnabled_ = true;
     int backfireAllowedSamplesMask_ = 0x0F;
     std::array<FMOD::Sound*, 4> alfaBackfireSamples_{};
@@ -2849,7 +2935,8 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_update(
     jboolean tractionActive,
     jint tractionPulseCount,
     jlong simulationFrameId,
-    jboolean suppressEffectsLoad
+    jboolean suppressEffectsLoad,
+    jboolean effectsLoadFromThrottle
 ) {
     return resultString(
         environment,
@@ -2876,7 +2963,8 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_update(
             tractionActive == JNI_TRUE,
             tractionPulseCount,
             static_cast<std::uint64_t>(std::max<jlong>(0, simulationFrameId)),
-            suppressEffectsLoad == JNI_TRUE
+            suppressEffectsLoad == JNI_TRUE,
+            effectsLoadFromThrottle == JNI_TRUE
         )
     );
 }

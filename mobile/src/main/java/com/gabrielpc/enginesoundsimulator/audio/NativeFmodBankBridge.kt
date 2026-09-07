@@ -47,6 +47,7 @@ internal class NativeFmodBankBridge {
         tractionPulseCount: Int,
         simulationFrameId: Long,
         suppressEffectsLoad: Boolean,
+        effectsLoadFromThrottle: Boolean,
     ): String?
 
     /** Immutable source rows captured from FMOD's actual event/channel hierarchy. */

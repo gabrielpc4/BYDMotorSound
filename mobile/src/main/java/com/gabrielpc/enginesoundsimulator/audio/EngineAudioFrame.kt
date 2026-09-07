@@ -32,6 +32,8 @@ data class EngineAudioFrame(
     val bov: Double = 0.0,
     val bovDecaySeconds: Double = 10.0,
     val perspective: EngineSoundPerspective = EngineSoundPerspective.CABIN,
-    /** When true, transmission and supercharger use minimum FMOD load (automatic cruising). */
+    /** When true, transmission is fully muted (automatic cruising). Supercharger is unaffected. */
     val suppressEffectsLoad: Boolean = false,
+    /** When true (and not suppressed), racing/manual uses RPM load for transmission and binary pedal load for supercharger. */
+    val effectsLoadFromThrottle: Boolean = false,
 )

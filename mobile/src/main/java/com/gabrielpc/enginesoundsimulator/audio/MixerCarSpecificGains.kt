@@ -3,7 +3,7 @@ package com.gabrielpc.enginesoundsimulator.audio
 import android.content.Context
 import com.gabrielpc.enginesoundsimulator.AppPreferenceStores
 
-/** Per-car mixer trims layered between app-wide global gains and dashboard presets. */
+/** Per-car, per-listening-perspective mixer trims layered between global gains and dashboard presets. */
 data class MixerCarSpecificGains(
     val overall: Float = 1.0f,
     val engineInterior: Float = 1.0f,
@@ -36,44 +36,58 @@ internal class MixerCarSpecificGainRepository(context: Context) {
         Context.MODE_PRIVATE,
     )
 
-    fun load(profile: FmodBankProfile): MixerCarSpecificGains {
+    fun load(profile: FmodBankProfile, perspective: EngineSoundPerspective): MixerCarSpecificGains {
         return MixerCarSpecificGains(
-            overall = read(profile, "overall"),
-            engineInterior = read(profile, "engine_interior"),
-            engineExterior = read(profile, "engine_exterior"),
-            effectsHost = read(profile, "effects_host"),
-            transmission = read(profile, "transmission"),
-            gearShift = read(profile, "gear_shift"),
-            turbo = read(profile, "turbo"),
-            backfire = read(profile, "backfire"),
-            limiter = read(profile, "limiter"),
-            supercharger = read(profile, "supercharger"),
+            overall = read(profile, perspective, "overall"),
+            engineInterior = read(profile, perspective, "engine_interior"),
+            engineExterior = read(profile, perspective, "engine_exterior"),
+            effectsHost = read(profile, perspective, "effects_host"),
+            transmission = read(profile, perspective, "transmission"),
+            gearShift = read(profile, perspective, "gear_shift"),
+            turbo = read(profile, perspective, "turbo"),
+            backfire = read(profile, perspective, "backfire"),
+            limiter = read(profile, perspective, "limiter"),
+            supercharger = read(profile, perspective, "supercharger"),
         ).normalized()
     }
 
-    fun save(profile: FmodBankProfile, gains: MixerCarSpecificGains) {
+    fun save(
+        profile: FmodBankProfile,
+        perspective: EngineSoundPerspective,
+        gains: MixerCarSpecificGains,
+    ) {
         val normalized = gains.normalized()
-        preferences.edit()
-            .putFloat(key(profile, "overall"), normalized.overall)
-            .putFloat(key(profile, "engine_interior"), normalized.engineInterior)
-            .putFloat(key(profile, "engine_exterior"), normalized.engineExterior)
-            .putFloat(key(profile, "effects_host"), normalized.effectsHost)
-            .putFloat(key(profile, "transmission"), normalized.transmission)
-            .putFloat(key(profile, "gear_shift"), normalized.gearShift)
-            .putFloat(key(profile, "turbo"), normalized.turbo)
-            .putFloat(key(profile, "backfire"), normalized.backfire)
-            .putFloat(key(profile, "limiter"), normalized.limiter)
-            .putFloat(key(profile, "supercharger"), normalized.supercharger)
-            .commit()
+        val editor = preferences.edit()
+        editor.putFloat(key(profile, perspective, "overall"), normalized.overall)
+        editor.putFloat(key(profile, perspective, "engine_interior"), normalized.engineInterior)
+        editor.putFloat(key(profile, perspective, "engine_exterior"), normalized.engineExterior)
+        editor.putFloat(key(profile, perspective, "effects_host"), normalized.effectsHost)
+        editor.putFloat(key(profile, perspective, "transmission"), normalized.transmission)
+        editor.putFloat(key(profile, perspective, "gear_shift"), normalized.gearShift)
+        editor.putFloat(key(profile, perspective, "turbo"), normalized.turbo)
+        editor.putFloat(key(profile, perspective, "backfire"), normalized.backfire)
+        editor.putFloat(key(profile, perspective, "limiter"), normalized.limiter)
+        editor.putFloat(key(profile, perspective, "supercharger"), normalized.supercharger)
+        editor.commit()
     }
 
     fun resetAll() {
         preferences.edit().clear().commit()
     }
 
-    private fun read(profile: FmodBankProfile, category: String): Float {
-        return preferences.getFloat(key(profile, category), 1.0f)
+    private fun read(
+        profile: FmodBankProfile,
+        perspective: EngineSoundPerspective,
+        category: String,
+    ): Float {
+        return preferences.getFloat(key(profile, perspective, category), 1.0f)
     }
 
-    private fun key(profile: FmodBankProfile, category: String): String = "${profile.id}.$category"
+    private fun key(
+        profile: FmodBankProfile,
+        perspective: EngineSoundPerspective,
+        category: String,
+    ): String {
+        return "${profile.id}.${perspective.name}.$category"
+    }
 }

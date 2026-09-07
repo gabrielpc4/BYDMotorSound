@@ -496,7 +496,11 @@ class DriveController(context: Context) {
     fun setMixerCarSpecificGains(updated: MixerCarSpecificGains) {
         val normalized = updated.normalized()
         mixerCarSpecificGains.set(normalized)
-        mixerCarSpecificGainRepository.save(selectedProfile.get(), normalized)
+        mixerCarSpecificGainRepository.save(
+            profile = selectedProfile.get(),
+            perspective = selectedPerspective.get(),
+            gains = normalized,
+        )
         syncEffectiveMixGainsToAudioEngine()
     }
 
@@ -763,6 +767,8 @@ class DriveController(context: Context) {
 
         val profile = selectedProfile.get()
         selectedPerspective.set(soundPerspectiveRepository.save(profile, perspective))
+        mixerCarSpecificGains.set(mixerCarSpecificGainRepository.load(profile, perspective))
+        syncEffectiveMixGainsToAudioEngine()
         audioEngine.setSoundProgram(profile, perspective)
     }
 
@@ -1029,7 +1035,7 @@ class DriveController(context: Context) {
 
         val gains = audioMixGainRepository.load(profile)
         audioMixGains.set(gains)
-        mixerCarSpecificGains.set(mixerCarSpecificGainRepository.load(profile))
+        mixerCarSpecificGains.set(mixerCarSpecificGainRepository.load(profile, perspective))
         syncEffectiveMixGainsToAudioEngine()
 
         val modes = carEffectModesRepository.load(profile)
@@ -1322,6 +1328,12 @@ class DriveController(context: Context) {
                 suppressEffectsLoad = transmission.position == TransmissionPosition.DRIVE &&
                     !manualShiftEnabled.get() &&
                     drivetrain.automaticTransmissionMode == AutomaticTransmissionMode.CRUISING,
+                effectsLoadFromThrottle = manualShiftEnabled.get() ||
+                    (
+                        transmission.position == TransmissionPosition.DRIVE &&
+                            !manualShiftEnabled.get() &&
+                            drivetrain.automaticTransmissionMode == AutomaticTransmissionMode.RACING
+                        ),
             ),
         )
         val selected = selectedProfile.get()

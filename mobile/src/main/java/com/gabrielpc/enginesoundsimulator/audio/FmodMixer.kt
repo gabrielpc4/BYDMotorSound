@@ -56,6 +56,8 @@ enum class MixerEventCategory(val eventNames: List<String>) {
     TURBO(listOf("turbo")),
     BACKFIRE(listOf("backfire_int", "backfire_ext")),
     LIMITER(listOf("limiter")),
+    /** Embedded engine subsounds; routed through native pseudo-event mute/solo keys. */
+    SUPERCHARGER(listOf("supercharger")),
     ;
 
     fun isMuted(mutedEvents: Map<String, Boolean>): Boolean {

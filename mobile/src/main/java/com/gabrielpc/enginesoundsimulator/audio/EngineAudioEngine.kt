@@ -610,6 +610,7 @@ class EngineAudioEngine(context: Context) {
                     tractionPulseCount = tractionPulseCount,
                     simulationFrameId = frame.simulationFrameId,
                     suppressEffectsLoad = frame.suppressEffectsLoad,
+                    effectsLoadFromThrottle = frame.effectsLoadFromThrottle,
                 )
                 if (measurePerformance) {
                     DebugTelemetry.recordAudioPerformance(

@@ -47,6 +47,26 @@ enum class FmodEventSection(val displayName: String, val order: Int) {
     }
 }
 
+/** Authored FMOD events controlled by one mixer category row. */
+enum class MixerEventCategory(val eventNames: List<String>) {
+    ENGINE_INTERIOR(listOf("engine_int")),
+    ENGINE_EXTERIOR(listOf("engine_ext")),
+    TRANSMISSION(listOf("transmission", "transmission_ext")),
+    SHIFT(listOf("gear_int", "gear_ext", "gear_grind")),
+    TURBO(listOf("turbo")),
+    BACKFIRE(listOf("backfire_int", "backfire_ext")),
+    LIMITER(listOf("limiter")),
+    ;
+
+    fun isMuted(mutedEvents: Map<String, Boolean>): Boolean {
+        return eventNames.all { mutedEvents[it] == true }
+    }
+
+    fun isSoloed(soloedEvents: Map<String, Boolean>): Boolean {
+        return eventNames.any { soloedEvents[it] == true }
+    }
+}
+
 internal fun parseNativeVoiceSnapshots(rows: Array<String>): List<FmodSourceState> = rows.mapNotNull { row ->
     val fields = row.split(NATIVE_FIELD_SEPARATOR)
     if (fields.size != NATIVE_SNAPSHOT_FIELD_COUNT) return@mapNotNull null

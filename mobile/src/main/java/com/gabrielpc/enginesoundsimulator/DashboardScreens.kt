@@ -106,6 +106,7 @@ import com.gabrielpc.enginesoundsimulator.audio.FmodBankResolver
 import com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective
 import com.gabrielpc.enginesoundsimulator.audio.FmodEventSection
 import com.gabrielpc.enginesoundsimulator.audio.MixerCarSpecificGains
+import com.gabrielpc.enginesoundsimulator.audio.MixerEventCategory
 import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains
 import com.gabrielpc.enginesoundsimulator.audio.FmodSourceState
 import com.gabrielpc.enginesoundsimulator.audio.FmodUpdateRate
@@ -304,16 +305,6 @@ internal fun MixerDashboardScreen(
                                     FmodSourceMeter(
                                         source = source,
                                         highlight = source.id in highlightedIds,
-                                        muted = mutedEvents[source.eventName] == true,
-                                        soloed = soloedEvents[source.eventName] == true,
-                                        onMute = { muted ->
-                                            mutedEvents = mutedEvents + (source.eventName to muted)
-                                            onEventMute(source.eventName, muted)
-                                        },
-                                        onSolo = { solo ->
-                                            soloedEvents = soloedEvents + (source.eventName to solo)
-                                            onEventSolo(source.eventName, solo)
-                                        },
                                         modifier = Modifier.weight(1f),
                                     )
                                 }
@@ -342,6 +333,32 @@ internal fun MixerDashboardScreen(
                 hasTurbo = state.hasTurbo,
                 mixerGains = mixerGains,
                 mixerSpecificGains = mixerSpecificGains,
+                mutedEvents = mutedEvents,
+                soloedEvents = soloedEvents,
+                onToggleCategoryMute = { category, muted ->
+                    var updated = mutedEvents
+                    category.eventNames.forEach { eventName ->
+                        updated = if (muted) {
+                            updated + (eventName to true)
+                        } else {
+                            updated - eventName
+                        }
+                        onEventMute(eventName, muted)
+                    }
+                    mutedEvents = updated
+                },
+                onToggleCategorySolo = { category, solo ->
+                    var updated = soloedEvents
+                    category.eventNames.forEach { eventName ->
+                        updated = if (solo) {
+                            updated + (eventName to true)
+                        } else {
+                            updated - eventName
+                        }
+                        onEventSolo(eventName, solo)
+                    }
+                    soloedEvents = updated
+                },
                 onMixerGainsChange = { updated ->
                     mixerGains = updated
                     onMixerGlobalGainsChange(updated)
@@ -421,6 +438,10 @@ private fun MixerControlsPanel(
     hasTurbo: Boolean,
     mixerGains: MixerGlobalGains,
     mixerSpecificGains: MixerCarSpecificGains,
+    mutedEvents: Map<String, Boolean>,
+    soloedEvents: Map<String, Boolean>,
+    onToggleCategoryMute: (MixerEventCategory, Boolean) -> Unit,
+    onToggleCategorySolo: (MixerEventCategory, Boolean) -> Unit,
     onMixerGainsChange: (MixerGlobalGains) -> Unit,
     onMixerSpecificGainsChange: (MixerCarSpecificGains) -> Unit,
     modifier: Modifier = Modifier,
@@ -474,6 +495,11 @@ private fun MixerControlsPanel(
             }
             MixerLayerGainSlider(
                 label = "ENGINE INTERIOR",
+                eventCategory = MixerEventCategory.ENGINE_INTERIOR,
+                mutedEvents = mutedEvents,
+                soloedEvents = soloedEvents,
+                onToggleCategoryMute = onToggleCategoryMute,
+                onToggleCategorySolo = onToggleCategorySolo,
                 layerValue = layerValueForScope(gainScope, mixerGains.engineInterior, mixerSpecificGains.engineInterior),
                 dashboardValue = carEngineHostGain,
                 globalValue = mixerGains.engineInterior,
@@ -489,6 +515,11 @@ private fun MixerControlsPanel(
             )
             MixerLayerGainSlider(
                 label = "ENGINE EXTERIOR",
+                eventCategory = MixerEventCategory.ENGINE_EXTERIOR,
+                mutedEvents = mutedEvents,
+                soloedEvents = soloedEvents,
+                onToggleCategoryMute = onToggleCategoryMute,
+                onToggleCategorySolo = onToggleCategorySolo,
                 layerValue = layerValueForScope(gainScope, mixerGains.engineExterior, mixerSpecificGains.engineExterior),
                 dashboardValue = carEngineHostGain,
                 globalValue = mixerGains.engineExterior,
@@ -523,6 +554,11 @@ private fun MixerControlsPanel(
             )
             MixerLayerGainSlider(
                 label = "TRANSMISSION",
+                eventCategory = MixerEventCategory.TRANSMISSION,
+                mutedEvents = mutedEvents,
+                soloedEvents = soloedEvents,
+                onToggleCategoryMute = onToggleCategoryMute,
+                onToggleCategorySolo = onToggleCategorySolo,
                 layerValue = layerValueForScope(gainScope, mixerGains.transmission, mixerSpecificGains.transmission),
                 dashboardValue = carTransmissionGain,
                 globalValue = mixerGains.transmission,
@@ -538,6 +574,11 @@ private fun MixerControlsPanel(
             )
             MixerLayerGainSlider(
                 label = "SHIFT",
+                eventCategory = MixerEventCategory.SHIFT,
+                mutedEvents = mutedEvents,
+                soloedEvents = soloedEvents,
+                onToggleCategoryMute = onToggleCategoryMute,
+                onToggleCategorySolo = onToggleCategorySolo,
                 layerValue = layerValueForScope(gainScope, mixerGains.gearShift, mixerSpecificGains.gearShift),
                 dashboardValue = carGearShiftGain,
                 globalValue = mixerGains.gearShift,
@@ -554,6 +595,11 @@ private fun MixerControlsPanel(
             if (hasTurbo) {
                 MixerLayerGainSlider(
                     label = "TURBO",
+                    eventCategory = MixerEventCategory.TURBO,
+                    mutedEvents = mutedEvents,
+                    soloedEvents = soloedEvents,
+                    onToggleCategoryMute = onToggleCategoryMute,
+                    onToggleCategorySolo = onToggleCategorySolo,
                     layerValue = layerValueForScope(gainScope, mixerGains.turbo, mixerSpecificGains.turbo),
                     dashboardValue = carTurboGain,
                     globalValue = mixerGains.turbo,
@@ -570,6 +616,11 @@ private fun MixerControlsPanel(
             }
             MixerLayerGainSlider(
                 label = "POPS & BANGS",
+                eventCategory = MixerEventCategory.BACKFIRE,
+                mutedEvents = mutedEvents,
+                soloedEvents = soloedEvents,
+                onToggleCategoryMute = onToggleCategoryMute,
+                onToggleCategorySolo = onToggleCategorySolo,
                 layerValue = layerValueForScope(gainScope, mixerGains.backfire, mixerSpecificGains.backfire),
                 dashboardValue = carBackfireGain,
                 globalValue = mixerGains.backfire,
@@ -585,6 +636,11 @@ private fun MixerControlsPanel(
             )
             MixerLayerGainSlider(
                 label = "LIMITER",
+                eventCategory = MixerEventCategory.LIMITER,
+                mutedEvents = mutedEvents,
+                soloedEvents = soloedEvents,
+                onToggleCategoryMute = onToggleCategoryMute,
+                onToggleCategorySolo = onToggleCategorySolo,
                 layerValue = layerValueForScope(gainScope, mixerGains.limiter, mixerSpecificGains.limiter),
                 dashboardValue = carLimiterGain,
                 globalValue = mixerGains.limiter,
@@ -658,6 +714,11 @@ private fun MixerLayerGainSlider(
     specificValue: Float,
     overall: Float,
     accentColor: Color = CyanSoft,
+    eventCategory: MixerEventCategory? = null,
+    mutedEvents: Map<String, Boolean> = emptyMap(),
+    soloedEvents: Map<String, Boolean> = emptyMap(),
+    onToggleCategoryMute: (MixerEventCategory, Boolean) -> Unit = { _, _ -> },
+    onToggleCategorySolo: (MixerEventCategory, Boolean) -> Unit = { _, _ -> },
     onValueChange: (Float) -> Unit,
 ) {
     val snappedLayerValue = MixerGlobalGains.snap(layerValue)
@@ -678,13 +739,40 @@ private fun MixerLayerGainSlider(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = label,
-                color = accentColor,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 0.8.sp,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = label,
+                    color = accentColor,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 0.8.sp,
+                )
+                if (eventCategory != null) {
+                    val muted = eventCategory.isMuted(mutedEvents)
+                    val soloed = eventCategory.isSoloed(soloedEvents)
+                    Text(
+                        text = "M",
+                        color = if (muted) Cyan else Muted,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black,
+                        modifier = Modifier.clickable {
+                            onToggleCategoryMute(eventCategory, !muted)
+                        },
+                    )
+                    Text(
+                        text = "S",
+                        color = if (soloed) Cyan else Muted,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black,
+                        modifier = Modifier.clickable {
+                            onToggleCategorySolo(eventCategory, !soloed)
+                        },
+                    )
+                }
+            }
             Text(
                 text = "${MixerGlobalGains.formatMultiplier(snappedLayerValue)} → ${MixerGlobalGains.formatMultiplier(effectiveValue)}",
                 color = if (accentColor == Amber) Amber else White,
@@ -1951,10 +2039,6 @@ private data class LoadedCarPreview(
 private fun FmodSourceMeter(
     source: FmodSourceState,
     highlight: Boolean,
-    muted: Boolean,
-    soloed: Boolean,
-    onMute: (Boolean) -> Unit,
-    onSolo: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val level = source.audibility.toFloat().coerceIn(0f, 1f)
@@ -2012,10 +2096,6 @@ private fun FmodSourceMeter(
                     fontSize = 9.sp,
                     fontFamily = FontFamily.Monospace,
                 )
-                Text("M", color = if (muted) Cyan else Muted, fontSize = 10.sp, fontWeight = FontWeight.Black,
-                    modifier = Modifier.clickable { onMute(!muted) })
-                Text("S", color = if (soloed) Cyan else Muted, fontSize = 10.sp, fontWeight = FontWeight.Black,
-                    modifier = Modifier.clickable { onSolo(!soloed) })
             }
         }
         Text(

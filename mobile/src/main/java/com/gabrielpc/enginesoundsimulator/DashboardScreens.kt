@@ -436,7 +436,6 @@ private fun GainControl(label: String, value: Float, onValueChange: (Float) -> U
 
 @Composable
 internal fun SettingsScreen(
-    onBack: () -> Unit,
     onResetAll: () -> Unit,
     fmodUpdateRateHz: Int,
     onFmodUpdateRateChange: (Int) -> Unit,
@@ -475,9 +474,6 @@ internal fun SettingsScreen(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("SETTINGS", color = White, fontSize = 24.sp, fontWeight = FontWeight.Black)
-            Spacer(Modifier.weight(1f))
-            Text("BACK", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black,
-                modifier = Modifier.clickable(onClick = onBack).padding(12.dp))
         }
         Row(
             modifier = Modifier.fillMaxWidth().border(1.dp, Line, RoundedCornerShape(8.dp)),

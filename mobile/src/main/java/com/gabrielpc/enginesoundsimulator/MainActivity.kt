@@ -562,7 +562,6 @@ private fun MotorSoundDashboard(
                                 .weight(1f),
                         )
                         DashboardMainScreen.SETTINGS -> SettingsScreen(
-                            onBack = { mainScreen = DashboardMainScreen.CLASSIC },
                             onResetAll = onResetAllPreferences,
                             fmodUpdateRateHz = state.fmodUpdateRateHz,
                             onFmodUpdateRateChange = onFmodUpdateRateChange,
@@ -678,25 +677,29 @@ private fun DashboardHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            if (mainScreen == DashboardMainScreen.MIXER) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back to classic dashboard",
-                    tint = Cyan,
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .clickable {
-                            onMainScreenChange(DashboardMainScreen.CLASSIC)
-                        },
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(11.dp)
-                        .clip(CircleShape)
-                        .background(if (state.engineSoundEnabled) Green else Red),
-                )
+            when (mainScreen) {
+                DashboardMainScreen.MIXER,
+                DashboardMainScreen.SETTINGS -> {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back to dashboard",
+                        tint = Cyan,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .clickable {
+                                onMainScreenChange(DashboardMainScreen.CLASSIC)
+                            },
+                    )
+                }
+                else -> {
+                    Box(
+                        modifier = Modifier
+                            .size(11.dp)
+                            .clip(CircleShape)
+                            .background(if (state.engineSoundEnabled) Green else Red),
+                    )
+                }
             }
             Text(
                 text = "ENGINE",

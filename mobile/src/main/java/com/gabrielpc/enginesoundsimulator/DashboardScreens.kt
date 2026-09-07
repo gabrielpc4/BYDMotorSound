@@ -1436,22 +1436,23 @@ internal fun CarGridSelectionDialog(
     // Disable the platform's narrow default dialog width so the picker can span the display.
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth(0.96f)
-                .fillMaxHeight(0.96f)
-                .clip(RoundedCornerShape(14.dp))
-                .background(PanelBright)
-                .border(1.dp, Line, RoundedCornerShape(14.dp))
-                .padding(start = 18.dp, top = 9.dp, end = 18.dp),
+                .fillMaxSize()
+                .background(PanelBright),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
                 ) {
                     Text(
                         text = "SELECT CAR",
@@ -1479,6 +1480,7 @@ internal fun CarGridSelectionDialog(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .padding(horizontal = 8.dp)
                             .padding(top = 10.dp),
                     ) {
                         listOf(
@@ -1514,6 +1516,7 @@ internal fun CarGridSelectionDialog(
                         modifier = Modifier
                             .fillMaxSize()
                             .alpha(if (isGridReady) 1f else 0f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {

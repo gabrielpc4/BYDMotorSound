@@ -8,13 +8,13 @@ import com.gabrielpc.enginesoundsimulator.drive.RacingReturnThrottlePercent
 
 internal data class AutomaticTransmissionConfig(
     val cruisingLogicEnabled: Boolean = true,
-    val sixGearOnLaunchEnabled: Boolean = true,
+    val sixGearOnLaunchEnabled: Boolean = false,
     val cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int> = emptyMap(),
     val racingReturnMaxThrottle: Double = RacingReturnThrottlePercent.asFraction(
         RacingReturnThrottlePercent.DEFAULT,
     ),
     val racingReturnHoldSeconds: Double = RacingReturnHoldSeconds.DEFAULT.toDouble(),
-    val manualRedlineHoldSeconds: Double = ManualRedlineHoldSeconds.DEFAULT.toDouble(),
+    val manualRedlineHoldSeconds: Double? = ManualRedlineHoldSeconds.asHoldSeconds(ManualRedlineHoldSeconds.DEFAULT),
     val manualAutodownshiftRpm: Double = ManualAutodownshiftRpm.DEFAULT.toDouble(),
 ) {
     companion object {
@@ -27,7 +27,7 @@ internal data class AutomaticTransmissionConfig(
                     settings.racingReturnThrottlePercent,
                 ),
                 racingReturnHoldSeconds = settings.racingReturnHoldSeconds.toDouble(),
-                manualRedlineHoldSeconds = settings.manualRedlineHoldSeconds.toDouble(),
+                manualRedlineHoldSeconds = ManualRedlineHoldSeconds.asHoldSeconds(settings.manualRedlineHoldSeconds),
                 manualAutodownshiftRpm = settings.manualAutodownshiftRpm.toDouble(),
             )
         }

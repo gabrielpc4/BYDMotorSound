@@ -920,12 +920,6 @@ internal fun SettingsScreen(
                 sixGearOnLaunchEnabled = sixGearOnLaunchEnabled,
                 onSixGearOnLaunchEnabledChange = onSixGearOnLaunchEnabledChange,
             )
-            TachometerShiftOverlayToggle(
-                title = "CRUISING RANGE",
-                description = "Semi-transparent wedge on the tachometer showing min/max automatic shift RPM while cruising.",
-                enabled = tachometerCruisingShiftRangeOverlayEnabled,
-                onEnabledChange = onTachometerCruisingShiftRangeOverlayEnabledChange,
-            )
             CruisingShiftOffsetsByTachMaxRpmControl(
                 offsets = cruisingShiftOffsetsByTachMaxRpm,
                 onOffsetChange = onCruisingShiftOffsetForTachMaxRpmChange,
@@ -939,6 +933,8 @@ internal fun SettingsScreen(
                 onManualRedlineHoldSecondsChange = onManualRedlineHoldSecondsChange,
                 manualAutodownshiftRpm = manualAutodownshiftRpm,
                 onManualAutodownshiftRpmChange = onManualAutodownshiftRpmChange,
+                tachometerCruisingShiftRangeOverlayEnabled = tachometerCruisingShiftRangeOverlayEnabled,
+                onTachometerCruisingShiftRangeOverlayEnabledChange = onTachometerCruisingShiftRangeOverlayEnabledChange,
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1086,11 +1082,18 @@ private fun TachometerShiftOverlayToggle(
     enabled: Boolean,
     onEnabledChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    embedded: Boolean = false,
 ) {
     Column(
-        modifier = modifier
-            .border(1.dp, Line, RoundedCornerShape(8.dp))
-            .padding(14.dp),
+        modifier = modifier.then(
+            if (embedded) {
+                Modifier
+            } else {
+                Modifier
+                    .border(1.dp, Line, RoundedCornerShape(8.dp))
+                    .padding(14.dp)
+            },
+        ),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(
@@ -1230,6 +1233,8 @@ private fun AutomaticTransmissionSettingsControl(
     onManualRedlineHoldSecondsChange: (Int) -> Unit,
     manualAutodownshiftRpm: Int,
     onManualAutodownshiftRpmChange: (Int) -> Unit,
+    tachometerCruisingShiftRangeOverlayEnabled: Boolean,
+    onTachometerCruisingShiftRangeOverlayEnabledChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
     Column(
@@ -1269,34 +1274,56 @@ private fun AutomaticTransmissionSettingsControl(
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.Top,
         ) {
-            Text("RACING RETURN THROTTLE", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
-            Text(
-                text = "$racingReturnThrottlePercent%",
-                color = White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Black,
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("RACING RETURN THROTTLE", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    Text(
+                        text = "$racingReturnThrottlePercent%",
+                        color = White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Black,
+                    )
+                }
+                Text(
+                    text = "After braking in racing mode, the next acceleration decides the mode: at or below this pedal level returns to cruising; above it stays in racing.",
+                    color = Muted,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                )
+                Slider(
+                    value = racingReturnThrottlePercent.toFloat(),
+                    onValueChange = { value ->
+                        val selectedPercent = RacingReturnThrottlePercent.normalize(value.roundToInt())
+                        if (selectedPercent != racingReturnThrottlePercent) {
+                            onRacingReturnThrottlePercentChange(selectedPercent)
+                        }
+                    },
+                    valueRange = RacingReturnThrottlePercent.MIN.toFloat()..RacingReturnThrottlePercent.MAX.toFloat(),
+                    steps = (RacingReturnThrottlePercent.MAX - RacingReturnThrottlePercent.MIN) / RacingReturnThrottlePercent.STEP - 1,
+                )
+            }
+
+            TachometerShiftOverlayToggle(
+                title = "CRUISING RPM RANGE OVERLAY",
+                description = "Semi-transparent wedge on the tachometer showing min/max automatic shift RPM while cruising.",
+                enabled = tachometerCruisingShiftRangeOverlayEnabled,
+                onEnabledChange = onTachometerCruisingShiftRangeOverlayEnabledChange,
+                modifier = Modifier.weight(1f),
+                embedded = true,
             )
         }
-        Text(
-            text = "After braking in racing mode, the next acceleration decides the mode: at or below this pedal level returns to cruising; above it stays in racing.",
-            color = Muted,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
-        )
-        Slider(
-            value = racingReturnThrottlePercent.toFloat(),
-            onValueChange = { value ->
-                val selectedPercent = RacingReturnThrottlePercent.normalize(value.roundToInt())
-                if (selectedPercent != racingReturnThrottlePercent) {
-                    onRacingReturnThrottlePercentChange(selectedPercent)
-                }
-            },
-            valueRange = RacingReturnThrottlePercent.MIN.toFloat()..RacingReturnThrottlePercent.MAX.toFloat(),
-            steps = (RacingReturnThrottlePercent.MAX - RacingReturnThrottlePercent.MIN) / RacingReturnThrottlePercent.STEP - 1,
-        )
+        val manualRedlineStopIndex = ManualRedlineHoldSeconds.stopIndex(manualRedlineHoldSeconds).toFloat()
+        val manualRedlineLastStopIndex = (ManualRedlineHoldSeconds.STOPS.size - 1).toFloat()
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1304,7 +1331,7 @@ private fun AutomaticTransmissionSettingsControl(
         ) {
             Text("MANUAL REDLINE HOLD", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
             Text(
-                text = "${manualRedlineHoldSeconds}s",
+                text = ManualRedlineHoldSeconds.format(manualRedlineHoldSeconds),
                 color = White,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Black,
@@ -1317,15 +1344,16 @@ private fun AutomaticTransmissionSettingsControl(
             lineHeight = 16.sp,
         )
         Slider(
-            value = manualRedlineHoldSeconds.toFloat(),
-            onValueChange = { value ->
-                val selectedSeconds = ManualRedlineHoldSeconds.normalize(value.roundToInt())
+            value = manualRedlineStopIndex,
+            onValueChange = { rawIndex ->
+                val index = rawIndex.roundToInt().coerceIn(0, ManualRedlineHoldSeconds.STOPS.lastIndex)
+                val selectedSeconds = ManualRedlineHoldSeconds.stopValue(index)
                 if (selectedSeconds != manualRedlineHoldSeconds) {
                     onManualRedlineHoldSecondsChange(selectedSeconds)
                 }
             },
-            valueRange = ManualRedlineHoldSeconds.MIN.toFloat()..ManualRedlineHoldSeconds.MAX.toFloat(),
-            steps = (ManualRedlineHoldSeconds.MAX - ManualRedlineHoldSeconds.MIN) / ManualRedlineHoldSeconds.STEP - 1,
+            valueRange = 0f..manualRedlineLastStopIndex,
+            steps = (ManualRedlineHoldSeconds.STOPS.size - 2).coerceAtLeast(0),
         )
         Row(
             modifier = Modifier.fillMaxWidth(),

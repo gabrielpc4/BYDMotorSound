@@ -36,14 +36,39 @@ internal object RacingReturnHoldSeconds {
 
 /** Manual mode: sustained redline time before returning to automatic racing mode. */
 internal object ManualRedlineHoldSeconds {
-    const val MIN = 1
-    const val MAX = 10
-    const val DEFAULT = 1
-    const val STEP = 1
+    const val NEVER = -1
+    const val DEFAULT = 1_000
+
+    val STOPS: IntArray = intArrayOf(0, 500, 1_000, NEVER)
 
     fun normalize(value: Int): Int {
-        val stepped = ((value.toFloat() / STEP).roundToInt() * STEP)
-        return stepped.coerceIn(MIN, MAX)
+        return STOPS.minByOrNull { kotlin.math.abs(it - value) } ?: DEFAULT
+    }
+
+    fun stopIndex(value: Int): Int {
+        val normalized = normalize(value)
+        return STOPS.indexOf(normalized).coerceAtLeast(0)
+    }
+
+    fun stopValue(index: Int): Int {
+        return STOPS[index.coerceIn(0, STOPS.lastIndex)]
+    }
+
+    fun format(value: Int): String {
+        return when (normalize(value)) {
+            0 -> "0s"
+            500 -> "0.5s"
+            1_000 -> "1s"
+            NEVER -> "NEVER"
+            else -> "1s"
+        }
+    }
+
+    fun asHoldSeconds(value: Int): Double? {
+        return when (normalize(value)) {
+            NEVER -> null
+            else -> normalize(value) / 1_000.0
+        }
     }
 }
 
@@ -62,7 +87,7 @@ internal object ManualAutodownshiftRpm {
 
 internal data class AutomaticTransmissionSettings(
     val cruisingLogicEnabled: Boolean = true,
-    val sixGearOnLaunchEnabled: Boolean = true,
+    val sixGearOnLaunchEnabled: Boolean = false,
     val cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int> = CruisingShiftOffsetByTachMaxRpm.defaultOffsets(),
     val racingReturnThrottlePercent: Int = RacingReturnThrottlePercent.DEFAULT,
     val racingReturnHoldSeconds: Int = RacingReturnHoldSeconds.DEFAULT,
@@ -82,7 +107,7 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
         migrateLegacyOffsetIfNeeded()
         return AutomaticTransmissionSettings(
             cruisingLogicEnabled = preferences.getBoolean(KEY_CRUISING_LOGIC_ENABLED, true),
-            sixGearOnLaunchEnabled = preferences.getBoolean(KEY_SIX_GEAR_ON_LAUNCH_ENABLED, true),
+            sixGearOnLaunchEnabled = preferences.getBoolean(KEY_SIX_GEAR_ON_LAUNCH_ENABLED, false),
             cruisingShiftOffsetsByTachMaxRpm = loadCruisingShiftOffsetsByTachMaxRpm(),
             racingReturnThrottlePercent = RacingReturnThrottlePercent.normalize(
                 preferences.getInt(

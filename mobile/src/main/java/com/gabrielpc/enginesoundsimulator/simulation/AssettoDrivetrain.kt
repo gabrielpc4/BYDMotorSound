@@ -61,7 +61,7 @@ internal class AssettoDrivetrain(
     private var virtualGearProfile: VirtualGearProfile,
 ) {
     private var launchSixGearProfile: VirtualGearProfile = buildLaunchSixGearProfile(physics)
-    private var sixGearOnLaunchEnabled = true
+    private var sixGearOnLaunchEnabled = false
     private var launchSixGearOverrideActive = false
     /**
      * Test branch behavior: keep the clutch disengaged in D so clutch-slip physics never fights
@@ -124,7 +124,7 @@ internal class AssettoDrivetrain(
     private var previousLaunchControlPhase = LaunchControlPhase.INACTIVE
     private var cruisingShiftOffsetRpm = 0
     private var racingReturnMaxThrottle = 0.30
-    private var manualRedlineHoldSeconds = 1.0
+    private var manualRedlineHoldSeconds: Double? = 1.0
     private var manualAutodownshiftRpm = 2_000.0
     private var cruisingLogicEnabled = true
     private var automaticTransmissionMode = AutomaticTransmissionMode.CRUISING
@@ -411,7 +411,7 @@ internal class AssettoDrivetrain(
             tachometerMaximumRpm = physics.engine.tachometerMaximumRpm,
         )
         racingReturnMaxThrottle = automaticTransmissionConfig.racingReturnMaxThrottle.coerceIn(0.0, 1.0)
-        manualRedlineHoldSeconds = automaticTransmissionConfig.manualRedlineHoldSeconds.coerceAtLeast(0.0)
+        manualRedlineHoldSeconds = automaticTransmissionConfig.manualRedlineHoldSeconds
         manualAutodownshiftRpm = automaticTransmissionConfig.manualAutodownshiftRpm.coerceAtLeast(0.0)
         cruisingLogicEnabled = automaticTransmissionConfig.cruisingLogicEnabled
         sixGearOnLaunchEnabled = automaticTransmissionConfig.sixGearOnLaunchEnabled
@@ -1322,6 +1322,14 @@ internal class AssettoDrivetrain(
             return
         }
 
+        if (launchControlPhase != LaunchControlPhase.INACTIVE) {
+            automaticTransmissionMode = AutomaticTransmissionMode.RACING
+            racingReturnArmed = false
+            racingStompPendingTargetGear = null
+            clearCruisingReturnTransition()
+            return
+        }
+
         if (speedMetersPerSecond <= AutomaticTransmissionPolicy.CRUISING_RETURN_MAX_SPEED_MPS) {
             automaticTransmissionMode = AutomaticTransmissionMode.CRUISING
             racingReturnArmed = false
@@ -1442,9 +1450,10 @@ internal class AssettoDrivetrain(
         }
 
         val redlineThreshold = effectiveRedlineThresholdRpm()
+        val holdSeconds = manualRedlineHoldSeconds
         if (rpm >= redlineThreshold) {
             manualRedlineElapsedSeconds += dt
-            if (manualRedlineElapsedSeconds >= manualRedlineHoldSeconds) {
+            if (holdSeconds != null && manualRedlineElapsedSeconds >= holdSeconds) {
                 manualRedlineElapsedSeconds = 0.0
                 automaticTransmissionMode = AutomaticTransmissionMode.RACING
                 racingReturnArmed = false
@@ -1697,6 +1706,10 @@ internal class AssettoDrivetrain(
             launchControlJitterPhase = 0.0
             launchControlArmedElapsedSeconds = 0.0
             launchControlArmedStartRpm = rpm
+            automaticTransmissionMode = AutomaticTransmissionMode.RACING
+            racingReturnArmed = false
+            racingStompPendingTargetGear = null
+            clearCruisingReturnTransition()
         }
         if (launchControlPhase == LaunchControlPhase.DISARMING && previousPhase == LaunchControlPhase.ARMED) {
             launchControlDisarmElapsedSeconds = 0.0

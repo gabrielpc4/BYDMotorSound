@@ -118,7 +118,7 @@ data class DriveSnapshot(
     val exteriorPureAudio: Boolean = false,
     val minimumAudioThrottle: Float = MinimumAudioThrottle.DEFAULT,
     val cruisingLogicEnabled: Boolean = true,
-    val sixGearOnLaunchEnabled: Boolean = true,
+    val sixGearOnLaunchEnabled: Boolean = false,
     val pedalAudioThrottleRampUpMilliseconds: Int = PedalAudioThrottleRampMilliseconds.DEFAULT,
     val pedalAudioThrottleRampDownMilliseconds: Int = PedalAudioThrottleRampMilliseconds.DEFAULT,
     val cruisingShiftOffsetTachMaxRpm: Int = CruisingShiftOffsetByTachMaxRpm.TIERS.first(),

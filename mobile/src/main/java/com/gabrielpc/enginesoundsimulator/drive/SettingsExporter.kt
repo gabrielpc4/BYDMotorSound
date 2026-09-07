@@ -135,6 +135,8 @@ internal object SettingsExporter {
             put("backfire", gains.backfire.toDouble())
             put("limiter", gains.limiter.toDouble())
             put("supercharger", gains.supercharger.toDouble())
+            put("backfireOverrideGain", gains.backfireOverrideGain.toDouble())
+            put("shiftOverrideGain", gains.shiftOverrideGain.toDouble())
         }
     }
 

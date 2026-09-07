@@ -29,6 +29,7 @@ import com.gabrielpc.enginesoundsimulator.audio.MixerCarSpecificGains
 import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains
 import com.gabrielpc.enginesoundsimulator.audio.effectiveCategoryGains
 import com.gabrielpc.enginesoundsimulator.audio.effectiveHostGains
+import com.gabrielpc.enginesoundsimulator.drive.effectiveEffectSoundOverrideGains
 import com.gabrielpc.enginesoundsimulator.AppPreferenceStores
 import com.gabrielpc.enginesoundsimulator.audio.SelectedCarRepository
 import com.gabrielpc.enginesoundsimulator.diagnostics.DebugScenarioOverride
@@ -517,10 +518,13 @@ class DriveController(context: Context) {
     }
 
     private fun syncEffectSoundOverrideGainsToAudioEngine() {
-        val gains = effectSoundOverrideGains.get()
+        val effective = effectiveEffectSoundOverrideGains(
+            mixerGlobal = mixerGlobalGains.get(),
+            local = effectSoundOverrideGains.get(),
+        )
         audioEngine.setEffectSoundOverrideGains(
-            shiftOverrideGain = gains.shiftGain,
-            backfireOverrideGain = gains.backfireGain,
+            shiftOverrideGain = effective.shiftGain,
+            backfireOverrideGain = effective.backfireGain,
         )
     }
 

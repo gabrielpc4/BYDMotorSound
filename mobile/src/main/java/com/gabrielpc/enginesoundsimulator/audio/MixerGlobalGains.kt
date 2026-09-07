@@ -6,7 +6,7 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** App-wide mixer multipliers applied on top of each car's dashboard mix settings. */
+/** App-wide mixer multipliers applied on top of each car's per-car mixer profile. */
 data class MixerGlobalGains(
     val engineInterior: Float = 1.0f,
     val engineExterior: Float = 1.0f,
@@ -17,6 +17,8 @@ data class MixerGlobalGains(
     val backfire: Float = 1.0f,
     val limiter: Float = 1.0f,
     val supercharger: Float = 1.0f,
+    val backfireOverrideGain: Float = 1.0f,
+    val shiftOverrideGain: Float = 1.0f,
 ) {
     fun normalized(): MixerGlobalGains = copy(
         engineInterior = snap(engineInterior),
@@ -28,6 +30,8 @@ data class MixerGlobalGains(
         backfire = snap(backfire),
         limiter = snap(limiter),
         supercharger = snap(supercharger),
+        backfireOverrideGain = snap(backfireOverrideGain),
+        shiftOverrideGain = snap(shiftOverrideGain),
     )
 
     companion object {
@@ -89,6 +93,8 @@ internal class MixerGlobalGainRepository(context: Context) {
             backfire = read("backfire"),
             limiter = read("limiter"),
             supercharger = read("supercharger"),
+            backfireOverrideGain = read("backfire_override"),
+            shiftOverrideGain = read("shift_override"),
         ).normalized()
     }
 
@@ -104,6 +110,8 @@ internal class MixerGlobalGainRepository(context: Context) {
             .putFloat("backfire", normalized.backfire)
             .putFloat("limiter", normalized.limiter)
             .putFloat("supercharger", normalized.supercharger)
+            .putFloat("backfire_override", normalized.backfireOverrideGain)
+            .putFloat("shift_override", normalized.shiftOverrideGain)
             .commit()
     }
 

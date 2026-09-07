@@ -2,6 +2,7 @@ package com.gabrielpc.enginesoundsimulator.drive
 
 import android.content.Context
 import com.gabrielpc.enginesoundsimulator.AppPreferenceStores
+import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains
 
 /** Per-car gain trims for bundled override one-shots on the main dashboard. */
 data class EffectSoundOverrideGains(
@@ -22,6 +23,16 @@ internal object EffectSoundOverrideGainPresets {
 
 internal fun normalizePresetGain(value: Float): Float {
     return value.coerceIn(EffectSoundOverrideGainPresets.MIN, EffectSoundOverrideGainPresets.MAX)
+}
+
+internal fun effectiveEffectSoundOverrideGains(
+    mixerGlobal: MixerGlobalGains,
+    local: EffectSoundOverrideGains,
+): EffectSoundOverrideGains {
+    return EffectSoundOverrideGains(
+        shiftGain = (local.shiftGain * mixerGlobal.shiftOverrideGain).coerceAtLeast(0f),
+        backfireGain = (local.backfireGain * mixerGlobal.backfireOverrideGain).coerceAtLeast(0f),
+    )
 }
 
 internal class EffectSoundOverrideGainRepository(context: Context) {

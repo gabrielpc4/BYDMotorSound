@@ -329,6 +329,8 @@ internal fun MixerDashboardScreen(
         ) {
             MixerControlsPanel(
                 soundPerspective = soundPerspective,
+                carBackfireOverrideGain = state.backfireOverrideGain,
+                carShiftOverrideGain = state.shiftOverrideGain,
                 hasTurbo = state.hasTurbo,
                 hasSupercharger = state.hasSupercharger,
                 mixerGains = mixerGains,
@@ -429,6 +431,8 @@ private fun MixerListeningPerspectiveSelector(
 @Composable
 private fun MixerControlsPanel(
     soundPerspective: EngineSoundPerspective,
+    carBackfireOverrideGain: Float,
+    carShiftOverrideGain: Float,
     hasTurbo: Boolean,
     hasSupercharger: Boolean,
     mixerGains: MixerGlobalGains,
@@ -662,6 +666,32 @@ private fun MixerControlsPanel(
                     }
                 },
             )
+            if (gainScope == MixerGainScope.GLOBAL) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    color = Line,
+                )
+                MixerLayerGainSlider(
+                    label = "POPS & BANGS OVERRIDE",
+                    layerValue = mixerGains.backfireOverrideGain,
+                    globalValue = mixerGains.backfireOverrideGain,
+                    specificValue = carBackfireOverrideGain,
+                    overall = 1f,
+                    onValueChange = { value ->
+                        onMixerGainsChange(mixerGains.copy(backfireOverrideGain = value))
+                    },
+                )
+                MixerLayerGainSlider(
+                    label = "SHIFT SOUNDS OVERRIDE",
+                    layerValue = mixerGains.shiftOverrideGain,
+                    globalValue = mixerGains.shiftOverrideGain,
+                    specificValue = carShiftOverrideGain,
+                    overall = 1f,
+                    onValueChange = { value ->
+                        onMixerGainsChange(mixerGains.copy(shiftOverrideGain = value))
+                    },
+                )
+            }
         }
     }
 }

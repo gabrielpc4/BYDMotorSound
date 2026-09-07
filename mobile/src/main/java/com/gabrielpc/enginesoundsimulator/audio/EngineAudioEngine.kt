@@ -61,7 +61,6 @@ class EngineAudioEngine(context: Context) {
     private val nativeEventSolos = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
     /** Incremented only when the UI changes an override; the worker sends the batch once. */
     private val nativeEventOverridesVersion = AtomicLong(0L)
-    private val backfireOnly = AtomicBoolean(false)
     private val backfireAudioEnabled = AtomicBoolean(true)
     private val backfireAllowedSamplesMask = AtomicInteger(0b111111)
     private val shiftSoundOverride = AtomicBoolean(false)
@@ -77,7 +76,6 @@ class EngineAudioEngine(context: Context) {
     private val pedalAudioThrottleRampUpMilliseconds = AtomicReference(PedalAudioThrottleRampMilliseconds.DEFAULT)
     private val pedalAudioThrottleRampDownMilliseconds = AtomicReference(PedalAudioThrottleRampMilliseconds.DEFAULT)
     private val engineSampleDataReady = AtomicBoolean(false)
-    private var sentBackfireOnly: Boolean? = null
     private var sentExteriorPureAudio: Boolean? = null
     private var sentMinimumAudioThrottle: Float? = null
     private var sentPedalAudioThrottleRampUpMilliseconds: Int? = null
@@ -148,8 +146,6 @@ class EngineAudioEngine(context: Context) {
         if (solo) nativeEventSolos[eventName] = true else nativeEventSolos.remove(eventName)
         nativeEventOverridesVersion.incrementAndGet()
     }
-
-    fun setBackfireOnly(enabled: Boolean) { backfireOnly.set(enabled) }
 
     fun setBackfireAudioEnabled(enabled: Boolean) { backfireAudioEnabled.set(enabled) }
 
@@ -314,7 +310,6 @@ class EngineAudioEngine(context: Context) {
         // NativeFmodBankBridge owns one process-global FMOD runtime. A close/open creates fresh
         // event instances but intentionally retains host control values, so every per-car mode
         // must be resent rather than assumed to equal the C++ field initializer.
-        sentBackfireOnly = null
         sentExteriorPureAudio = null
         sentMinimumAudioThrottle = null
         sentPedalAudioThrottleRampUpMilliseconds = null
@@ -545,11 +540,6 @@ class EngineAudioEngine(context: Context) {
                 if (requestedBackfireUseOriginal != sentBackfireUseOriginal) {
                     bridge.setBackfireUseOriginal(requestedBackfireUseOriginal)
                     sentBackfireUseOriginal = requestedBackfireUseOriginal
-                }
-                val requestedBackfireOnly = backfireOnly.get()
-                if (requestedBackfireOnly != sentBackfireOnly) {
-                    bridge.setBackfireOnly(requestedBackfireOnly)
-                    sentBackfireOnly = requestedBackfireOnly
                 }
                 val requestedExteriorPureAudio = exteriorPureAudio.get()
                 if (requestedExteriorPureAudio != sentExteriorPureAudio) {

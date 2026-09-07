@@ -248,7 +248,6 @@ class MainActivity : ComponentActivity() {
                         onExteriorPureAudioChange = controller::setExteriorPureAudio,
                         onMixerDiagnosticsActive = controller::setMixerDiagnosticsActive,
                         onCategoryGains = controller::setFmodCategoryGains,
-                        onToggleBackfireOnly = controller::setBackfireOnly,
                         onBackfireSettingsChange = controller::setBackfireSettings,
                         onShiftSoundSettingsChange = controller::setShiftSoundSettings,
                         onTransmissionSoundSettingsChange = controller::setTransmissionSoundSettings,
@@ -354,7 +353,6 @@ private fun MotorSoundDashboard(
     onExteriorPureAudioChange: (Boolean) -> Unit,
     onMixerDiagnosticsActive: (Boolean) -> Unit,
     onCategoryGains: (Float, Float, Float, Float) -> Unit,
-    onToggleBackfireOnly: (Boolean) -> Unit,
     onBackfireSettingsChange: (BackfireSettings) -> Unit,
     onShiftSoundSettingsChange: (ShiftSoundSettings) -> Unit,
     onTransmissionSoundSettingsChange: (TransmissionSoundSettings) -> Unit,
@@ -567,7 +565,6 @@ private fun MotorSoundDashboard(
                             onManualDownshift = onManualDownshift,
                             onHostGains = onHostGains,
                             onCategoryGains = onCategoryGains,
-                            onBackfireOnlyChange = onToggleBackfireOnly,
                             onEventMute = onEventMute,
                             onEventSolo = onEventSolo,
                             modifier = Modifier

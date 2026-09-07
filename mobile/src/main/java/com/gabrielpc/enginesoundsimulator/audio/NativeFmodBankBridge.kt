@@ -65,8 +65,6 @@ internal class NativeFmodBankBridge {
 
     external fun setCategoryGains(transmission: Float, gearShift: Float, turbo: Float, backfire: Float)
 
-    external fun setBackfireOnly(enabled: Boolean)
-
     external fun setBackfireAudioEnabled(enabled: Boolean)
 
     external fun setShiftSoundOverride(enabled: Boolean)

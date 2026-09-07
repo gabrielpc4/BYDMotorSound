@@ -160,7 +160,6 @@ internal fun MixerDashboardScreen(
     onManualDownshift: () -> Unit,
     onHostGains: (Float, Float) -> Unit,
     onCategoryGains: (Float, Float, Float, Float) -> Unit,
-    onBackfireOnlyChange: (Boolean) -> Unit,
     onEventMute: (String, Boolean) -> Unit,
     onEventSolo: (String, Boolean) -> Unit,
     soundPerspective: EngineSoundPerspective,
@@ -256,13 +255,11 @@ internal fun MixerDashboardScreen(
             onPerspectiveSelected = onSoundPerspectiveChange,
             engineGain = engineGain,
             effectsGain = effectsGain,
-            backfireOnly = state.backfireOnly,
             onHostGains = { engine, effects ->
                 engineGain = engine
                 effectsGain = effects
                 onHostGains(engine, effects)
             },
-            onBackfireOnly = onBackfireOnlyChange,
         )
         Spacer(Modifier.height(20.dp))
         BoxWithConstraints(
@@ -337,9 +334,7 @@ private fun MixerPerspectiveSelector(
     onPerspectiveSelected: (EngineSoundPerspective) -> Unit,
     engineGain: Float,
     effectsGain: Float,
-    backfireOnly: Boolean,
     onHostGains: (Float, Float) -> Unit,
-    onBackfireOnly: (Boolean) -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -389,37 +384,6 @@ private fun MixerPerspectiveSelector(
             steps = 6,
             modifier = Modifier.width(220.dp),
         )
-        BackfireOnlyToggle(backfireOnly) { onBackfireOnly(!backfireOnly) }
-    }
-}
-
-@Composable
-private fun BackfireOnlyToggle(enabled: Boolean, onToggle: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .width(170.dp)
-            .clickable(onClick = onToggle),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text("ONLY BACKFIRE", color = if (enabled) Cyan else CyanSoft, fontSize = 10.sp, fontWeight = FontWeight.Black)
-        Box(
-            modifier = Modifier
-                .width(64.dp)
-                .height(30.dp)
-                .clip(RoundedCornerShape(50))
-                .background(if (enabled) Cyan else Line)
-                .padding(4.dp),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(22.dp)
-                    .offset(x = if (enabled) 34.dp else 0.dp)
-                    .clip(CircleShape)
-                    .background(White),
-            )
-        }
     }
 }
 

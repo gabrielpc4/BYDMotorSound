@@ -86,10 +86,6 @@ internal object DebugTelemetry {
      */
     fun scenarioOverride(timestampNanos: Long): DebugScenarioOverride? = scenario.get()?.overrideAt(timestampNanos)
 
-    private val backfireOnlyMode = AtomicReference(false)
-
-    fun backfireOnly(): Boolean = backfireOnlyMode.get()
-
     fun recordSimulation(
         timestampNanos: Long,
         simulationFrameId: Long,
@@ -277,23 +273,8 @@ internal object DebugTelemetry {
                 }
             }
 
-            "BACKFIRE_ONLY" -> {
-                val profileId = extras?.getString(EXTRA_PROFILE_ID)?.trim().orEmpty()
-                if (profileId.isEmpty()) {
-                    "backfire-only scenario requires --es profile <installed-profile-id>"
-                } else {
-                    if (session.get() == null) {
-                        session.set(CaptureSession(FRAME_CAPACITY, NATIVE_RECORD_CAPACITY, profileId))
-                    }
-                    backfireOnlyMode.set(true)
-                    scenario.set(DeterministicScenario(exportSerial.incrementAndGet(), profileId, SystemClock.elapsedRealtimeNanos(), ScenarioKind.BACKFIRE))
-                    "backfire-only scenario started for $profileId"
-                }
-            }
-
             "CANCEL_SCENARIO" -> {
                 scenario.set(null)
-                backfireOnlyMode.set(false)
                 "scenario cancelled"
             }
 
@@ -301,13 +282,12 @@ internal object DebugTelemetry {
 
             "STOP", "OFF" -> {
                 scenario.set(null)
-                backfireOnlyMode.set(false)
                 val completed = session.getAndSet(null)
                 export(context, completed, "stopped")
             }
 
             "STATUS" -> session.get()?.status() ?: "capture off"
-            else -> "unknown command '$command'; use START, CLEAR, PERF_START, PERF_STOP, PERF_STATUS, SCENARIO, MODDED_AUDIT, BACKFIRE, BACKFIRE_ONLY, CANCEL_SCENARIO, DUMP, STOP, or STATUS"
+            else -> "unknown command '$command'; use START, CLEAR, PERF_START, PERF_STOP, PERF_STATUS, SCENARIO, MODDED_AUDIT, BACKFIRE, CANCEL_SCENARIO, DUMP, STOP, or STATUS"
         }
         writeStatus(context, result)
         return result

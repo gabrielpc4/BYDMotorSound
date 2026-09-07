@@ -922,14 +922,6 @@ public:
         applyEventOverridesLocked();
     }
 
-    void setBackfireOnly(bool enabled) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (!active_) return;
-        if (backfireOnly_ == enabled) return;
-        backfireOnly_ = enabled;
-        applyEventOverridesLocked();
-    }
-
     void setBackfireAudioEnabled(bool enabled) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (backfireAudioEnabled_ == enabled) return;
@@ -1545,12 +1537,8 @@ private:
         for (auto& pair : slots_) {
             const bool muted = mutedEvents_[pair.first];
             const bool soloed = anySolo && !soloEvents_[pair.first];
-            const bool protectedBackfire = backfireOnly_ &&
-                (pair.first == "backfire_int" || pair.first == "backfire_ext");
             const bool disabledBackfire = !backfireAudioEnabled_ &&
                 (pair.first == "backfire_int" || pair.first == "backfire_ext");
-            const bool excludedByBackfireOnly = backfireOnly_ &&
-                pair.first != "backfire_int" && pair.first != "backfire_ext";
             const bool isEngine = pair.first == "engine_int" || pair.first == "engine_ext";
             const bool disabledShift = shiftSoundOverride_ &&
                 (pair.first == "gear_int" || pair.first == "gear_ext" || pair.first == "gear_grind");
@@ -1561,7 +1549,7 @@ private:
             const bool disabledTurbo = !turboAudioEnabled_ && pair.first == "turbo";
             const float baseGain = isEngine ? hostEngineGain_ : hostEffectsGain_;
             const float categoryGain = eventCategoryGain(pair.first);
-            pair.second->instance->setVolume((disabledBackfire || disabledShift || disabledShiftAudio || disabledTransmission || disabledTurbo || (!protectedBackfire && (muted || soloed || excludedByBackfireOnly))) ? 0.0f : baseGain * categoryGain);
+            pair.second->instance->setVolume((disabledBackfire || disabledShift || disabledShiftAudio || disabledTransmission || disabledTurbo || muted || soloed) ? 0.0f : baseGain * categoryGain);
         }
     }
 
@@ -2410,7 +2398,6 @@ private:
     float gearShiftGain_ = 1.0f;
     float turboGain_ = 1.0f;
     float backfireGain_ = 1.0f;
-    bool backfireOnly_ = false;
     bool backfireAudioEnabled_ = true;
     bool backfireUseOriginal_ = true;
     bool shiftSoundOverride_ = false;
@@ -2675,13 +2662,6 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setCategoryGa
     JNIEnv*, jobject, jfloat transmission, jfloat gearShift, jfloat turbo, jfloat backfire
 ) {
     runtime.setCategoryGains(transmission, gearShift, turbo, backfire);
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setBackfireOnly(
-    JNIEnv*, jobject, jboolean enabled
-) {
-    runtime.setBackfireOnly(enabled == JNI_TRUE);
 }
 
 extern "C" JNIEXPORT void JNICALL

@@ -88,8 +88,6 @@ data class DriveSnapshot(
     val gearShiftGain: Float = 1.0f,
     val turboGain: Float = 1.0f,
     val backfireGain: Float = 1.0f,
-    /** Session-only listening aid; when enabled native FMOD leaves only backfire events audible. */
-    val backfireOnly: Boolean = false,
     /** Global backfire policy, deliberately independent of each car bank's authored thresholds. */
     val backfireSettings: BackfireSettings = BackfireSettings(),
     val shiftSoundSettings: ShiftSoundSettings = ShiftSoundSettings(),
@@ -177,7 +175,6 @@ class DriveController(context: Context) {
     private val stagedBankImportRunning = AtomicBoolean(false)
     private val audioMuted = AtomicBoolean(false)
     // Deliberately session-only: this diagnostic/listening mode must never become a car preference.
-    private val backfireOnly = AtomicBoolean(false)
     private val backfireSettings = AtomicReference(BackfireSettings())
     private val shiftSoundSettings = AtomicReference(ShiftSoundSettings())
     private val transmissionSoundSettings = AtomicReference(TransmissionSoundSettings())
@@ -287,7 +284,6 @@ class DriveController(context: Context) {
             gearShiftGain = audioMixGains.get().gearShift,
             turboGain = audioMixGains.get().turbo,
             backfireGain = audioMixGains.get().backfire,
-            backfireOnly = backfireOnly.get(),
             backfireSettings = backfireSettings.get(),
             shiftSoundSettings = shiftSoundSettings.get(),
             transmissionSoundSettings = transmissionSoundSettings.get(),
@@ -359,8 +355,6 @@ class DriveController(context: Context) {
             vehicleReader.stop()
             audioEngine.stop()
             mediaShiftButtonCoordinator.stop()
-            backfireOnly.set(false)
-            audioEngine.setBackfireOnly(false)
             simulatedPedals.set(SimulatedPedalInput())
             simulatedRegen.set(1.0)
             simulatedPedalsLatched.set(false)
@@ -583,11 +577,6 @@ class DriveController(context: Context) {
         audioEngine.setCategoryGains(gains)
     }
 
-    fun setBackfireOnly(enabled: Boolean) {
-        backfireOnly.set(enabled)
-        audioEngine.setBackfireOnly(enabled)
-    }
-
     fun setBackfireSettings(updated: BackfireSettings) {
         val normalized = updated.normalized()
         backfireSettings.set(normalized)
@@ -648,7 +637,6 @@ class DriveController(context: Context) {
         simulation.updateAutomaticTransmissionSettings(AutomaticTransmissionSettings())
         carEffectModes.set(CarEffectModes())
         simulation.updateBackfireSettings(backfireSettings.get())
-        setBackfireOnly(false)
         audioEngine.setBackfireAudioEnabled(true)
         audioEngine.setBackfireUseOriginal(true)
         audioEngine.setShiftSoundEnabled(true)
@@ -942,9 +930,6 @@ class DriveController(context: Context) {
             selectedProfile.set(profile)
             selectedCarRepository.save(profile)
             applyCarAudioPreferences(profile)
-            // This is intentionally reset per car because it is a temporary listening filter,
-            // not part of the authored mix or a persistent vehicle preference.
-            setBackfireOnly(false)
             val telemetry = vehicleReader.snapshot()
             val driveInput = resolveDriveInput(
                 mode = inputMode.get(),
@@ -1250,9 +1235,6 @@ class DriveController(context: Context) {
             tractionLimitActive = drivetrain.tractionLimitActive,
             tractionLimitPulse = drivetrain.tractionLimitPulse,
         )
-        // Debug-only listening mode is controlled by ADB and mutes continuous/limiter events in
-        // native FMOD while preserving backfire instances for audibility measurements.
-        audioEngine.setBackfireOnly(backfireOnly.get() || DebugTelemetry.backfireOnly())
         audioEngine.update(
             EngineAudioFrame(
                 simulationFrameId = simulationFrameId,

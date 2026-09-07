@@ -985,8 +985,19 @@ public:
         hostEngineInteriorGain_ = engineInterior;
         hostEngineExteriorGain_ = engineExterior;
         hostEffectsGain_ = effects;
-        if (alfaBackfireChannel_ != nullptr) alfaBackfireChannel_->setVolume(hostEffectsGain_ * backfireGain_);
+        applyOverrideChannelVolumesLocked();
         applyEventOverridesLocked();
+    }
+
+    void setEffectSoundOverrideGains(float shiftOverrideGain, float backfireOverrideGain) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!active_) return;
+        const float shift = std::max(0.0f, shiftOverrideGain);
+        const float backfire = std::max(0.0f, backfireOverrideGain);
+        if (shift == shiftOverrideGain_ && backfire == backfireOverrideGain_) return;
+        shiftOverrideGain_ = shift;
+        backfireOverrideGain_ = backfire;
+        applyOverrideChannelVolumesLocked();
     }
 
     void setLoadedProfileId(const std::string& profileId) {
@@ -1024,7 +1035,6 @@ public:
         backfireGain_ = backfire;
         limiterGain_ = limiter;
         superchargerGain_ = supercharger;
-        if (alfaBackfireChannel_ != nullptr) alfaBackfireChannel_->setVolume(hostEffectsGain_ * backfireGain_);
         applyEventOverridesLocked();
     }
 
@@ -1346,9 +1356,18 @@ private:
         const int index = upshift ? 0 : 1;
         if (core_->playSound(shiftSamples_[index], nullptr, true, &channel) != FMOD_OK || channel == nullptr) return;
         channel->setMode(FMOD_2D);
-        channel->setVolume(hostEffectsGain_ * gearShiftGain_);
+        channel->setVolume(hostEffectsGain_ * shiftOverrideGain_);
         channel->setPaused(false);
         shiftChannel_ = channel;
+    }
+
+    void applyOverrideChannelVolumesLocked() {
+        if (shiftChannel_ != nullptr) {
+            shiftChannel_->setVolume(hostEffectsGain_ * shiftOverrideGain_);
+        }
+        if (alfaBackfireChannel_ != nullptr) {
+            alfaBackfireChannel_->setVolume(hostEffectsGain_ * backfireOverrideGain_);
+        }
     }
 
     void playAlfaBackfireSampleLocked(int sampleIndex) {
@@ -1377,7 +1396,7 @@ private:
         channel->setMode(FMOD_2D);
         // Core one-shots use the same effects host gain and per-category trim as their Studio
         // counterparts, while the sample itself remains an unprocessed Alfa recording.
-        channel->setVolume(hostEffectsGain_ * backfireGain_);
+        channel->setVolume(hostEffectsGain_ * backfireOverrideGain_);
         channel->setPaused(false);
         alfaBackfireChannel_ = channel;
     }
@@ -2778,6 +2797,8 @@ private:
     float backfireGain_ = 1.0f;
     float limiterGain_ = 1.0f;
     float superchargerGain_ = 1.0f;
+    float shiftOverrideGain_ = 1.0f;
+    float backfireOverrideGain_ = 1.0f;
     std::atomic<bool> hasEmbeddedSupercharger_{false};
     EmbeddedSuperchargerState embeddedSuperchargerState_ = EmbeddedSuperchargerState::Probing;
     bool superchargerProbeWasAccelerating_ = false;
@@ -3056,6 +3077,13 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setCategoryGa
     JNIEnv*, jobject, jfloat transmission, jfloat gearShift, jfloat turbo, jfloat backfire, jfloat limiter, jfloat supercharger
 ) {
     runtime.setCategoryGains(transmission, gearShift, turbo, backfire, limiter, supercharger);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setEffectSoundOverrideGains(
+    JNIEnv*, jobject, jfloat shiftOverrideGain, jfloat backfireOverrideGain
+) {
+    runtime.setEffectSoundOverrideGains(shiftOverrideGain, backfireOverrideGain);
 }
 
 extern "C" JNIEXPORT jboolean JNICALL

@@ -3,8 +3,6 @@ package com.gabrielpc.enginesoundsimulator.drive
 import android.content.Context
 import com.gabrielpc.enginesoundsimulator.AppBuildInfo
 import com.gabrielpc.enginesoundsimulator.AppPreferenceStores
-import com.gabrielpc.enginesoundsimulator.audio.AudioMixGainRepository
-import com.gabrielpc.enginesoundsimulator.audio.AudioMixGains
 import com.gabrielpc.enginesoundsimulator.audio.CarEffectModes
 import com.gabrielpc.enginesoundsimulator.audio.CarEffectModesRepository
 import com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective
@@ -44,7 +42,7 @@ internal object SettingsExporter {
         val backfireSettingsRepository = BackfireSettingsRepository(appContext)
         val effectSoundOverrideRepository = EffectSoundOverrideRepository(appContext)
         val mixerGlobalGainRepository = MixerGlobalGainRepository(appContext)
-        val audioMixGainRepository = AudioMixGainRepository(appContext)
+        val effectSoundOverrideGainRepository = EffectSoundOverrideGainRepository(appContext)
         val mixerCarSpecificGainRepository = MixerCarSpecificGainRepository(appContext)
         val carEffectModesRepository = CarEffectModesRepository(appContext)
         val soundPerspectiveRepository = EngineSoundPerspectiveRepository(appContext)
@@ -83,7 +81,7 @@ internal object SettingsExporter {
                 JSONObject().apply {
                     put("displayName", profile.displayName)
                     put("packGroup", profile.packGroup)
-                    put("dashboardMixGains", audioMixGainsToJson(audioMixGainRepository.load(profile)))
+                    put("effectSoundOverrideGains", effectSoundOverrideGainsToJson(effectSoundOverrideGainRepository.load(profile)))
                     put(
                         "mixerSpecificGains",
                         JSONObject().apply {
@@ -119,16 +117,10 @@ internal object SettingsExporter {
         return outputFile.absolutePath
     }
 
-    private fun audioMixGainsToJson(gains: AudioMixGains): JSONObject {
+    private fun effectSoundOverrideGainsToJson(gains: EffectSoundOverrideGains): JSONObject {
         return JSONObject().apply {
-            put("engineHost", gains.engineHost.toDouble())
-            put("effectsHost", gains.effectsHost.toDouble())
-            put("transmission", gains.transmission.toDouble())
-            put("gearShift", gains.gearShift.toDouble())
-            put("turbo", gains.turbo.toDouble())
-            put("backfire", gains.backfire.toDouble())
-            put("limiter", gains.limiter.toDouble())
-            put("supercharger", gains.supercharger.toDouble())
+            put("shift", gains.shiftGain.toDouble())
+            put("backfire", gains.backfireGain.toDouble())
         }
     }
 

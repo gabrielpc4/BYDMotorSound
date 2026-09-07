@@ -3,7 +3,7 @@ package com.gabrielpc.enginesoundsimulator.audio
 import android.content.Context
 import com.gabrielpc.enginesoundsimulator.AppPreferenceStores
 
-/** Per-car, per-listening-perspective mixer trims layered between global gains and dashboard presets. */
+/** Per-car, per-listening-perspective mixer trims layered on top of global gains. */
 data class MixerCarSpecificGains(
     val overall: Float = 1.0f,
     val engineInterior: Float = 1.0f,

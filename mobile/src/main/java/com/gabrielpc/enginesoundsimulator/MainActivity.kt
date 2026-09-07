@@ -249,7 +249,7 @@ class MainActivity : ComponentActivity() {
                         onFmodUpdateRateChange = controller::setFmodUpdateRateHz,
                         onExteriorPureAudioChange = controller::setExteriorPureAudio,
                         onMixerDiagnosticsActive = controller::setMixerDiagnosticsActive,
-                        onCategoryGains = controller::setFmodCategoryGains,
+                        onOverrideGainChange = controller::setEffectSoundOverrideGain,
                         onBackfireSettingsChange = controller::setBackfireSettings,
                         onPreviewBackfireSample = backfirePreviewPlayer::play,
                         onEventMute = controller::setFmodEventMute,
@@ -354,7 +354,7 @@ private fun MotorSoundDashboard(
     onFmodUpdateRateChange: (Int) -> Unit,
     onExteriorPureAudioChange: (Boolean) -> Unit,
     onMixerDiagnosticsActive: (Boolean) -> Unit,
-    onCategoryGains: (Float, Float, Float, Float) -> Unit,
+    onOverrideGainChange: (EffectSoundKind, Float) -> Unit,
     onBackfireSettingsChange: (BackfireSettings) -> Unit,
     onPreviewBackfireSample: (Int) -> Unit,
     onEventMute: (String, Boolean) -> Unit,
@@ -506,7 +506,7 @@ private fun MotorSoundDashboard(
                                             state = state,
                                             onEnabledChange = onEffectEnabledChange,
                                             onOverrideChange = onEffectOverrideChange,
-                                            onCategoryGains = onCategoryGains,
+                                            onOverrideGainChange = onOverrideGainChange,
                                         )
                                     }
                                     ClassicDriveControls(
@@ -1307,24 +1307,39 @@ private fun DashboardEffectControls(
     state: DriveSnapshot,
     onEnabledChange: (EffectSoundKind, Boolean) -> Unit,
     onOverrideChange: (EffectSoundKind, Boolean) -> Unit,
-    onCategoryGains: (Float, Float, Float, Float) -> Unit,
+    onOverrideGainChange: (EffectSoundKind, Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val layout = DashboardClassicEffectLayout
     val rows = listOf(
-        Triple("POPS & BANGS", EffectSoundKind.POPS_AND_BANGS, state.backfireGain),
-        Triple("SHIFT SOUNDS", EffectSoundKind.SHIFT, state.gearShiftGain),
-        Triple("TRANSMISSION", EffectSoundKind.TRANSMISSION, state.transmissionGain),
-    ) + if (state.hasTurbo) listOf(Triple("TURBO", EffectSoundKind.TURBO, state.turboGain)) else emptyList()
+        "POPS & BANGS" to EffectSoundKind.POPS_AND_BANGS,
+        "SHIFT SOUNDS" to EffectSoundKind.SHIFT,
+        "TRANSMISSION" to EffectSoundKind.TRANSMISSION,
+    ) + if (state.hasTurbo) listOf("TURBO" to EffectSoundKind.TURBO) else emptyList()
     val rowHeight = 42.dp
     val rowGap = 7.dp
-    // This row is a horizontal column group; keeping intrinsic width leaves the tenth
-    // column available for the pedal controls instead of consuming the whole dashboard.
-    // The effect matrix is secondary to the car preview and tachometer on the classic screen.
-    // Keep its intrinsic layout logic intact but render the whole matrix at half scale so it
-    // occupies less visual area without changing the gain/toggle hit targets' relative layout.
-    // The controls intentionally retain their original size; the previous half-scale treatment
-    // was a temporary experiment and made the matrix appear detached from its container.
+
+    fun overrideEnabled(kind: EffectSoundKind): Boolean {
+        return when (kind) {
+            EffectSoundKind.POPS_AND_BANGS -> state.popsAndBangsOverride
+            EffectSoundKind.SHIFT -> state.shiftSoundsOverride
+            EffectSoundKind.TRANSMISSION, EffectSoundKind.TURBO -> false
+        }
+    }
+
+    fun overrideGain(kind: EffectSoundKind): Float {
+        return when (kind) {
+            EffectSoundKind.POPS_AND_BANGS -> state.backfireOverrideGain
+            EffectSoundKind.SHIFT -> state.shiftOverrideGain
+            EffectSoundKind.TRANSMISSION, EffectSoundKind.TURBO -> 1.0f
+        }
+    }
+
+    fun showsOverrideGain(kind: EffectSoundKind): Boolean {
+        return overrideEnabled(kind) &&
+            (kind == EffectSoundKind.POPS_AND_BANGS || kind == EffectSoundKind.SHIFT)
+    }
+
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(layout.columnGap),
@@ -1335,9 +1350,9 @@ private fun DashboardEffectControls(
                 .width(layout.labelColumnWidth)
                 .padding(layout.labelColumnPadding),
         ) {
-            rows.forEach { row ->
+            rows.forEach { (label, kind) ->
                 Box(Modifier.height(rowHeight), contentAlignment = Alignment.CenterStart) {
-                    Text(row.first, color = Cyan, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text(label, color = Cyan, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -1348,15 +1363,15 @@ private fun DashboardEffectControls(
                 .width(layout.toggleColumnWidth)
                 .padding(layout.columnPadding),
         ) {
-            rows.forEach { row ->
-                val enabled = when (row.second) {
+            rows.forEach { (_, kind) ->
+                val enabled = when (kind) {
                     EffectSoundKind.POPS_AND_BANGS -> state.popsAndBangsEnabled
                     EffectSoundKind.SHIFT -> state.shiftSoundsEnabled
                     EffectSoundKind.TRANSMISSION -> state.transmissionEnabled
                     EffectSoundKind.TURBO -> state.turboEnabled
                 }
                 DashboardSwitchCell(rowHeight, enabled, Line) {
-                    onEnabledChange(row.second, !enabled)
+                    onEnabledChange(kind, !enabled)
                 }
             }
         }
@@ -1367,14 +1382,10 @@ private fun DashboardEffectControls(
                 .wrapContentWidth()
                 .padding(layout.columnPadding),
         ) {
-            rows.forEach { row ->
-                val override = when (row.second) {
-                    EffectSoundKind.POPS_AND_BANGS -> state.popsAndBangsOverride
-                    EffectSoundKind.SHIFT -> state.shiftSoundsOverride
-                    else -> false
-                }
-                if (row.second == EffectSoundKind.POPS_AND_BANGS || row.second == EffectSoundKind.SHIFT) {
-                    DashboardOverrideColumnCell(override, true, { onOverrideChange(row.second, !override) }, rowHeight)
+            rows.forEach { (_, kind) ->
+                if (kind == EffectSoundKind.POPS_AND_BANGS || kind == EffectSoundKind.SHIFT) {
+                    val override = overrideEnabled(kind)
+                    DashboardOverrideColumnCell(override, true, { onOverrideChange(kind, !override) }, rowHeight)
                 } else {
                     DashboardEmptyControlCell(rowHeight)
                 }
@@ -1387,15 +1398,11 @@ private fun DashboardEffectControls(
                 .width(layout.toggleColumnWidth)
                 .padding(layout.columnPadding),
         ) {
-            rows.forEach { row ->
-                val override = when (row.second) {
-                    EffectSoundKind.POPS_AND_BANGS -> state.popsAndBangsOverride
-                    EffectSoundKind.SHIFT -> state.shiftSoundsOverride
-                    else -> false
-                }
-                if (row.second == EffectSoundKind.POPS_AND_BANGS || row.second == EffectSoundKind.SHIFT) {
+            rows.forEach { (_, kind) ->
+                if (kind == EffectSoundKind.POPS_AND_BANGS || kind == EffectSoundKind.SHIFT) {
+                    val override = overrideEnabled(kind)
                     DashboardSwitchCell(rowHeight, override, Line) {
-                        onOverrideChange(row.second, !override)
+                        onOverrideChange(kind, !override)
                     }
                 } else {
                     DashboardEmptyControlCell(rowHeight)
@@ -1410,16 +1417,15 @@ private fun DashboardEffectControls(
                     .width(layout.presetColumnWidth)
                     .padding(layout.columnPadding),
             ) {
-                rows.forEach { row ->
-                    val rowGain = row.third
-                    val selected = kotlin.math.abs(rowGain - preset.gain) < 0.001f
-                    DashboardGainButton(preset, selected, if (selected) Night else Cyan, Line) {
-                        when (row.second) {
-                            EffectSoundKind.TRANSMISSION -> onCategoryGains(preset.gain, state.gearShiftGain, state.turboGain, state.backfireGain)
-                            EffectSoundKind.POPS_AND_BANGS -> onCategoryGains(state.transmissionGain, state.gearShiftGain, state.turboGain, preset.gain)
-                            EffectSoundKind.SHIFT -> onCategoryGains(state.transmissionGain, preset.gain, state.turboGain, state.backfireGain)
-                            EffectSoundKind.TURBO -> onCategoryGains(state.transmissionGain, state.gearShiftGain, preset.gain, state.backfireGain)
+                rows.forEach { (_, kind) ->
+                    if (showsOverrideGain(kind)) {
+                        val rowGain = overrideGain(kind)
+                        val selected = kotlin.math.abs(rowGain - preset.gain) < 0.001f
+                        DashboardGainButton(preset, selected, if (selected) Night else Cyan, Line) {
+                            onOverrideGainChange(kind, preset.gain)
                         }
+                    } else {
+                        DashboardEmptyControlCell(rowHeight)
                     }
                 }
             }

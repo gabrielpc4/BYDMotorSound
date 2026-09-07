@@ -67,6 +67,8 @@ internal class NativeFmodBankBridge {
     external fun setLoadedProfileId(profileId: String)
 
     external fun setCategoryGains(transmission: Float, gearShift: Float, turbo: Float, backfire: Float, limiter: Float, supercharger: Float)
+
+    external fun setEffectSoundOverrideGains(shiftOverrideGain: Float, backfireOverrideGain: Float)
     external fun hasEmbeddedSupercharger(): Boolean
 
     external fun setBackfireAudioEnabled(enabled: Boolean)

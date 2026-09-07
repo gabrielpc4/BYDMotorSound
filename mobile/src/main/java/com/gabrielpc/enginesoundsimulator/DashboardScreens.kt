@@ -329,14 +329,6 @@ internal fun MixerDashboardScreen(
         ) {
             MixerControlsPanel(
                 soundPerspective = soundPerspective,
-                carEngineHostGain = state.engineHostGain,
-                carEffectsHostGain = state.effectsHostGain,
-                carTransmissionGain = state.transmissionGain,
-                carGearShiftGain = state.gearShiftGain,
-                carTurboGain = state.turboGain,
-                carBackfireGain = state.backfireGain,
-                carLimiterGain = state.limiterGain,
-                carSuperchargerGain = state.superchargerGain,
                 hasTurbo = state.hasTurbo,
                 hasSupercharger = state.hasSupercharger,
                 mixerGains = mixerGains,
@@ -437,14 +429,6 @@ private fun MixerListeningPerspectiveSelector(
 @Composable
 private fun MixerControlsPanel(
     soundPerspective: EngineSoundPerspective,
-    carEngineHostGain: Float,
-    carEffectsHostGain: Float,
-    carTransmissionGain: Float,
-    carGearShiftGain: Float,
-    carTurboGain: Float,
-    carBackfireGain: Float,
-    carLimiterGain: Float,
-    carSuperchargerGain: Float,
     hasTurbo: Boolean,
     hasSupercharger: Boolean,
     mixerGains: MixerGlobalGains,
@@ -491,7 +475,6 @@ private fun MixerControlsPanel(
                 MixerLayerGainSlider(
                     label = "OVERALL",
                     layerValue = mixerSpecificGains.overall,
-                    dashboardValue = carEngineHostGain,
                     globalValue = mixerGains.engineInterior,
                     specificValue = mixerSpecificGains.engineInterior,
                     overall = mixerSpecificGains.overall,
@@ -513,7 +496,6 @@ private fun MixerControlsPanel(
                 onToggleCategoryMute = onToggleCategoryMute,
                 onToggleCategorySolo = onToggleCategorySolo,
                 layerValue = layerValueForScope(gainScope, mixerGains.engineInterior, mixerSpecificGains.engineInterior),
-                dashboardValue = carEngineHostGain,
                 globalValue = mixerGains.engineInterior,
                 specificValue = mixerSpecificGains.engineInterior,
                 overall = mixerSpecificGains.overall,
@@ -533,7 +515,6 @@ private fun MixerControlsPanel(
                 onToggleCategoryMute = onToggleCategoryMute,
                 onToggleCategorySolo = onToggleCategorySolo,
                 layerValue = layerValueForScope(gainScope, mixerGains.engineExterior, mixerSpecificGains.engineExterior),
-                dashboardValue = carEngineHostGain,
                 globalValue = mixerGains.engineExterior,
                 specificValue = mixerSpecificGains.engineExterior,
                 overall = mixerSpecificGains.overall,
@@ -548,7 +529,6 @@ private fun MixerControlsPanel(
             MixerLayerGainSlider(
                 label = "EFFECTS",
                 layerValue = layerValueForScope(gainScope, mixerGains.effectsHost, mixerSpecificGains.effectsHost),
-                dashboardValue = carEffectsHostGain,
                 globalValue = mixerGains.effectsHost,
                 specificValue = mixerSpecificGains.effectsHost,
                 overall = mixerSpecificGains.overall,
@@ -572,7 +552,6 @@ private fun MixerControlsPanel(
                 onToggleCategoryMute = onToggleCategoryMute,
                 onToggleCategorySolo = onToggleCategorySolo,
                 layerValue = layerValueForScope(gainScope, mixerGains.transmission, mixerSpecificGains.transmission),
-                dashboardValue = carTransmissionGain,
                 globalValue = mixerGains.transmission,
                 specificValue = mixerSpecificGains.transmission,
                 overall = mixerSpecificGains.overall,
@@ -592,7 +571,6 @@ private fun MixerControlsPanel(
                 onToggleCategoryMute = onToggleCategoryMute,
                 onToggleCategorySolo = onToggleCategorySolo,
                 layerValue = layerValueForScope(gainScope, mixerGains.gearShift, mixerSpecificGains.gearShift),
-                dashboardValue = carGearShiftGain,
                 globalValue = mixerGains.gearShift,
                 specificValue = mixerSpecificGains.gearShift,
                 overall = mixerSpecificGains.overall,
@@ -613,7 +591,6 @@ private fun MixerControlsPanel(
                     onToggleCategoryMute = onToggleCategoryMute,
                     onToggleCategorySolo = onToggleCategorySolo,
                     layerValue = layerValueForScope(gainScope, mixerGains.turbo, mixerSpecificGains.turbo),
-                    dashboardValue = carTurboGain,
                     globalValue = mixerGains.turbo,
                     specificValue = mixerSpecificGains.turbo,
                     overall = mixerSpecificGains.overall,
@@ -635,7 +612,6 @@ private fun MixerControlsPanel(
                     onToggleCategoryMute = onToggleCategoryMute,
                     onToggleCategorySolo = onToggleCategorySolo,
                     layerValue = layerValueForScope(gainScope, mixerGains.supercharger, mixerSpecificGains.supercharger),
-                    dashboardValue = carSuperchargerGain,
                     globalValue = mixerGains.supercharger,
                     specificValue = mixerSpecificGains.supercharger,
                     overall = mixerSpecificGains.overall,
@@ -656,7 +632,6 @@ private fun MixerControlsPanel(
                 onToggleCategoryMute = onToggleCategoryMute,
                 onToggleCategorySolo = onToggleCategorySolo,
                 layerValue = layerValueForScope(gainScope, mixerGains.backfire, mixerSpecificGains.backfire),
-                dashboardValue = carBackfireGain,
                 globalValue = mixerGains.backfire,
                 specificValue = mixerSpecificGains.backfire,
                 overall = mixerSpecificGains.overall,
@@ -676,7 +651,6 @@ private fun MixerControlsPanel(
                 onToggleCategoryMute = onToggleCategoryMute,
                 onToggleCategorySolo = onToggleCategorySolo,
                 layerValue = layerValueForScope(gainScope, mixerGains.limiter, mixerSpecificGains.limiter),
-                dashboardValue = carLimiterGain,
                 globalValue = mixerGains.limiter,
                 specificValue = mixerSpecificGains.limiter,
                 overall = mixerSpecificGains.overall,
@@ -759,7 +733,6 @@ private fun MixerGainScopeSelector(
 private fun MixerLayerGainSlider(
     label: String,
     layerValue: Float,
-    dashboardValue: Float,
     globalValue: Float,
     specificValue: Float,
     overall: Float,
@@ -772,7 +745,7 @@ private fun MixerLayerGainSlider(
     onValueChange: (Float) -> Unit,
 ) {
     val snappedLayerValue = MixerGlobalGains.snap(layerValue)
-    val effectiveValue = dashboardValue * globalValue * specificValue * overall
+    val effectiveValue = globalValue * specificValue * overall
     val stopIndex = MixerGlobalGains.stopIndex(snappedLayerValue).toFloat()
     val lastStopIndex = (MixerGlobalGains.STOPS.size - 1).toFloat()
     val sliderColors = SliderDefaults.colors(

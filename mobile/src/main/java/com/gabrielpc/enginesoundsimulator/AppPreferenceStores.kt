@@ -7,7 +7,7 @@ internal object AppPreferenceStores {
     const val SELECTED_CAR = "selected_car"
     const val SHIFT_MODE = "shift_mode"
     const val ENGINE_SOUND_PERSPECTIVE = "engine_sound_perspective"
-    const val AUDIO_MIX_GAINS = "audio_mix_gains_v2"
+    const val EFFECT_SOUND_OVERRIDE_GAINS = "effect_sound_override_gains_v1"
     const val AUDIO_MIX_GAINS_LEGACY = "audio_mix_gains"
     const val MIXER_GLOBAL_GAINS = "mixer_global_gains_v1"
     const val MIXER_CAR_SPECIFIC_GAINS = "mixer_car_specific_gains_v2"

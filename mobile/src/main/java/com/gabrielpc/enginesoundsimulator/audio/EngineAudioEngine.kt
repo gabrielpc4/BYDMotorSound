@@ -56,7 +56,8 @@ class EngineAudioEngine(context: Context) {
     private val tractionPulseSerial = AtomicLong(0L)
     private val hostEngineInteriorGain = AtomicReference(1.0f)
     private val hostEngineExteriorGain = AtomicReference(1.0f)
-    private val hostEffectsGain = AtomicReference(DEFAULT_EFFECTS_HOST_GAIN)
+    private val hostEffectsGain = AtomicReference(2.0f)
+    private val effectSoundOverrideGains = AtomicReference(com.gabrielpc.enginesoundsimulator.drive.EffectSoundOverrideGains())
     private val categoryGains = AtomicReference(AudioMixGains())
     private val nativeEventMutes = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
     private val nativeEventSolos = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
@@ -139,6 +140,15 @@ class EngineAudioEngine(context: Context) {
 
     internal fun setCategoryGains(gains: AudioMixGains) {
         categoryGains.set(gains)
+    }
+
+    fun setEffectSoundOverrideGains(shiftOverrideGain: Float, backfireOverrideGain: Float) {
+        effectSoundOverrideGains.set(
+            com.gabrielpc.enginesoundsimulator.drive.EffectSoundOverrideGains(
+                shiftGain = shiftOverrideGain.coerceAtLeast(0f),
+                backfireGain = backfireOverrideGain.coerceAtLeast(0f),
+            ),
+        )
     }
 
     fun setEventMute(eventName: String, muted: Boolean) {
@@ -352,6 +362,7 @@ class EngineAudioEngine(context: Context) {
         var consumedRejectedShift = rejectedShiftSerial.get()
         var consumedTractionPulse = tractionPulseSerial.get()
         var sentCategoryGains: AudioMixGains? = null
+        var sentEffectSoundOverrideGains: com.gabrielpc.enginesoundsimulator.drive.EffectSoundOverrideGains? = null
         var sentHostEngineInteriorGain: Float? = null
         var sentHostEngineExteriorGain: Float? = null
         var sentHostEffectsGain: Float? = null
@@ -489,6 +500,14 @@ class EngineAudioEngine(context: Context) {
                     )
                     sentCategoryGains = configuredGains
                     categoryGainCalls = 1
+                }
+                val configuredOverrideGains = effectSoundOverrideGains.get()
+                if (configuredOverrideGains != sentEffectSoundOverrideGains) {
+                    bridge.setEffectSoundOverrideGains(
+                        configuredOverrideGains.shiftGain,
+                        configuredOverrideGains.backfireGain,
+                    )
+                    sentEffectSoundOverrideGains = configuredOverrideGains
                 }
                 val requestedNativeEventOverridesVersion = nativeEventOverridesVersion.get()
                 if (requestedNativeEventOverridesVersion != sentNativeEventOverridesVersion) {

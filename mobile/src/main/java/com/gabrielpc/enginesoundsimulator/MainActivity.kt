@@ -1087,7 +1087,8 @@ private val DASHBOARD_EFFECT_GAIN_PRESETS = listOf(
 )
 
 private object DashboardClassicEffectLayout {
-    val effectLabelColumnWidth = 220.dp
+    val engineLabelColumnWidth = 88.dp
+    val effectLabelColumnWidth = 116.dp
     val toggleColumnWidth = 82.dp
     val presetColumnWidth = 105.dp
     val columnGap = 8.dp
@@ -1137,7 +1138,8 @@ private object DashboardClassicEffectLayout {
         get() {
             val trailingControlsWidth = engineRowWidthBeforeSlider - columnGap
             val gapCountAfterEngineLabel = 5
-            return (matrixWidthAfterLabel - trailingControlsWidth - (columnGap * gapCountAfterEngineLabel))
+            val labelWidthDelta = effectLabelColumnWidth - engineLabelColumnWidth
+            return (labelWidthDelta + matrixWidthAfterLabel - trailingControlsWidth - (columnGap * gapCountAfterEngineLabel))
                 .coerceAtLeast(120.dp)
         }
 }
@@ -1166,7 +1168,7 @@ private fun DashboardEngineControls(
         Box(
             modifier = Modifier
                 .height(rowHeight)
-                .width(layout.effectLabelColumnWidth)
+                .width(layout.engineLabelColumnWidth)
                 .padding(start = layout.labelColumnPadding, bottom = 12.dp),
             contentAlignment = Alignment.BottomStart,
         ) {
@@ -1303,8 +1305,8 @@ private fun DashboardEffectControls(
 ) {
     val layout = DashboardClassicEffectLayout
     val rows = listOf(
-        "POPS & BANGS SOUND OVERRIDE" to EffectSoundKind.POPS_AND_BANGS,
-        "SHIFT SOUNDS OVERRIDE" to EffectSoundKind.SHIFT,
+        "Pops & Bangs" to EffectSoundKind.POPS_AND_BANGS,
+        "Shift Sounds" to EffectSoundKind.SHIFT,
     )
     val rowHeight = 42.dp
     val rowGap = 7.dp
@@ -1340,9 +1342,8 @@ private fun DashboardEffectControls(
                     Text(
                         text = label,
                         color = Cyan,
-                        fontSize = 11.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
-                        lineHeight = 13.sp,
                     )
                 }
             }

@@ -59,8 +59,18 @@ val fmodSdkDirectory = file(
         ?: throw GradleException("Set fmod.sdk.dir to the local FMOD Android SDK directory."),
 )
 val generatedFmodSdk = file("build/generated/fmodSdk")
-val bankDelivery = providers.gradleProperty("bankDelivery").orElse("embedded").get()
-require(bankDelivery in setOf("embedded", "external")) { "bankDelivery must be embedded or external" }
+val bankDeliveryOverride = providers.gradleProperty("bankDelivery")
+val embedBanksInApk: Boolean = run {
+    val override = bankDeliveryOverride.orNull
+    if (override != null) {
+        require(override in setOf("embedded", "external")) {
+            "bankDelivery must be embedded or external"
+        }
+        return@run override == "embedded"
+    }
+    // Debug builds stay lean for iteration; release APKs keep bundled banks for pendrive installs.
+    gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+}
 val embeddedAssetTasks = listOf("original", "modded").associateWith { group ->
     tasks.register<Exec>("prepare${group.replaceFirstChar(Char::uppercase)}EmbeddedBanks") {
         val output = file("build/generated/embeddedBanks/$group")
@@ -211,11 +221,10 @@ android {
                 applicationIdSuffix = ".$name"
                 resValue("string", "app_name", "${name.replaceFirstChar(Char::uppercase)} Cars • Engine Sounds")
                 buildConfigField("String", "CAR_CATALOG_GROUP", "\"$group\"")
-                buildConfigField("boolean", "EMBEDDED_BANKS", (bankDelivery == "embedded").toString())
             }
         }
     }
-    if (bankDelivery == "embedded") {
+    if (embedBanksInApk) {
         listOf("original", "modded").forEach { group ->
             sourceSets.getByName(group).assets.srcDir(
                 files(file("build/generated/embeddedBanks/$group")).builtBy(embeddedAssetTasks.getValue(group)),
@@ -278,6 +287,21 @@ tasks.configureEach {
 
 androidComponents {
     onVariants(selector().all()) { variant ->
+        if (variant.flavorName == "original" || variant.flavorName == "modded") {
+            val embeddedBanks = when (bankDeliveryOverride.orNull) {
+                "embedded" -> true
+                "external" -> false
+                else -> variant.buildType == "release"
+            }
+            variant.buildConfigFields?.put(
+                "EMBEDDED_BANKS",
+                com.android.build.api.variant.BuildConfigField(
+                    "boolean",
+                    embeddedBanks.toString(),
+                    "Whether car banks ship inside this APK",
+                ),
+            )
+        }
         variant.outputs.forEach { output ->
             output.outputFileName.set(
                 "engine-sounds-simulator-build-$stampedBuildNumber-${variant.name}.apk",

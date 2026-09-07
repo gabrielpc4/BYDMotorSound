@@ -69,14 +69,20 @@ data class MixerGlobalGains(
     }
 }
 
-internal fun AudioMixGains.effectiveWith(mixerGlobal: MixerGlobalGains): AudioMixGains = copy(
-    effectsHost = effectsHost * mixerGlobal.effectsHost,
-    transmission = transmission * mixerGlobal.transmission,
-    gearShift = gearShift * mixerGlobal.gearShift,
-    turbo = turbo * mixerGlobal.turbo,
-    backfire = backfire * mixerGlobal.backfire,
-    limiter = limiter * mixerGlobal.limiter,
-)
+internal fun AudioMixGains.effectiveWith(
+    mixerGlobal: MixerGlobalGains,
+    mixerSpecific: MixerCarSpecificGains,
+): AudioMixGains {
+    val overall = mixerSpecific.overall
+    return copy(
+        effectsHost = effectsHost * mixerGlobal.effectsHost * mixerSpecific.effectsHost * overall,
+        transmission = transmission * mixerGlobal.transmission * mixerSpecific.transmission * overall,
+        gearShift = gearShift * mixerGlobal.gearShift * mixerSpecific.gearShift * overall,
+        turbo = turbo * mixerGlobal.turbo * mixerSpecific.turbo * overall,
+        backfire = backfire * mixerGlobal.backfire * mixerSpecific.backfire * overall,
+        limiter = limiter * mixerGlobal.limiter * mixerSpecific.limiter * overall,
+    )
+}
 
 internal class MixerGlobalGainRepository(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences(

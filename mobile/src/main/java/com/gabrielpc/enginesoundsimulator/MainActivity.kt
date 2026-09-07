@@ -241,6 +241,7 @@ class MainActivity : ComponentActivity() {
                         onManualUpshift = controller::requestManualUpshift,
                         onManualDownshift = controller::requestManualDownshift,
                         onMixerGlobalGainsChange = controller::setMixerGlobalGains,
+                        onMixerCarSpecificGainsChange = controller::setMixerCarSpecificGains,
                         onFmodUpdateRateChange = controller::setFmodUpdateRateHz,
                         onExteriorPureAudioChange = controller::setExteriorPureAudio,
                         onMixerDiagnosticsActive = controller::setMixerDiagnosticsActive,
@@ -343,6 +344,7 @@ private fun MotorSoundDashboard(
     onManualUpshift: () -> Unit,
     onManualDownshift: () -> Unit,
     onMixerGlobalGainsChange: (com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains) -> Unit,
+    onMixerCarSpecificGainsChange: (com.gabrielpc.enginesoundsimulator.audio.MixerCarSpecificGains) -> Unit,
     onFmodUpdateRateChange: (Int) -> Unit,
     onExteriorPureAudioChange: (Boolean) -> Unit,
     onMixerDiagnosticsActive: (Boolean) -> Unit,
@@ -555,6 +557,7 @@ private fun MotorSoundDashboard(
                             onManualUpshift = onManualUpshift,
                             onManualDownshift = onManualDownshift,
                             onMixerGlobalGainsChange = onMixerGlobalGainsChange,
+                            onMixerCarSpecificGainsChange = onMixerCarSpecificGainsChange,
                             onEventMute = onEventMute,
                             onEventSolo = onEventSolo,
                             modifier = Modifier

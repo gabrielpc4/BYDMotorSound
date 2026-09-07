@@ -104,6 +104,7 @@ import com.gabrielpc.enginesoundsimulator.audio.FmodBankProfiles
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankResolver
 import com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective
 import com.gabrielpc.enginesoundsimulator.audio.FmodEventSection
+import com.gabrielpc.enginesoundsimulator.audio.MixerCarSpecificGains
 import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains
 import com.gabrielpc.enginesoundsimulator.audio.FmodSourceState
 import com.gabrielpc.enginesoundsimulator.audio.FmodUpdateRate
@@ -149,6 +150,12 @@ internal const val MIXER_SCREEN_HORIZONTAL_PADDING = 20
 /** Reserve scroll space so mixer sliders can scroll clear of the floating pedals row. */
 private val MIXER_PEDALS_OVERLAY_HEIGHT = 240.dp
 
+/** Which mixer layer the category sliders edit in the mixer panel. */
+private enum class MixerGainScope(val displayName: String) {
+    GLOBAL("GLOBAL"),
+    SPECIFIC("SPECIFIC"),
+}
+
 @Composable
 internal fun MixerDashboardScreen(
     state: DriveSnapshot,
@@ -161,7 +168,8 @@ internal fun MixerDashboardScreen(
     onTransmissionPositionChange: (TransmissionPosition) -> Unit,
     onManualUpshift: () -> Unit,
     onManualDownshift: () -> Unit,
-    onMixerGlobalGainsChange: (com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains) -> Unit,
+    onMixerGlobalGainsChange: (MixerGlobalGains) -> Unit,
+    onMixerCarSpecificGainsChange: (MixerCarSpecificGains) -> Unit,
     onEventMute: (String, Boolean) -> Unit,
     onEventSolo: (String, Boolean) -> Unit,
     soundPerspective: EngineSoundPerspective,
@@ -233,6 +241,9 @@ internal fun MixerDashboardScreen(
     }
 
     var mixerGains by remember(state.mixerGlobalGains) { mutableStateOf(state.mixerGlobalGains) }
+    var mixerSpecificGains by remember(state.selectedCarId, state.mixerCarSpecificGains) {
+        mutableStateOf(state.mixerCarSpecificGains)
+    }
     Row(
         modifier = modifier
             .fillMaxSize()
@@ -329,9 +340,14 @@ internal fun MixerDashboardScreen(
                 carLimiterGain = state.limiterGain,
                 hasTurbo = state.hasTurbo,
                 mixerGains = mixerGains,
+                mixerSpecificGains = mixerSpecificGains,
                 onMixerGainsChange = { updated ->
                     mixerGains = updated
                     onMixerGlobalGainsChange(updated)
+                },
+                onMixerSpecificGainsChange = { updated ->
+                    mixerSpecificGains = updated
+                    onMixerCarSpecificGainsChange(updated)
                 },
                 modifier = Modifier.fillMaxSize(),
             )
@@ -403,9 +419,13 @@ private fun MixerControlsPanel(
     carLimiterGain: Float,
     hasTurbo: Boolean,
     mixerGains: MixerGlobalGains,
+    mixerSpecificGains: MixerCarSpecificGains,
     onMixerGainsChange: (MixerGlobalGains) -> Unit,
+    onMixerSpecificGainsChange: (MixerCarSpecificGains) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var gainScope by remember { mutableStateOf(MixerGainScope.GLOBAL) }
+
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -422,50 +442,213 @@ private fun MixerControlsPanel(
                 .padding(bottom = MIXER_PEDALS_OVERLAY_HEIGHT),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            MixerGlobalGainSlider("ENGINE INTERIOR", mixerGains.engineInterior, carEngineHostGain) {
-                onMixerGainsChange(mixerGains.copy(engineInterior = it))
+            MixerGainScopeSelector(
+                scope = gainScope,
+                onScopeSelected = { gainScope = it },
+            )
+            if (gainScope == MixerGainScope.SPECIFIC) {
+                MixerLayerGainSlider(
+                    label = "OVERALL",
+                    layerValue = mixerSpecificGains.overall,
+                    dashboardValue = carEngineHostGain,
+                    globalValue = mixerGains.engineInterior,
+                    specificValue = mixerSpecificGains.engineInterior,
+                    overall = mixerSpecificGains.overall,
+                    onValueChange = {
+                        onMixerSpecificGainsChange(mixerSpecificGains.copy(overall = it))
+                    },
+                )
             }
-            MixerGlobalGainSlider("ENGINE EXTERIOR", mixerGains.engineExterior, carEngineHostGain) {
-                onMixerGainsChange(mixerGains.copy(engineExterior = it))
-            }
-            MixerGlobalGainSlider("EFFECTS", mixerGains.effectsHost, carEffectsHostGain) {
-                onMixerGainsChange(mixerGains.copy(effectsHost = it))
-            }
+            MixerLayerGainSlider(
+                label = "ENGINE INTERIOR",
+                layerValue = layerValueForScope(gainScope, mixerGains.engineInterior, mixerSpecificGains.engineInterior),
+                dashboardValue = carEngineHostGain,
+                globalValue = mixerGains.engineInterior,
+                specificValue = mixerSpecificGains.engineInterior,
+                overall = mixerSpecificGains.overall,
+                onValueChange = { value ->
+                    if (gainScope == MixerGainScope.GLOBAL) {
+                        onMixerGainsChange(mixerGains.copy(engineInterior = value))
+                    } else {
+                        onMixerSpecificGainsChange(mixerSpecificGains.copy(engineInterior = value))
+                    }
+                },
+            )
+            MixerLayerGainSlider(
+                label = "ENGINE EXTERIOR",
+                layerValue = layerValueForScope(gainScope, mixerGains.engineExterior, mixerSpecificGains.engineExterior),
+                dashboardValue = carEngineHostGain,
+                globalValue = mixerGains.engineExterior,
+                specificValue = mixerSpecificGains.engineExterior,
+                overall = mixerSpecificGains.overall,
+                onValueChange = { value ->
+                    if (gainScope == MixerGainScope.GLOBAL) {
+                        onMixerGainsChange(mixerGains.copy(engineExterior = value))
+                    } else {
+                        onMixerSpecificGainsChange(mixerSpecificGains.copy(engineExterior = value))
+                    }
+                },
+            )
+            MixerLayerGainSlider(
+                label = "EFFECTS",
+                layerValue = layerValueForScope(gainScope, mixerGains.effectsHost, mixerSpecificGains.effectsHost),
+                dashboardValue = carEffectsHostGain,
+                globalValue = mixerGains.effectsHost,
+                specificValue = mixerSpecificGains.effectsHost,
+                overall = mixerSpecificGains.overall,
+                onValueChange = { value ->
+                    if (gainScope == MixerGainScope.GLOBAL) {
+                        onMixerGainsChange(mixerGains.copy(effectsHost = value))
+                    } else {
+                        onMixerSpecificGainsChange(mixerSpecificGains.copy(effectsHost = value))
+                    }
+                },
+            )
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 4.dp),
                 color = Line,
             )
-            MixerGlobalGainSlider("TRANSMISSION", mixerGains.transmission, carTransmissionGain) {
-                onMixerGainsChange(mixerGains.copy(transmission = it))
-            }
-            MixerGlobalGainSlider("SHIFT", mixerGains.gearShift, carGearShiftGain) {
-                onMixerGainsChange(mixerGains.copy(gearShift = it))
-            }
+            MixerLayerGainSlider(
+                label = "TRANSMISSION",
+                layerValue = layerValueForScope(gainScope, mixerGains.transmission, mixerSpecificGains.transmission),
+                dashboardValue = carTransmissionGain,
+                globalValue = mixerGains.transmission,
+                specificValue = mixerSpecificGains.transmission,
+                overall = mixerSpecificGains.overall,
+                onValueChange = { value ->
+                    if (gainScope == MixerGainScope.GLOBAL) {
+                        onMixerGainsChange(mixerGains.copy(transmission = value))
+                    } else {
+                        onMixerSpecificGainsChange(mixerSpecificGains.copy(transmission = value))
+                    }
+                },
+            )
+            MixerLayerGainSlider(
+                label = "SHIFT",
+                layerValue = layerValueForScope(gainScope, mixerGains.gearShift, mixerSpecificGains.gearShift),
+                dashboardValue = carGearShiftGain,
+                globalValue = mixerGains.gearShift,
+                specificValue = mixerSpecificGains.gearShift,
+                overall = mixerSpecificGains.overall,
+                onValueChange = { value ->
+                    if (gainScope == MixerGainScope.GLOBAL) {
+                        onMixerGainsChange(mixerGains.copy(gearShift = value))
+                    } else {
+                        onMixerSpecificGainsChange(mixerSpecificGains.copy(gearShift = value))
+                    }
+                },
+            )
             if (hasTurbo) {
-                MixerGlobalGainSlider("TURBO", mixerGains.turbo, carTurboGain) {
-                    onMixerGainsChange(mixerGains.copy(turbo = it))
-                }
+                MixerLayerGainSlider(
+                    label = "TURBO",
+                    layerValue = layerValueForScope(gainScope, mixerGains.turbo, mixerSpecificGains.turbo),
+                    dashboardValue = carTurboGain,
+                    globalValue = mixerGains.turbo,
+                    specificValue = mixerSpecificGains.turbo,
+                    overall = mixerSpecificGains.overall,
+                    onValueChange = { value ->
+                        if (gainScope == MixerGainScope.GLOBAL) {
+                            onMixerGainsChange(mixerGains.copy(turbo = value))
+                        } else {
+                            onMixerSpecificGainsChange(mixerSpecificGains.copy(turbo = value))
+                        }
+                    },
+                )
             }
-            MixerGlobalGainSlider("POPS & BANGS", mixerGains.backfire, carBackfireGain) {
-                onMixerGainsChange(mixerGains.copy(backfire = it))
-            }
-            MixerGlobalGainSlider("LIMITER", mixerGains.limiter, carLimiterGain) {
-                onMixerGainsChange(mixerGains.copy(limiter = it))
-            }
+            MixerLayerGainSlider(
+                label = "POPS & BANGS",
+                layerValue = layerValueForScope(gainScope, mixerGains.backfire, mixerSpecificGains.backfire),
+                dashboardValue = carBackfireGain,
+                globalValue = mixerGains.backfire,
+                specificValue = mixerSpecificGains.backfire,
+                overall = mixerSpecificGains.overall,
+                onValueChange = { value ->
+                    if (gainScope == MixerGainScope.GLOBAL) {
+                        onMixerGainsChange(mixerGains.copy(backfire = value))
+                    } else {
+                        onMixerSpecificGainsChange(mixerSpecificGains.copy(backfire = value))
+                    }
+                },
+            )
+            MixerLayerGainSlider(
+                label = "LIMITER",
+                layerValue = layerValueForScope(gainScope, mixerGains.limiter, mixerSpecificGains.limiter),
+                dashboardValue = carLimiterGain,
+                globalValue = mixerGains.limiter,
+                specificValue = mixerSpecificGains.limiter,
+                overall = mixerSpecificGains.overall,
+                onValueChange = { value ->
+                    if (gainScope == MixerGainScope.GLOBAL) {
+                        onMixerGainsChange(mixerGains.copy(limiter = value))
+                    } else {
+                        onMixerSpecificGainsChange(mixerSpecificGains.copy(limiter = value))
+                    }
+                },
+            )
+        }
+    }
+}
+
+private fun layerValueForScope(
+    scope: MixerGainScope,
+    globalValue: Float,
+    specificValue: Float,
+): Float {
+    if (scope == MixerGainScope.GLOBAL) {
+        return globalValue
+    }
+
+    return specificValue
+}
+
+@Composable
+private fun MixerGainScopeSelector(
+    scope: MixerGainScope,
+    onScopeSelected: (MixerGainScope) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "MIX",
+            color = Muted,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp,
+        )
+        Spacer(Modifier.width(10.dp))
+        MixerGainScope.entries.forEach { option ->
+            val active = option == scope
+            Text(
+                text = option.displayName,
+                color = if (active) Cyan else Muted,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Black,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(if (active) Cyan.copy(alpha = 0.14f) else Color.Transparent)
+                    .clickable { onScopeSelected(option) }
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+            )
         }
     }
 }
 
 @Composable
-private fun MixerGlobalGainSlider(
+private fun MixerLayerGainSlider(
     label: String,
+    layerValue: Float,
+    dashboardValue: Float,
     globalValue: Float,
-    carValue: Float,
+    specificValue: Float,
+    overall: Float,
     onValueChange: (Float) -> Unit,
 ) {
-    val snappedGlobalValue = MixerGlobalGains.snap(globalValue)
-    val effectiveValue = carValue * snappedGlobalValue
-    val stopIndex = MixerGlobalGains.stopIndex(snappedGlobalValue).toFloat()
+    val snappedLayerValue = MixerGlobalGains.snap(layerValue)
+    val effectiveValue = dashboardValue * globalValue * specificValue * overall
+    val stopIndex = MixerGlobalGains.stopIndex(snappedLayerValue).toFloat()
     val lastStopIndex = (MixerGlobalGains.STOPS.size - 1).toFloat()
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -482,7 +665,7 @@ private fun MixerGlobalGainSlider(
                 letterSpacing = 0.8.sp,
             )
             Text(
-                text = "${MixerGlobalGains.formatMultiplier(snappedGlobalValue)} → ${MixerGlobalGains.formatMultiplier(effectiveValue)}",
+                text = "${MixerGlobalGains.formatMultiplier(snappedLayerValue)} → ${MixerGlobalGains.formatMultiplier(effectiveValue)}",
                 color = White,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,

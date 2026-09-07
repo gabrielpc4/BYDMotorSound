@@ -10,10 +10,26 @@ internal object CruisingShiftOffsetRpm {
     const val MAX = 4_000
     const val DEFAULT = 2_000
     const val STEP = 1_000
+    const val HIGH_TACHOMETER_BONUS_RPM = 1_000
+    const val HIGH_TACHOMETER_THRESHOLD_RPM = 10_000
+    const val ULTRA_HIGH_TACHOMETER_THRESHOLD_RPM = 12_000
 
     fun normalize(value: Int): Int {
         val stepped = ((value.toFloat() / STEP).roundToInt() * STEP)
         return stepped.coerceIn(MIN, MAX)
+    }
+
+    /** Extra cruising offset for cars whose authored tachometer scale reaches 10k or 12k RPM. */
+    fun tachometerMaximumBonus(tachometerMaximumRpm: Double): Int {
+        return when {
+            tachometerMaximumRpm >= ULTRA_HIGH_TACHOMETER_THRESHOLD_RPM -> HIGH_TACHOMETER_BONUS_RPM * 2
+            tachometerMaximumRpm >= HIGH_TACHOMETER_THRESHOLD_RPM -> HIGH_TACHOMETER_BONUS_RPM
+            else -> 0
+        }
+    }
+
+    fun effectiveForTachometer(userOffsetRpm: Int, tachometerMaximumRpm: Double): Int {
+        return (normalize(userOffsetRpm) + tachometerMaximumBonus(tachometerMaximumRpm)).coerceAtLeast(MIN)
     }
 }
 
@@ -81,6 +97,7 @@ internal data class AutomaticTransmissionSettings(
     val racingReturnHoldSeconds: Int = RacingReturnHoldSeconds.DEFAULT,
     val manualRedlineHoldSeconds: Int = ManualRedlineHoldSeconds.DEFAULT,
     val manualAutodownshiftRpm: Int = ManualAutodownshiftRpm.DEFAULT,
+    val tachometerCruisingShiftRangeOverlayEnabled: Boolean = true,
 )
 
 internal class AutomaticTransmissionSettingsRepository(context: Context) {
@@ -113,6 +130,10 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
             manualAutodownshiftRpm = ManualAutodownshiftRpm.normalize(
                 preferences.getInt(KEY_MANUAL_AUTODOWNSHIFT_RPM, ManualAutodownshiftRpm.DEFAULT),
             ),
+            tachometerCruisingShiftRangeOverlayEnabled = preferences.getBoolean(
+                KEY_TACHOMETER_CRUISING_SHIFT_RANGE_OVERLAY_ENABLED,
+                true,
+            ),
         )
     }
 
@@ -136,6 +157,10 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
             .putInt(
                 KEY_MANUAL_AUTODOWNSHIFT_RPM,
                 ManualAutodownshiftRpm.normalize(settings.manualAutodownshiftRpm),
+            )
+            .putBoolean(
+                KEY_TACHOMETER_CRUISING_SHIFT_RANGE_OVERLAY_ENABLED,
+                settings.tachometerCruisingShiftRangeOverlayEnabled,
             )
             .commit()
     }
@@ -175,6 +200,8 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
         const val KEY_RACING_RETURN_HOLD_SECONDS = "racing_return_hold_seconds"
         const val KEY_MANUAL_REDLINER_HOLD_SECONDS = "manual_redline_hold_seconds"
         const val KEY_MANUAL_AUTODOWNSHIFT_RPM = "manual_autodownshift_rpm"
+        const val KEY_TACHOMETER_CRUISING_SHIFT_RANGE_OVERLAY_ENABLED =
+            "tachometer_cruising_shift_range_overlay_enabled"
         const val LEGACY_OFFSET_RPM_KEY = "offset_rpm"
     }
 }

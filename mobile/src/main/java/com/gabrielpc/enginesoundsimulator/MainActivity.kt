@@ -80,6 +80,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
@@ -231,6 +232,8 @@ class MainActivity : ComponentActivity() {
                         onMediaShiftButton = controller::handleMediaShiftButton,
                         onVirtualForwardGearCountChange = controller::setVirtualForwardGearCount,
                         onSixGearOnLaunchEnabledChange = controller::setSixGearOnLaunchEnabled,
+                        onTachometerCruisingShiftRangeOverlayEnabledChange =
+                            controller::setTachometerCruisingShiftRangeOverlayEnabled,
                         onCruisingShiftOffsetRpmChange = controller::setCruisingShiftOffsetRpm,
                         onRacingReturnThrottlePercentChange = controller::setRacingReturnThrottlePercent,
                         onRacingReturnHoldSecondsChange = controller::setRacingReturnHoldSeconds,
@@ -335,6 +338,7 @@ private fun MotorSoundDashboard(
     onMediaShiftButton: (Int) -> Boolean,
     onVirtualForwardGearCountChange: (Int) -> Unit,
     onSixGearOnLaunchEnabledChange: (Boolean) -> Unit,
+    onTachometerCruisingShiftRangeOverlayEnabledChange: (Boolean) -> Unit,
     onCruisingShiftOffsetRpmChange: (Int) -> Unit,
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
     onRacingReturnHoldSecondsChange: (Int) -> Unit,
@@ -531,9 +535,10 @@ private fun MotorSoundDashboard(
                                 drivetrain = state.drivetrain,
                                 transmissionPosition = state.transmissionPosition,
                                 manualShiftModeEnabled = state.manualShiftModeEnabled,
+                                cruisingLogicEnabled = state.cruisingLogicEnabled,
+                                cruisingShiftRangeOverlayEnabled = state.tachometerCruisingShiftRangeOverlayEnabled,
                                 maxRpm = state.drivetrain.tachometerMaximumRpm,
                                 redlineRpm = state.drivetrain.redlineRpm,
-                                upshiftRpm = state.drivetrain.automaticUpshiftRpm,
                                 modifier = Modifier
                                     .align(Alignment.CenterEnd)
                                     .width(maxWidth * DashboardLayoutDefaults.TACHOMETER_OVERLAY_WIDTH_FRACTION)
@@ -591,6 +596,9 @@ private fun MotorSoundDashboard(
                             onPedalAudioThrottleRampUpMillisecondsChange = onPedalAudioThrottleRampUpMillisecondsChange,
                             pedalAudioThrottleRampDownMilliseconds = state.pedalAudioThrottleRampDownMilliseconds,
                             onPedalAudioThrottleRampDownMillisecondsChange = onPedalAudioThrottleRampDownMillisecondsChange,
+                            tachometerCruisingShiftRangeOverlayEnabled = state.tachometerCruisingShiftRangeOverlayEnabled,
+                            onTachometerCruisingShiftRangeOverlayEnabledChange =
+                                onTachometerCruisingShiftRangeOverlayEnabledChange,
                             onPreviewBackfireSample = onPreviewBackfireSample,
                         )
                     }
@@ -2153,18 +2161,20 @@ private fun Tachometer(
     drivetrain: DrivetrainState,
     transmissionPosition: TransmissionPosition,
     manualShiftModeEnabled: Boolean,
+    cruisingLogicEnabled: Boolean,
+    cruisingShiftRangeOverlayEnabled: Boolean,
     maxRpm: Double,
     redlineRpm: Double,
-    upshiftRpm: Double,
     modifier: Modifier = Modifier,
 ) {
     TachometerGauge(
         drivetrain = drivetrain,
         transmissionPosition = transmissionPosition,
         manualShiftModeEnabled = manualShiftModeEnabled,
+        cruisingLogicEnabled = cruisingLogicEnabled,
+        cruisingShiftRangeOverlayEnabled = cruisingShiftRangeOverlayEnabled,
         maxRpm = maxRpm,
         redlineRpm = redlineRpm,
-        upshiftRpm = upshiftRpm,
         modifier = modifier,
     )
 }
@@ -2200,9 +2210,10 @@ private fun TachometerGauge(
     drivetrain: DrivetrainState,
     transmissionPosition: TransmissionPosition,
     manualShiftModeEnabled: Boolean,
+    cruisingLogicEnabled: Boolean,
+    cruisingShiftRangeOverlayEnabled: Boolean,
     maxRpm: Double,
     redlineRpm: Double,
-    upshiftRpm: Double,
     modifier: Modifier = Modifier,
 ) {
     val shakeIntensity = redlineShakeIntensity(
@@ -2275,6 +2286,23 @@ private fun TachometerGauge(
                     size = zoneBandSize,
                     style = zoneBandStyle,
                 )
+
+                if (
+                    showAutomaticTransmissionMode &&
+                    cruisingShiftRangeOverlayEnabled &&
+                    cruisingLogicEnabled &&
+                    drivetrain.automaticTransmissionMode == AutomaticTransmissionMode.CRUISING
+                ) {
+                    drawCruisingShiftRangeOverlay(
+                        center = center,
+                        radius = radius,
+                        startAngle = startAngle,
+                        sweepAngle = sweepAngle,
+                        gaugeMaxRpm = gaugeMaxRpm,
+                        downshiftRpm = drivetrain.effectiveAutomaticDownshiftRpm,
+                        upshiftRpm = drivetrain.effectiveAutomaticUpshiftRpm,
+                    )
+                }
 
                 val tickCount = majorIntervals * 5
                 for (tick in 0..tickCount) {
@@ -2376,6 +2404,55 @@ private fun TachometerGauge(
             }
         }
     }
+}
+
+private fun DrawScope.drawCruisingShiftRangeOverlay(
+    center: androidx.compose.ui.geometry.Offset,
+    radius: Float,
+    startAngle: Float,
+    sweepAngle: Float,
+    gaugeMaxRpm: Double,
+    downshiftRpm: Double,
+    upshiftRpm: Double,
+) {
+    if (downshiftRpm <= 0.0 || upshiftRpm <= 0.0) {
+        return
+    }
+
+    val downFraction = (downshiftRpm / gaugeMaxRpm).toFloat().coerceIn(0f, 1f)
+    val downAngle = startAngle + sweepAngle * downFraction
+    val outerRadius = radius * 0.92f
+    val shiftColor = Color(0xFF7A1E22)
+    val upFraction = (upshiftRpm / gaugeMaxRpm).toFloat().coerceIn(0f, 1f)
+    val upAngle = startAngle + sweepAngle * upFraction
+    val wedgeSweep = upAngle - downAngle
+
+    if (wedgeSweep <= 0f) {
+        return
+    }
+
+    val downPoint = polar(center, outerRadius, downAngle)
+    val wedgePath = Path().apply {
+        moveTo(center.x, center.y)
+        lineTo(downPoint.x, downPoint.y)
+        arcTo(
+            rect = androidx.compose.ui.geometry.Rect(
+                left = center.x - outerRadius,
+                top = center.y - outerRadius,
+                right = center.x + outerRadius,
+                bottom = center.y + outerRadius,
+            ),
+            startAngleDegrees = downAngle,
+            sweepAngleDegrees = wedgeSweep,
+            forceMoveTo = false,
+        )
+        close()
+    }
+
+    drawPath(
+        path = wedgePath,
+        color = shiftColor.copy(alpha = 0.38f),
+    )
 }
 
 private fun polar(

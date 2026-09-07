@@ -172,6 +172,7 @@ internal object SettingsExporter {
             put("racingReturnHoldSeconds", settings.racingReturnHoldSeconds)
             put("manualRedlineHoldSeconds", settings.manualRedlineHoldSeconds)
             put("manualAutodownshiftRpm", settings.manualAutodownshiftRpm)
+            put("tachometerCruisingShiftRangeOverlayEnabled", settings.tachometerCruisingShiftRangeOverlayEnabled)
         }
     }
 

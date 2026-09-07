@@ -844,6 +844,8 @@ internal fun SettingsScreen(
     onPedalAudioThrottleRampUpMillisecondsChange: (Int) -> Unit,
     pedalAudioThrottleRampDownMilliseconds: Int,
     onPedalAudioThrottleRampDownMillisecondsChange: (Int) -> Unit,
+    tachometerCruisingShiftRangeOverlayEnabled: Boolean,
+    onTachometerCruisingShiftRangeOverlayEnabledChange: (Boolean) -> Unit,
     onPreviewBackfireSample: (Int) -> Unit,
 ) {
     var backfireTab by remember { mutableStateOf(false) }
@@ -889,6 +891,12 @@ internal fun SettingsScreen(
                 onGearCountChange = onVirtualForwardGearCountChange,
                 sixGearOnLaunchEnabled = sixGearOnLaunchEnabled,
                 onSixGearOnLaunchEnabledChange = onSixGearOnLaunchEnabledChange,
+            )
+            TachometerShiftOverlayToggle(
+                title = "CRUISING RANGE",
+                description = "Semi-transparent wedge on the tachometer showing min/max automatic shift RPM while cruising.",
+                enabled = tachometerCruisingShiftRangeOverlayEnabled,
+                onEnabledChange = onTachometerCruisingShiftRangeOverlayEnabledChange,
             )
             AutomaticTransmissionSettingsControl(
                 minimumAudioThrottle = minimumAudioThrottle,
@@ -1035,6 +1043,41 @@ private fun VirtualForwardGearCountControl(
         VirtualGearDistributionChart(
             gearCount = gearCount,
             modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun TachometerShiftOverlayToggle(
+    title: String,
+    description: String,
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .border(1.dp, Line, RoundedCornerShape(8.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(title, color = Cyan, fontSize = 13.sp, fontWeight = FontWeight.Black)
+            Switch(
+                checked = enabled,
+                onCheckedChange = onEnabledChange,
+            )
+        }
+
+        Text(
+            text = description,
+            color = Muted,
+            fontSize = 11.sp,
+            lineHeight = 14.sp,
         )
     }
 }

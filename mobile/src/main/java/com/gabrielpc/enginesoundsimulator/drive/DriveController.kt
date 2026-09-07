@@ -124,6 +124,7 @@ data class DriveSnapshot(
     val racingReturnHoldSeconds: Int = RacingReturnHoldSeconds.DEFAULT,
     val manualRedlineHoldSeconds: Int = ManualRedlineHoldSeconds.DEFAULT,
     val manualAutodownshiftRpm: Int = ManualAutodownshiftRpm.DEFAULT,
+    val tachometerCruisingShiftRangeOverlayEnabled: Boolean = true,
     val favoriteCarIds: Set<String> = emptySet(),
     val userMessage: UserVisibleMessage? = null,
 )
@@ -455,6 +456,12 @@ class DriveController(context: Context) {
     fun setSixGearOnLaunchEnabled(enabled: Boolean) {
         updateAutomaticTransmissionSettings {
             it.copy(sixGearOnLaunchEnabled = enabled)
+        }
+    }
+
+    fun setTachometerCruisingShiftRangeOverlayEnabled(enabled: Boolean) {
+        updateAutomaticTransmissionSettings {
+            it.copy(tachometerCruisingShiftRangeOverlayEnabled = enabled)
         }
     }
 
@@ -1332,6 +1339,8 @@ class DriveController(context: Context) {
                 racingReturnHoldSeconds = automaticTransmissionSettings.get().racingReturnHoldSeconds,
                 manualRedlineHoldSeconds = automaticTransmissionSettings.get().manualRedlineHoldSeconds,
                 manualAutodownshiftRpm = automaticTransmissionSettings.get().manualAutodownshiftRpm,
+                tachometerCruisingShiftRangeOverlayEnabled =
+                    automaticTransmissionSettings.get().tachometerCruisingShiftRangeOverlayEnabled,
                 transmissionLockedToVehicle = transmission.lockedToVehicle,
                 carAudioReady = isSelectedCarAudioReady(selected.id),
                 favoriteCarIds = favoriteCarIds.get(),

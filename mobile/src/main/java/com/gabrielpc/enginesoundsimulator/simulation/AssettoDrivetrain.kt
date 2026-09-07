@@ -1,6 +1,7 @@
 package com.gabrielpc.enginesoundsimulator.simulation
 
 import com.gabrielpc.enginesoundsimulator.drive.BackfireSettings
+import com.gabrielpc.enginesoundsimulator.drive.CruisingShiftOffsetRpm
 import android.util.Log
 import kotlin.math.PI
 import kotlin.math.abs
@@ -41,6 +42,10 @@ internal class AssettoDrivetrainFrame(
     var racingReturnArmed: Boolean = false,
     var launchSixGearOverrideActive: Boolean = false,
     var launchReturnArmed: Boolean = false,
+    /** Upshift threshold after cruising offset and mode, for the current gear. */
+    var effectiveAutomaticUpshiftRpm: Double = 0.0,
+    /** Per-gear downshift threshold after cruising offset and mode. */
+    var effectiveAutomaticDownshiftRpm: Double = 0.0,
 )
 
 /**
@@ -402,7 +407,10 @@ internal class AssettoDrivetrain(
         automaticTransmissionConfig: AutomaticTransmissionConfig,
     ): AssettoDrivetrainFrame {
         val dt = f32(deltaSeconds.coerceIn(0.0001, 0.050))
-        cruisingShiftOffsetRpm = automaticTransmissionConfig.cruisingShiftOffsetRpm.coerceAtLeast(0)
+        cruisingShiftOffsetRpm = CruisingShiftOffsetRpm.effectiveForTachometer(
+            userOffsetRpm = automaticTransmissionConfig.cruisingShiftOffsetRpm,
+            tachometerMaximumRpm = physics.engine.tachometerMaximumRpm,
+        )
         racingReturnMaxThrottle = automaticTransmissionConfig.racingReturnMaxThrottle.coerceIn(0.0, 1.0)
         manualRedlineHoldSeconds = automaticTransmissionConfig.manualRedlineHoldSeconds.coerceAtLeast(0.0)
         manualAutodownshiftRpm = automaticTransmissionConfig.manualAutodownshiftRpm.coerceAtLeast(0.0)
@@ -661,6 +669,8 @@ internal class AssettoDrivetrain(
             launchControlPhase = LaunchControlPhase.INACTIVE
         }
         lastFrame.automaticTransmissionMode = automaticTransmissionMode
+        lastFrame.effectiveAutomaticUpshiftRpm = effectiveUpshiftTriggerRpm()
+        lastFrame.effectiveAutomaticDownshiftRpm = effectiveDownshiftRpmForCurrentGear()
         lastFrame.racingReturnArmed = racingReturnArmed
         lastFrame.launchSixGearOverrideActive = launchSixGearOverrideActive
         lastFrame.launchReturnArmed = launchReturnArmed

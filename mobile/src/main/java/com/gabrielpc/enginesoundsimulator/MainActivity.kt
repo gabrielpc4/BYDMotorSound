@@ -1787,62 +1787,56 @@ private fun CarStage(
                 .fillMaxWidth()
                 .weight(1f),
         ) {
-            val previewModifier = Modifier
-                .fillMaxWidth(0.88f)
-                .fillMaxHeight(0.88f)
-                .align(Alignment.Center)
-
-            if (preview != null) {
-                Box(
-                    modifier = previewModifier.clickable { carPickerExpanded = true },
-                ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable { carPickerExpanded = true },
+            ) {
+                if (preview != null) {
                     Image(
                         bitmap = preview,
                         contentDescription = CarDisplayNameFormatter.format(state.selectedCarName),
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize(),
                     )
-                    CarPreviewLoadingOverlay(
-                        visible = showCarAudioLoading,
-                        onOpenCarPicker = { carPickerExpanded = true },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    CarFavoriteStarButton(
-                        isFavorite = state.selectedCarId in state.favoriteCarIds,
-                        onToggle = { onToggleCarFavorite(state.selectedCarId) },
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp),
-                    )
-                }
-            } else {
-                Box(
-                    modifier = previewModifier
-                        .clickable { carPickerExpanded = true },
-                ) {
+                } else {
                     Image(
                         painter = painterResource(R.drawable.apex_v10_car),
                         contentDescription = CarDisplayNameFormatter.format(state.selectedCarName),
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize(),
                     )
-                    CarPreviewLoadingOverlay(
-                        visible = showCarAudioLoading,
-                        onOpenCarPicker = { carPickerExpanded = true },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    CarFavoriteStarButton(
-                        isFavorite = state.selectedCarId in state.favoriteCarIds,
-                        onToggle = { onToggleCarFavorite(state.selectedCarId) },
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp),
-                    )
                 }
-            }
 
-            CarSelectorArrow("‹", "Previous car", onPreviousCar, Modifier.align(Alignment.CenterStart))
-            CarSelectorArrow("›", "Next car", onNextCar, Modifier.align(Alignment.CenterEnd))
+                CarPreviewLoadingOverlay(
+                    visible = showCarAudioLoading,
+                    onOpenCarPicker = { carPickerExpanded = true },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                CarFavoriteStarButton(
+                    isFavorite = state.selectedCarId in state.favoriteCarIds,
+                    onToggle = { onToggleCarFavorite(state.selectedCarId) },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp),
+                )
+                CarSelectorArrow(
+                    label = "‹",
+                    contentDescription = "Previous car",
+                    onClick = onPreviousCar,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(start = 8.dp),
+                )
+                CarSelectorArrow(
+                    label = "›",
+                    contentDescription = "Next car",
+                    onClick = onNextCar,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 8.dp),
+                )
+            }
         }
     }
 

@@ -151,6 +151,8 @@ private object DashboardLayoutDefaults {
     const val UI_SCALE = 0.8f
     const val TACHOMETER_SCALE = 0.8f
     const val CANVAS_ASPECT_RATIO = 1920f / 990f
+    /** Classic layout keeps the tach as a right-side overlay sized like the old 0.88 row weight. */
+    const val TACHOMETER_OVERLAY_WIDTH_FRACTION = 0.88f / (1.12f + 0.88f)
 }
 
 class MainActivity : ComponentActivity() {
@@ -449,16 +451,13 @@ private fun MotorSoundDashboard(
                     }
 
                     when (mainScreen) {
-                        DashboardMainScreen.CLASSIC -> Box(
+                        DashboardMainScreen.CLASSIC -> BoxWithConstraints(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
                                 .padding(horizontal = 34.dp, vertical = 6.dp),
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
+                            Column(modifier = Modifier.fillMaxSize()) {
                                 CarStage(
                                     state = state,
                                     onPreviousCar = onPreviousCar,
@@ -466,71 +465,65 @@ private fun MotorSoundDashboard(
                                     onSelectCar = onSelectCar,
                                     onToggleCarFavorite = onToggleCarFavorite,
                                     modifier = Modifier
-                                        .weight(1.12f)
-                                        .fillMaxHeight(),
+                                        .fillMaxWidth()
+                                        .weight(1f),
                                 )
-                                Tachometer(
-                                    drivetrain = state.drivetrain,
-                                    transmissionPosition = state.transmissionPosition,
-                                    manualShiftModeEnabled = state.manualShiftModeEnabled,
-                                    maxRpm = state.drivetrain.tachometerMaximumRpm,
-                                    redlineRpm = state.drivetrain.redlineRpm,
-                                    upshiftRpm = state.drivetrain.automaticUpshiftRpm,
-                                    modifier = Modifier
-                                        .weight(0.88f)
-                                        .fillMaxHeight()
-                                        .padding(start = 16.dp, bottom = 6.dp)
-                                        .graphicsLayer {
-                                            scaleX = DashboardLayoutDefaults.TACHOMETER_SCALE
-                                            scaleY = DashboardLayoutDefaults.TACHOMETER_SCALE
-                                        },
-                                )
-                            }
-                            Row(
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .fillMaxWidth()
-                                    .padding(start = 4.dp, end = 4.dp),
-                                verticalAlignment = Alignment.Bottom,
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .padding(start = 8.dp, bottom = 2.dp),
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.Bottom,
                                 ) {
-                                    DashboardEngineControls(
+                                    Column(
+                                        modifier = Modifier.padding(start = 8.dp, bottom = 2.dp),
+                                    ) {
+                                        DashboardEngineControls(
+                                            state = state,
+                                            onMinimumAudioThrottleChange = onMinimumAudioThrottleChange,
+                                            onEngineExternalChange = onEngineExternalChange,
+                                            onEnginePureChange = onEnginePureChange,
+                                            modifier = Modifier.padding(bottom = 6.dp),
+                                        )
+                                        DashboardEffectControls(
+                                            state = state,
+                                            onEnabledChange = onEffectEnabledChange,
+                                            onOverrideChange = onEffectOverrideChange,
+                                            onCategoryGains = onCategoryGains,
+                                        )
+                                    }
+                                    ClassicDriveControls(
                                         state = state,
-                                        onMinimumAudioThrottleChange = onMinimumAudioThrottleChange,
-                                        onEngineExternalChange = onEngineExternalChange,
-                                        onEnginePureChange = onEnginePureChange,
-                                        modifier = Modifier.padding(bottom = 6.dp),
+                                        onThrottle = onThrottle,
+                                        onBrake = onBrake,
+                                        onSimulatedRegen = onSimulatedRegen,
+                                        onToggleSimulatedPedalLatch = { onToggleSimulatedPedalLatch(!state.simulatedPedalsLatched) },
+                                        onTransmissionPositionChange = onTransmissionPositionChange,
+                                        onManualUpshift = onManualUpshift,
+                                        onManualDownshift = onManualDownshift,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(start = 28.dp),
                                     )
-                                    DashboardEffectControls(
-                                        state = state,
-                                        onEnabledChange = onEffectEnabledChange,
-                                        onOverrideChange = onEffectOverrideChange,
-                                        onCategoryGains = onCategoryGains,
+                                    DashboardMixerLauncherButton(
+                                        onClick = { mainScreen = DashboardMainScreen.MIXER },
+                                        modifier = Modifier.padding(end = 4.dp, bottom = 12.dp),
                                     )
                                 }
-                                ClassicDriveControls(
-                                    state = state,
-                                    onThrottle = onThrottle,
-                                    onBrake = onBrake,
-                                    onSimulatedRegen = onSimulatedRegen,
-                                    onToggleSimulatedPedalLatch = { onToggleSimulatedPedalLatch(!state.simulatedPedalsLatched) },
-                                    onTransmissionPositionChange = onTransmissionPositionChange,
-                                    onManualUpshift = onManualUpshift,
-                                    onManualDownshift = onManualDownshift,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxWidth()
-                                        .padding(start = 28.dp),
-                                )
                             }
-                            DashboardMixerLauncherButton(
-                                onClick = { mainScreen = DashboardMainScreen.MIXER },
+                            Tachometer(
+                                drivetrain = state.drivetrain,
+                                transmissionPosition = state.transmissionPosition,
+                                manualShiftModeEnabled = state.manualShiftModeEnabled,
+                                maxRpm = state.drivetrain.tachometerMaximumRpm,
+                                redlineRpm = state.drivetrain.redlineRpm,
+                                upshiftRpm = state.drivetrain.automaticUpshiftRpm,
                                 modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .padding(end = 4.dp, bottom = 12.dp),
+                                    .align(Alignment.CenterEnd)
+                                    .width(maxWidth * DashboardLayoutDefaults.TACHOMETER_OVERLAY_WIDTH_FRACTION)
+                                    .fillMaxHeight()
+                                    .padding(start = 16.dp, bottom = 6.dp)
+                                    .graphicsLayer {
+                                        scaleX = DashboardLayoutDefaults.TACHOMETER_SCALE
+                                        scaleY = DashboardLayoutDefaults.TACHOMETER_SCALE
+                                    },
                             )
                         }
                         DashboardMainScreen.MIXER -> MixerDashboardScreen(

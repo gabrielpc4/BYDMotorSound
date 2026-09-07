@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PACKS_ROOT = ROOT / "fmod_bank_packs"
 INDEX_PATH = PACKS_ROOT / "index.json"
 MAIN_ACTIVITY = "com.gabrielpc.enginesoundsimulator.MainActivity"
+SHARED_DEPENDENCY_IDS = {"assetto-common", "assetto-common-strings"}
 APPS = {
     "original_cars_pack": "com.gabrielpc.enginesoundsimulator.original",
     "modded_car_packs": "com.gabrielpc.enginesoundsimulator.modded",
@@ -118,17 +119,40 @@ def trigger_import(package: str) -> None:
     )
 
 
-def wait_for_import(package: str, group: str, expected: int) -> None:
+def wait_for_import(package: str, group: str, expected: int, dependency_expected: int = 0) -> None:
+    dependency_group = "original_cars_pack"
     print(f"Waiting for {package} to import {group}...")
     while True:
         installed = installed_pack_count(package, group)
         staged = staged_pack_count(package, group)
-        print(f"  installed={installed}/{expected} staged={staged}", flush=True)
-        if installed >= expected and staged == 0:
+        dependency_installed = installed_pack_count(package, dependency_group) if dependency_expected > 0 else 0
+        dependency_staged = staged_pack_count(package, dependency_group) if dependency_expected > 0 else 0
+        if dependency_expected > 0:
+            print(
+                f"  installed={installed}/{expected} staged={staged} "
+                f"shared={dependency_installed}/{dependency_expected} staged_shared={dependency_staged}",
+                flush=True,
+            )
+        else:
+            print(f"  installed={installed}/{expected} staged={staged}", flush=True)
+
+        primary_ready = installed >= expected and staged == 0
+        dependency_ready = dependency_expected == 0 or (
+            dependency_installed >= dependency_expected and dependency_staged == 0
+        )
+        if primary_ready and dependency_ready:
             return
-        if staged == 0 and installed >= max(1, expected - 2):
-            return
+        if staged == 0 and dependency_staged == 0 and installed >= max(1, expected - 2):
+            if dependency_expected == 0 or dependency_installed >= max(1, dependency_expected - 1):
+                return
         time.sleep(5)
+
+
+def dependency_packs(index: dict[str, object]) -> list[dict[str, object]]:
+    return [
+        pack for pack in index["packs"]
+        if pack["active"] and pack["id"] in SHARED_DEPENDENCY_IDS
+    ]
 
 
 def main() -> int:
@@ -141,23 +165,38 @@ def main() -> int:
         return 1
 
     index = json.loads(INDEX_PATH.read_text())
+    shared_dependencies = dependency_packs(index)
     for group, package in APPS.items():
         packs = [pack for pack in index["packs"] if pack["active"] and pack["group"] == group]
         expected = len(packs)
+        dependency_expected = len(shared_dependencies) if group == "modded_car_packs" else 0
         installed = installed_pack_count(package, group)
         staged = staged_pack_count(package, group)
+        dependency_installed = (
+            installed_pack_count(package, "original_cars_pack") if dependency_expected > 0 else 0
+        )
+        dependency_staged = (
+            staged_pack_count(package, "original_cars_pack") if dependency_expected > 0 else 0
+        )
 
-        if installed >= expected and staged == 0:
+        if (
+            installed >= expected
+            and staged == 0
+            and dependency_installed >= dependency_expected
+            and dependency_staged == 0
+        ):
             print(f"{package}: {installed}/{expected} banks already installed.")
             continue
 
-        if staged > 0:
-            print(f"{package}: found {staged} staged bank(s); resuming import.")
+        if staged > 0 or dependency_staged > 0:
+            print(f"{package}: found staged bank(s); resuming import.")
         else:
             push_group(group, package, packs)
+            if dependency_expected > 0:
+                push_group("original_cars_pack", package, shared_dependencies)
 
         trigger_import(package)
-        wait_for_import(package, group, expected)
+        wait_for_import(package, group, expected, dependency_expected)
         print(f"{package}: import finished with {installed_pack_count(package, group)} installed banks.")
 
     trigger_import(APPS["original_cars_pack"])

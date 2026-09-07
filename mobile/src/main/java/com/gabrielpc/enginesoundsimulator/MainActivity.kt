@@ -1165,7 +1165,6 @@ private fun DashboardEngineControls(
     val rowGap = 7.dp
     val cruisingOffsetSteps = (CruisingShiftOffsetByTachMaxRpm.MAX - CruisingShiftOffsetByTachMaxRpm.MIN) /
         CruisingShiftOffsetByTachMaxRpm.STEP - 1
-    val tierLabel = CruisingShiftOffsetByTachMaxRpm.formatTierLabel(state.cruisingShiftOffsetTachMaxRpm)
 
     Row(
         modifier = modifier,
@@ -1188,10 +1187,10 @@ private fun DashboardEngineControls(
         ) {
             DashboardPedalAudioSettingSlider(
                 label = "CRUISING OFFSET",
-                valueLabel = "${state.cruisingShiftOffsetRpm} RPM · $tierLabel",
-                value = state.cruisingShiftOffsetRpm.toFloat(),
+                valueLabel = CruisingShiftOffsetByTachMaxRpm.formatOffsetLabel(state.cruisingShiftOffsetRpm),
+                value = CruisingShiftOffsetByTachMaxRpm.sliderValueFromOffset(state.cruisingShiftOffsetRpm),
                 onValueChange = { value ->
-                    val selectedOffset = CruisingShiftOffsetByTachMaxRpm.normalize(value.roundToInt())
+                    val selectedOffset = CruisingShiftOffsetByTachMaxRpm.offsetFromSliderValue(value)
                     if (selectedOffset != state.cruisingShiftOffsetRpm) {
                         onCruisingShiftOffsetForTachMaxRpmChange(
                             state.cruisingShiftOffsetTachMaxRpm,

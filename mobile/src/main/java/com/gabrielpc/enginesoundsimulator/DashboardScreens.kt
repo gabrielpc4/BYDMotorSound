@@ -1194,7 +1194,7 @@ private fun CruisingShiftOffsetsByTachMaxRpmControl(
                                 fontWeight = FontWeight.Black,
                             )
                             Text(
-                                text = "$offset RPM",
+                                text = CruisingShiftOffsetByTachMaxRpm.formatOffsetLabel(offset),
                                 color = White,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
@@ -1202,9 +1202,9 @@ private fun CruisingShiftOffsetsByTachMaxRpmControl(
                         }
 
                         Slider(
-                            value = offset.toFloat(),
+                            value = CruisingShiftOffsetByTachMaxRpm.sliderValueFromOffset(offset),
                             onValueChange = { value ->
-                                val normalized = CruisingShiftOffsetByTachMaxRpm.normalize(value.roundToInt())
+                                val normalized = CruisingShiftOffsetByTachMaxRpm.offsetFromSliderValue(value)
                                 if (normalized != offset) {
                                     onOffsetChange(tier, normalized)
                                 }

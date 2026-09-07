@@ -49,7 +49,16 @@ internal object CruisingShiftOffsetByTachMaxRpm {
         return "cruising_shift_offset_rpm_$tierRpm"
     }
 
-    fun formatTierLabel(tierRpm: Int): String {
-        return "${tierRpm / 1_000}K MAX"
+    fun formatOffsetLabel(offsetRpm: Int): String {
+        return "-${offsetRpm}RPM"
+    }
+
+    /** Slider position is inverted so dragging left increases the offset magnitude. */
+    fun sliderValueFromOffset(offsetRpm: Int): Float {
+        return (MAX - normalize(offsetRpm)).toFloat()
+    }
+
+    fun offsetFromSliderValue(sliderValue: Float): Int {
+        return normalize((MAX - sliderValue).roundToInt())
     }
 }

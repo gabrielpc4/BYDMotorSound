@@ -94,9 +94,8 @@ internal fun TelemetrySnapshot.resolvedTransmissionPosition(
 internal fun TelemetrySnapshot.gearboxSignalAvailable(): Boolean =
     resolvedTransmissionPosition() != null
 
-internal fun TelemetrySnapshot.transmissionFollowsVehicle(mode: InputMode): Boolean {
-    return mode == InputMode.RealPedals && gearboxSignalAvailable()
-}
+internal fun TelemetrySnapshot.transmissionFollowsVehicle(): Boolean =
+    gearboxSignalAvailable()
 
 internal data class ResolvedTransmissionControl(
     val position: TransmissionPosition,
@@ -106,8 +105,9 @@ internal data class ResolvedTransmissionControl(
 )
 
 /**
- * In REAL pedal mode, the BYD gearbox is the baseline. The driver may override P/N/D in the app
- * until the physical lever moves; any real-world change resynchronizes the manual override too.
+ * When the BYD gearbox is readable, P/N/D follows the physical lever in both REAL and SIMULATED
+ * pedal modes. The driver may override P/N/D in the app until the physical lever moves; any
+ * real-world change resynchronizes the manual override too.
  */
 internal fun resolveTransmissionControl(
     mode: InputMode,
@@ -115,7 +115,7 @@ internal fun resolveTransmissionControl(
     manualPosition: TransmissionPosition,
     lastVehiclePosition: TransmissionPosition?,
 ): ResolvedTransmissionControl {
-    if (!telemetry.transmissionFollowsVehicle(mode)) {
+    if (!telemetry.transmissionFollowsVehicle()) {
         return ResolvedTransmissionControl(
             position = manualPosition,
             lockedToVehicle = false,

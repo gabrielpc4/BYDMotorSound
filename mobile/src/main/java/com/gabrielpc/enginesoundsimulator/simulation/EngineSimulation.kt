@@ -448,9 +448,29 @@ internal fun resolveDriveInput(
             usesSimulatedPedals = false,
         )
     }
+
+    var throttle = simulatedPedalThrottle.coerceIn(0.0, 1.0)
+    var brake = simulatedPedalBrake.coerceIn(0.0, 1.0)
+
+    if (mode == com.gabrielpc.enginesoundsimulator.drive.InputMode.SimulatedPedals) {
+        if (telemetry.accelerator.isValid) {
+            throttle = maxOf(
+                throttle,
+                normalizeVehicleThrottlePercent(telemetry.accelerator.value!!),
+            )
+        }
+
+        if (telemetry.brake.isValid) {
+            brake = maxOf(
+                brake,
+                (telemetry.brake.value!! / 100.0).coerceIn(0.0, 1.0),
+            )
+        }
+    }
+
     return ResolvedDriveInput(
-        throttle = simulatedPedalThrottle.coerceIn(0.0, 1.0),
-        brake = simulatedPedalBrake.coerceIn(0.0, 1.0),
+        throttle = throttle,
+        brake = brake,
         realReportedRawSpeedKmh = null,
         label = com.gabrielpc.enginesoundsimulator.drive.InputMode.SimulatedPedals.displayName,
         usesSimulatedPedals = true,

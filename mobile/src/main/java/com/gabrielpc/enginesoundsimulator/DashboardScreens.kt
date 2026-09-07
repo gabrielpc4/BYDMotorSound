@@ -138,9 +138,9 @@ internal fun DashboardMixerLauncherButton(
         contentDescription = "Mixer",
         tint = Cyan,
         modifier = modifier
-            .clickable(onClick = onClick)
-            .padding(10.dp)
-            .size(44.dp),
+            .size(28.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
     )
 }
 

@@ -157,6 +157,7 @@ private object DashboardLayoutDefaults {
     /** Car preview/header slot matches the old 1.12 row beside the tach. */
     const val CLASSIC_CAR_STAGE_WIDTH_FRACTION = 1.12f / (1.12f + 0.88f)
     val classicContentStartPadding = 8.dp
+    val classicContentEndPadding = 8.dp
 }
 
 private object CarStageTapDefaults {
@@ -526,7 +527,10 @@ private fun MotorSoundDashboard(
                                     )
                                     DashboardMixerLauncherButton(
                                         onClick = { mainScreen = DashboardMainScreen.MIXER },
-                                        modifier = Modifier.padding(end = 4.dp, bottom = 12.dp),
+                                        modifier = Modifier.padding(
+                                            end = DashboardLayoutDefaults.classicContentEndPadding,
+                                            bottom = 12.dp,
+                                        ),
                                     )
                                 }
                             }
@@ -767,9 +771,15 @@ private fun DashboardHeader(
             muted = state.audioMuted,
             onToggle = onToggleAudioMute,
         )
-        IconButton(onClick = onOpenSettings) {
-            Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Cyan)
-        }
+        Icon(
+            imageVector = Icons.Default.Settings,
+            contentDescription = "Settings",
+            tint = Cyan,
+            modifier = Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onOpenSettings),
+        )
     }
 }
 
@@ -1812,9 +1822,7 @@ private fun CarStage(
     }
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(end = 8.dp),
+        modifier = modifier.fillMaxSize(),
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             if (preview != null) {
@@ -1893,6 +1901,7 @@ private fun CarStage(
                     label = "›",
                     contentDescription = "Next car",
                     onClick = onNextCar,
+                    compact = true,
                 )
             }
             CarFavoriteStarButton(
@@ -2024,11 +2033,19 @@ private fun CarSelectorSideTapZone(
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
 ) {
     Box(
         modifier = modifier
-            .fillMaxHeight()
-            .width(CarStageTapDefaults.sideStripWidth)
+            .then(
+                if (compact) {
+                    Modifier.size(CarStageTapDefaults.sideStripWidth)
+                } else {
+                    Modifier
+                        .fillMaxHeight()
+                        .width(CarStageTapDefaults.sideStripWidth)
+                },
+            )
             .clickable(
                 onClick = onClick,
                 indication = null,

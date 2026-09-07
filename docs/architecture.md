@@ -70,8 +70,11 @@ and authored gains. The bridge passes physical RPM, drivetrain speed, boost, BOV
 and lifecycle data without rewriting the authored graph. It also has a small, intentional app
 policy layer which must not be mistaken for bank authoring:
 
-- engine and transmission events receive authored throttle at the full-load endpoint (`1.0`), so
-  pedal position controls the drivetrain rather than attenuating or swapping those load layers;
+- engine events receive authored throttle at the full-load endpoint (`1.0`), so pedal position
+  controls the drivetrain rather than attenuating or swapping those load layers;
+- transmission events receive the driver pedal as their FMOD `throttle` parameter so bank-authored
+  gain automation (for example roughly -38 dB at light pedal and 0 dB at full pedal) stays active;
+- embedded supercharger subsounds inside the engine event are scaled by the same driver pedal;
 - backfire also receives its authored full-load endpoint (`1.0`);
 - the diagnostic host defaults are engine gain `1.0` and effects gain `2.0`; per-car mixer trims
   multiply only transmission, gear-shift, and turbo event families;

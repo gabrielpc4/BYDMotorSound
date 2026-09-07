@@ -34,9 +34,9 @@ constexpr int kFmodDspBlocks = 4;
 constexpr int kFmodLogicalChannelCap = 2048;
 constexpr int kFmodRealChannelCap = 256;
 constexpr int kPerspectiveExterior = 1;
-// Intentional FMOD parity choice: the Lab keeps these authored event inputs at
-// full load. The physical pedal still controls drivetrain simulation, but it
-// must not attenuate or swap the bank's load layers.
+// Engine load layers stay at the authored full-load endpoint so pedal position drives the
+// drivetrain without attenuating or swapping those layers. Transmission and embedded
+// supercharger subsounds follow the driver pedal so FMOD bank automation can modulate them.
 constexpr float kFullLoadAudioThrottle = 1.0f;
 // Backfire is authored as a lift-off one-shot: its throttle automation fades it to roughly
 // -38 dB above the 0.75 point. Keep the continuous engine at full-load, but feed this event the
@@ -810,9 +810,13 @@ public:
             tractionPulseCount > 0,
             simulationFrameId
         );
-        const float targetThrottle = effectiveAudioThrottleLocked(cleanThrottle);
-        const float effectiveThrottle = rampPedalAudioThrottleLocked(targetThrottle, cleanDt);
-        applyPedalAudioThrottleLocked(effectiveThrottle);
+        const float engineThrottle = effectiveAudioThrottleLocked(kFullLoadAudioThrottle);
+        const float transmissionTarget = cleanThrottle;
+        const float transmissionThrottle = rampTransmissionAudioThrottleLocked(transmissionTarget, cleanDt);
+        applyEngineAudioThrottleLocked(engineThrottle);
+        applyTransmissionAudioThrottleLocked(transmissionThrottle);
+        effectsPedalThrottle_ = transmissionThrottle;
+        applyEmbeddedEngineChannelGainsLocked();
         if (perspective != perspective_) {
             switchPerspectiveLocked(perspective);
         }
@@ -1407,7 +1411,9 @@ private:
         traceRpm_ = 0.0f;
         traceDrivetrainSpeed_ = 0.0f;
         traceThrottle_ = 0.0f;
-        smoothedPedalAudioThrottle_ = minimumAudioThrottle_;
+        smoothedEngineAudioThrottle_ = minimumAudioThrottle_;
+        smoothedTransmissionAudioThrottle_ = 0.0f;
+        effectsPedalThrottle_ = 0.0f;
         traceBoostNormalized_ = 0.0f;
         traceBoostAbsolute_ = 0.0f;
         traceBov_ = 0.0f;
@@ -1685,7 +1691,7 @@ private:
         }
         const float engineHost = std::max(hostGainForEventLocked(eventName), 0.0001f);
         if (isSuperchargerSoundName(soundName)) {
-            return (hostEffectsGain_ * superchargerGain_) / engineHost;
+            return (hostEffectsGain_ * superchargerGain_ * effectsPedalThrottle_) / engineHost;
         }
         if (!isLimiterSoundName(soundName)) {
             return 1.0f;
@@ -1886,7 +1892,9 @@ private:
         limiterRunning_ = false;
         limiterDecay_ = 10.0f;
         tractionDecay_ = 10.0f;
-        smoothedPedalAudioThrottle_ = minimumAudioThrottle_;
+        smoothedEngineAudioThrottle_ = minimumAudioThrottle_;
+        smoothedTransmissionAudioThrottle_ = 0.0f;
+        effectsPedalThrottle_ = 0.0f;
         setDiagnosticsEnabledLocked(false);
         nextVoiceSerial_ = 1;
     }
@@ -2168,10 +2176,10 @@ private:
         return std::clamp(std::max(throttle, minimumAudioThrottle_), 0.0f, 1.0f);
     }
 
-    float rampPedalAudioThrottleLocked(float target, float dt) {
-        const float delta = target - smoothedPedalAudioThrottle_;
+    float rampTowardLocked(float& smoothed, float target, float dt, float spanMin, float spanMax) {
+        const float delta = target - smoothed;
         if (std::abs(delta) <= 1e-4f) {
-            smoothedPedalAudioThrottle_ = target;
+            smoothed = target;
             return target;
         }
 
@@ -2179,33 +2187,51 @@ private:
             ? pedalAudioThrottleRampUpSeconds_
             : pedalAudioThrottleRampDownSeconds_;
         if (rampSeconds <= 1e-4f) {
-            smoothedPedalAudioThrottle_ = target;
+            smoothed = target;
             return target;
         }
 
-        const float rampSpan = std::max(1e-4f, kFullLoadAudioThrottle - minimumAudioThrottle_);
+        const float rampSpan = std::max(1e-4f, spanMax - spanMin);
         const float maxStep = (dt / rampSeconds) * rampSpan;
         if (delta > 0.0f) {
-            smoothedPedalAudioThrottle_ = std::min(target, smoothedPedalAudioThrottle_ + maxStep);
+            smoothed = std::min(target, smoothed + maxStep);
         } else {
-            smoothedPedalAudioThrottle_ = std::max(target, smoothedPedalAudioThrottle_ - maxStep);
+            smoothed = std::max(target, smoothed - maxStep);
         }
 
-        return smoothedPedalAudioThrottle_;
+        return smoothed;
     }
 
-    void applyPedalAudioThrottleLocked(float throttle) {
+    float rampTransmissionAudioThrottleLocked(float target, float dt) {
+        return rampTowardLocked(
+            smoothedTransmissionAudioThrottle_,
+            std::clamp(target, 0.0f, 1.0f),
+            dt,
+            0.0f,
+            kFullLoadAudioThrottle
+        );
+    }
+
+    void applyEngineAudioThrottleLocked(float throttle) {
         const std::string selectedEngine = perspectiveEventLocked("engine_int", "engine_ext");
+        const float clamped = std::clamp(throttle, 0.0f, 1.0f);
+        if (!selectedEngine.empty()) {
+            setParameterQuietly(selectedEngine, "throttle", clamped);
+        }
+    }
+
+    void applyTransmissionAudioThrottleLocked(float throttle) {
         const std::string selectedTransmission = perspectiveEventLocked("transmission", "transmission_ext");
         const float clamped = std::clamp(throttle, 0.0f, 1.0f);
-        if (!selectedEngine.empty()) setParameterQuietly(selectedEngine, "throttle", clamped);
-        if (!selectedTransmission.empty()) setParameterQuietly(selectedTransmission, "throttle", clamped);
+        if (!selectedTransmission.empty()) {
+            setParameterQuietly(selectedTransmission, "throttle", clamped);
+        }
     }
 
     void applyMinimumAudioThrottleLocked() {
-        const float target = effectiveAudioThrottleLocked(traceThrottle_);
-        smoothedPedalAudioThrottle_ = target;
-        applyPedalAudioThrottleLocked(smoothedPedalAudioThrottle_);
+        const float engineTarget = effectiveAudioThrottleLocked(kFullLoadAudioThrottle);
+        smoothedEngineAudioThrottle_ = engineTarget;
+        applyEngineAudioThrottleLocked(smoothedEngineAudioThrottle_);
     }
 
     void applyAudioThrottlePolicyLocked() {
@@ -2235,10 +2261,11 @@ private:
             stopEventLocked(oldTransmission, FMOD_STUDIO_STOP_ALLOWFADEOUT);
             startEventLocked(newTransmission);
         }
-        // The selected continuous graph can change while the pedal is steady. Reapply its
-        // authored full-load endpoint rather than inheriting the bank default for a frame after
-        // a cabin/exterior transition. A backfire endpoint is written only when that one-shot starts.
+        // The selected continuous graph can change while the pedal is steady. Reapply the engine
+        // full-load endpoint rather than inheriting the bank default for a frame after a
+        // cabin/exterior transition. Transmission keeps its current pedal-driven throttle.
         applyAudioThrottlePolicyLocked();
+        applyTransmissionAudioThrottleLocked(smoothedTransmissionAudioThrottle_);
         applySpatialAttributesLocked();
     }
 
@@ -2650,7 +2677,9 @@ private:
     bool active_ = false;
     bool exteriorPureAudio_ = false;
     float minimumAudioThrottle_ = 1.0f;
-    float smoothedPedalAudioThrottle_ = 1.0f;
+    float smoothedEngineAudioThrottle_ = 1.0f;
+    float smoothedTransmissionAudioThrottle_ = 0.0f;
+    float effectsPedalThrottle_ = 0.0f;
     float pedalAudioThrottleRampUpSeconds_ = 0.1f;
     float pedalAudioThrottleRampDownSeconds_ = 0.1f;
     bool hasTurbo_ = false;

@@ -84,7 +84,7 @@ internal class NativeFmodBankBridge {
     /** Neutralizes exterior 3D distance/pan while preserving authored Studio events and DSP. */
     external fun setExteriorPureAudio(enabled: Boolean)
 
-    /** Lower bound applied to FMOD engine/transmission throttle parameters. */
+    /** Lower bound applied to the FMOD engine throttle parameter only. */
     external fun setMinimumAudioThrottle(minimum: Float)
 
     /** Separate ramp durations for FMOD pedal throttle across the minimum→full span. */

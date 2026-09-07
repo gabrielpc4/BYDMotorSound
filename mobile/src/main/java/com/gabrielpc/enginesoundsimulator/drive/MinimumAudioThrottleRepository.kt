@@ -4,7 +4,7 @@ import android.content.Context
 import com.gabrielpc.enginesoundsimulator.AppPreferenceStores
 import kotlin.math.roundToInt
 
-/** Lower bound applied to FMOD engine/transmission throttle parameters. */
+/** Lower bound applied to the FMOD engine throttle parameter only. */
 internal object MinimumAudioThrottle {
     const val MIN = 0.0f
     const val MAX = 1.0f

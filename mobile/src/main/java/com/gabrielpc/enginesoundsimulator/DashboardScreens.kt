@@ -1147,7 +1147,7 @@ private fun AutomaticTransmissionSettingsControl(
             )
         }
         Text(
-            text = "Lower bound applied to FMOD engine and transmission throttle parameters.",
+            text = "Lower bound applied to the FMOD engine throttle parameter. Transmission and supercharger follow the driver pedal directly.",
             color = Muted,
             fontSize = 12.sp,
             lineHeight = 16.sp,

@@ -119,7 +119,6 @@ internal class AssettoDrivetrain(
     private var launchControlArmedElapsedSeconds = 0.0
     private var launchControlArmedStartRpm = physics.engine.idleRpm
     private var launchControlDisarmElapsedSeconds = 0.0
-    private var launchControlDisarmStartRpm = physics.engine.idleRpm
     private var launchControlTachCycleElapsedSeconds = 0.0
     private var launchControlTachCycleStartRpm = physics.engine.idleRpm
     private var previousLaunchControlPhase = LaunchControlPhase.INACTIVE
@@ -1668,7 +1667,6 @@ internal class AssettoDrivetrain(
         launchControlArmedElapsedSeconds = 0.0
         launchControlArmedStartRpm = physics.engine.idleRpm
         launchControlDisarmElapsedSeconds = 0.0
-        launchControlDisarmStartRpm = physics.engine.idleRpm
         launchControlTachCycleElapsedSeconds = 0.0
         launchControlTachCycleStartRpm = physics.engine.idleRpm
         clearLaunchProfileReturnState()
@@ -1702,7 +1700,6 @@ internal class AssettoDrivetrain(
         }
         if (launchControlPhase == LaunchControlPhase.DISARMING && previousPhase == LaunchControlPhase.ARMED) {
             launchControlDisarmElapsedSeconds = 0.0
-            launchControlDisarmStartRpm = rpm
         }
         if (launchControlPhase == LaunchControlPhase.LAUNCHED && previousPhase != LaunchControlPhase.LAUNCHED) {
             launchControlTachCycleElapsedSeconds = 0.0
@@ -1716,18 +1713,18 @@ internal class AssettoDrivetrain(
 
             LaunchControlPhase.DISARMING -> {
                 launchControlDisarmElapsedSeconds += dt
-                val target = LaunchControl.disarmTargetRpm(
-                    disarmElapsedSeconds = launchControlDisarmElapsedSeconds,
-                    startRpm = launchControlDisarmStartRpm,
-                    endRpm = launchControlArmedStartRpm,
-                )
-                // The legacy main-branch path replaced the natural free-rev integration while
-                // disarming. Assign the target directly so the engine torque step cannot add RPM
-                // again before the next launch-control sample.
-                rpm = target.coerceIn(physics.engine.idleRpm, physics.engine.limiterRpm)
-                if (launchControlDisarmElapsedSeconds >= LaunchControl.ARMED_RAMP_SECONDS) {
+                val target = launchControlArmedStartRpm.coerceIn(physics.engine.idleRpm, physics.engine.limiterRpm)
+                rpm = approachRpm(target, LaunchControl.DISARM_RESPONSE_SECONDS, dt)
+                val settled = LaunchControl.disarmSettled(rpm, target)
+                if (
+                    settled &&
+                    launchControlDisarmElapsedSeconds >= LaunchControl.DISARM_MIN_SECONDS
+                ) {
                     launchControlPhase = LaunchControlPhase.INACTIVE
-                    rpm = launchControlArmedStartRpm.coerceIn(physics.engine.idleRpm, physics.engine.limiterRpm)
+                    rpm = target
+                } else if (launchControlDisarmElapsedSeconds >= LaunchControl.DISARM_MAX_SECONDS) {
+                    launchControlPhase = LaunchControlPhase.INACTIVE
+                    rpm = target
                 }
             }
 

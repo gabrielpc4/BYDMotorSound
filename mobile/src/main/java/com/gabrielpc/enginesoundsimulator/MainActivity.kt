@@ -2297,7 +2297,8 @@ private fun TachometerGauge(
                     showAutomaticTransmissionMode &&
                     cruisingShiftRangeOverlayEnabled &&
                     cruisingLogicEnabled &&
-                    drivetrain.automaticTransmissionMode == AutomaticTransmissionMode.CRUISING
+                    drivetrain.automaticTransmissionMode == AutomaticTransmissionMode.CRUISING &&
+                    drivetrain.gear > 1
                 ) {
                     drawCruisingShiftRangeOverlay(
                         center = center,
@@ -2428,7 +2429,6 @@ private fun DrawScope.drawCruisingShiftRangeOverlay(
     val downFraction = (downshiftRpm / gaugeMaxRpm).toFloat().coerceIn(0f, 1f)
     val downAngle = startAngle + sweepAngle * downFraction
     val outerRadius = radius * 0.92f
-    val shiftColor = Color(0xFF7A1E22)
     val upFraction = (upshiftRpm / gaugeMaxRpm).toFloat().coerceIn(0f, 1f)
     val upAngle = startAngle + sweepAngle * upFraction
     val wedgeSweep = upAngle - downAngle
@@ -2457,7 +2457,7 @@ private fun DrawScope.drawCruisingShiftRangeOverlay(
 
     drawPath(
         path = wedgePath,
-        color = shiftColor.copy(alpha = 0.38f),
+        color = Cyan.copy(alpha = 0.22f),
     )
 }
 

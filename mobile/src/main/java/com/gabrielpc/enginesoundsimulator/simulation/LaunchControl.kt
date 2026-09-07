@@ -38,6 +38,11 @@ internal object LaunchControl {
     const val ARMED_RAMP_SECONDS = 0.42
     const val ARMED_OVERSHOOT_RPM = 165.0
     const val ARMED_SETTLE_SECONDS = 0.34
+    /** Exponential time constant while staging RPM falls back after throttle is lifted. */
+    const val DISARM_RESPONSE_SECONDS = 1.35
+    const val DISARM_MIN_SECONDS = 0.40
+    const val DISARM_MAX_SECONDS = 3.5
+    const val DISARM_SETTLE_RPM = 40.0
     const val ARMED_RAMP_FOLLOW_SECONDS = 0.11
     const val ARMED_JITTER_FOLLOW_SECONDS = 0.055
     const val LAUNCHED_ENGINE_BRAKE_RESPONSE_SECONDS = 0.22
@@ -69,14 +74,8 @@ internal object LaunchControl {
         return HOLD_RPM + overshoot + jitter
     }
 
-    fun disarmTargetRpm(
-        disarmElapsedSeconds: Double,
-        startRpm: Double,
-        endRpm: Double,
-    ): Double {
-        val fraction = (disarmElapsedSeconds / ARMED_RAMP_SECONDS).coerceIn(0.0, 1.0)
-        val eased = 1.0 - (1.0 - fraction).pow(3.0)
-        return startRpm - eased * (startRpm - endRpm)
+    fun disarmSettled(currentRpm: Double, targetRpm: Double): Boolean {
+        return kotlin.math.abs(currentRpm - targetRpm) <= DISARM_SETTLE_RPM
     }
 
     fun shouldPlayLaunchTachAnimation(gearIndex: Int, throttle: Double): Boolean {

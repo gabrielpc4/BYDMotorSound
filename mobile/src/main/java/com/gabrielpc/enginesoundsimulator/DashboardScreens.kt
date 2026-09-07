@@ -35,9 +35,11 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
@@ -1355,11 +1357,6 @@ internal fun CarGridSelectionDialog(
     val visibleProfiles = remember(groupProfiles, searchQuery) {
         groupProfiles.filter { profile -> carPickerProfileMatchesSearch(profile, searchQuery) }
     }
-    val installedCountLabel = if (searchQuery.isBlank()) {
-        "${groupProfiles.size} INSTALLED"
-    } else {
-        "${visibleProfiles.size} OF ${groupProfiles.size} INSTALLED"
-    }
     val focusManager = LocalFocusManager.current
     LaunchedEffect(Unit) {
         delay(1)
@@ -1372,23 +1369,47 @@ internal fun CarGridSelectionDialog(
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .fillMaxHeight(0.84f)
+                .fillMaxWidth(0.96f)
+                .fillMaxHeight(0.96f)
                 .clip(RoundedCornerShape(14.dp))
                 .background(PanelBright)
                 .border(1.dp, Line, RoundedCornerShape(14.dp))
                 .padding(18.dp),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                Text("SELECT CAR", color = CyanSoft, fontSize = 18.sp, fontWeight = FontWeight.Black, letterSpacing = 1.2.sp)
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp, bottom = 8.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    if (showGroupFilters) {
+                    Text(
+                        text = "SELECT CAR",
+                        color = CyanSoft,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.2.sp,
+                    )
+                    CarPickerSearchField(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = "Close car picker",
+                            tint = White,
+                        )
+                    }
+                }
+                if (showGroupFilters) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp, bottom = 8.dp),
+                    ) {
                         listOf(
                             FmodBankProfiles.moddedCarsPackId to "MODDED CARS",
                             FmodBankProfiles.originalCarsPackId to "ORIGINAL CARS",
@@ -1412,19 +1433,9 @@ internal fun CarGridSelectionDialog(
                             }
                         }
                     }
-                    CarPickerSearchField(
-                        query = searchQuery,
-                        onQueryChange = { searchQuery = it },
-                        modifier = Modifier.weight(1f),
-                    )
+                } else {
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
-                Text(
-                    text = installedCountLabel,
-                    color = Muted,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 2.dp, bottom = 12.dp),
-                )
                 LazyVerticalGrid(
                     // Choose as many cards as fit at runtime; this remains usable on both the
                     // 1920x1080 emulator and narrower vehicle displays.

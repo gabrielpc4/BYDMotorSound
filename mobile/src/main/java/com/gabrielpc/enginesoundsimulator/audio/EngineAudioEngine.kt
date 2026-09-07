@@ -383,6 +383,7 @@ class EngineAudioEngine(context: Context) {
                 perspective = soundPerspective.get().ordinal,
                 hasTurbo = physics.engine.turbos.isNotEmpty(),
                 idleRpm = physics.engine.idleRpm.toFloat(),
+                limiterRpm = physics.engine.limiterRpm.toFloat(),
                 spatial = physics.nativeFmodSpatialCoordinates(),
                 // Debug capture is explicitly armed through ADB. It replaces the previous
                 // always-on Logcat trace so normal debug drives do not format high-rate strings.

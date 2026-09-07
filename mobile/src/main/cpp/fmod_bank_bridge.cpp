@@ -34,10 +34,10 @@ constexpr int kFmodDspBlocks = 4;
 constexpr int kFmodLogicalChannelCap = 2048;
 constexpr int kFmodRealChannelCap = 256;
 constexpr int kPerspectiveExterior = 1;
-// Engine load layers stay at the authored full-load endpoint so pedal position drives the
-// drivetrain without attenuating or swapping those layers. Transmission and embedded
-// supercharger subsounds follow the driver pedal so FMOD bank automation can modulate them.
+// Engine load layers stay at the authored full-load endpoint. Transmission and embedded
+// supercharger subsounds follow RPM: minimum at idle, full gain from 90% of idle-to-limiter.
 constexpr float kFullLoadAudioThrottle = 1.0f;
+constexpr float kEffectsFullGainRpmFraction = 0.9f;
 // Backfire is authored as a lift-off one-shot: its throttle automation fades it to roughly
 // -38 dB above the 0.75 point. Keep the continuous engine at full-load, but feed this event the
 // low-throttle endpoint so a triggered backfire is actually audible instead of merely appearing
@@ -639,6 +639,7 @@ public:
         int perspective,
         bool hasTurbo,
         float idleRpm,
+        float limiterRpm,
         const std::array<float, 12>& spatial,
         bool diagnosticsEnabled
     ) {
@@ -743,6 +744,7 @@ public:
         perspective_ = perspective;
         hasTurbo_ = hasTurbo;
         idleRpm_ = std::max(1.0f, idleRpm);
+        limiterRpm_ = std::max(idleRpm_ + 1.0f, limiterRpm);
         setListenerLocked();
         startSelectedContinuousEventsLocked();
         // Establish the normal FMOD lifecycle before delivering the first physical values:
@@ -811,11 +813,11 @@ public:
             simulationFrameId
         );
         const float engineThrottle = effectiveAudioThrottleLocked(kFullLoadAudioThrottle);
-        const float transmissionTarget = cleanThrottle;
-        const float transmissionThrottle = rampTransmissionAudioThrottleLocked(transmissionTarget, cleanDt);
+        const float effectsLoadTarget = effectsLoadFromRpmLocked(cleanRpm);
+        const float effectsLoad = rampEffectsLoadLocked(effectsLoadTarget, cleanDt);
         applyEngineAudioThrottleLocked(engineThrottle);
-        applyTransmissionAudioThrottleLocked(transmissionThrottle);
-        effectsPedalThrottle_ = transmissionThrottle;
+        applyTransmissionAudioThrottleLocked(effectsLoad);
+        effectsLoadFromRpm_ = effectsLoad;
         applyEmbeddedEngineChannelGainsLocked();
         if (perspective != perspective_) {
             switchPerspectiveLocked(perspective);
@@ -1412,8 +1414,8 @@ private:
         traceDrivetrainSpeed_ = 0.0f;
         traceThrottle_ = 0.0f;
         smoothedEngineAudioThrottle_ = minimumAudioThrottle_;
-        smoothedTransmissionAudioThrottle_ = 0.0f;
-        effectsPedalThrottle_ = 0.0f;
+        smoothedEffectsLoad_ = 0.0f;
+        effectsLoadFromRpm_ = 0.0f;
         traceBoostNormalized_ = 0.0f;
         traceBoostAbsolute_ = 0.0f;
         traceBov_ = 0.0f;
@@ -1691,7 +1693,7 @@ private:
         }
         const float engineHost = std::max(hostGainForEventLocked(eventName), 0.0001f);
         if (isSuperchargerSoundName(soundName)) {
-            return (hostEffectsGain_ * superchargerGain_ * effectsPedalThrottle_) / engineHost;
+            return (hostEffectsGain_ * superchargerGain_ * effectsLoadFromRpm_) / engineHost;
         }
         if (!isLimiterSoundName(soundName)) {
             return 1.0f;
@@ -1889,12 +1891,13 @@ private:
         hasEmbeddedSupercharger_.store(false, std::memory_order_relaxed);
         superchargerGain_ = 1.0f;
         idleRpm_ = 1000.0f;
+        limiterRpm_ = 7000.0f;
         limiterRunning_ = false;
         limiterDecay_ = 10.0f;
         tractionDecay_ = 10.0f;
         smoothedEngineAudioThrottle_ = minimumAudioThrottle_;
-        smoothedTransmissionAudioThrottle_ = 0.0f;
-        effectsPedalThrottle_ = 0.0f;
+        smoothedEffectsLoad_ = 0.0f;
+        effectsLoadFromRpm_ = 0.0f;
         setDiagnosticsEnabledLocked(false);
         nextVoiceSerial_ = 1;
     }
@@ -2202,9 +2205,25 @@ private:
         return smoothed;
     }
 
-    float rampTransmissionAudioThrottleLocked(float target, float dt) {
+    float effectsLoadFromRpmLocked(float rpm) const {
+        const float idle = idleRpm_;
+        const float limit = limiterRpm_;
+        const float span = limit - idle;
+        if (span <= 1e-3f) {
+            return 1.0f;
+        }
+
+        const float normalized = std::clamp((rpm - idle) / span, 0.0f, 1.0f);
+        if (normalized >= kEffectsFullGainRpmFraction) {
+            return 1.0f;
+        }
+
+        return normalized / kEffectsFullGainRpmFraction;
+    }
+
+    float rampEffectsLoadLocked(float target, float dt) {
         return rampTowardLocked(
-            smoothedTransmissionAudioThrottle_,
+            smoothedEffectsLoad_,
             std::clamp(target, 0.0f, 1.0f),
             dt,
             0.0f,
@@ -2261,11 +2280,10 @@ private:
             stopEventLocked(oldTransmission, FMOD_STUDIO_STOP_ALLOWFADEOUT);
             startEventLocked(newTransmission);
         }
-        // The selected continuous graph can change while the pedal is steady. Reapply the engine
-        // full-load endpoint rather than inheriting the bank default for a frame after a
-        // cabin/exterior transition. Transmission keeps its current pedal-driven throttle.
+        // Reapply the engine full-load endpoint after a cabin/exterior transition. Transmission
+        // keeps its current RPM-driven load factor.
         applyAudioThrottlePolicyLocked();
-        applyTransmissionAudioThrottleLocked(smoothedTransmissionAudioThrottle_);
+        applyTransmissionAudioThrottleLocked(smoothedEffectsLoad_);
         applySpatialAttributesLocked();
     }
 
@@ -2678,12 +2696,13 @@ private:
     bool exteriorPureAudio_ = false;
     float minimumAudioThrottle_ = 1.0f;
     float smoothedEngineAudioThrottle_ = 1.0f;
-    float smoothedTransmissionAudioThrottle_ = 0.0f;
-    float effectsPedalThrottle_ = 0.0f;
+    float smoothedEffectsLoad_ = 0.0f;
+    float effectsLoadFromRpm_ = 0.0f;
     float pedalAudioThrottleRampUpSeconds_ = 0.1f;
     float pedalAudioThrottleRampDownSeconds_ = 0.1f;
     bool hasTurbo_ = false;
     float idleRpm_ = 1000.0f;
+    float limiterRpm_ = 7000.0f;
     bool limiterRunning_ = false;
     std::atomic<bool> diagnosticsEnabled_{false};
     std::mutex diagnosticMutex_;
@@ -2780,6 +2799,7 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_open(
     jint perspective,
     jboolean hasTurbo,
     jfloat idleRpm,
+    jfloat limiterRpm,
     jfloatArray spatial,
     jboolean diagnosticsEnabled
 ) {
@@ -2793,6 +2813,7 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_open(
             perspective,
             hasTurbo == JNI_TRUE,
             idleRpm,
+            limiterRpm,
             spatialArray(environment, spatial),
             diagnosticsEnabled == JNI_TRUE
         )

@@ -17,6 +17,7 @@ internal class NativeFmodBankBridge {
         perspective: Int,
         hasTurbo: Boolean,
         idleRpm: Float,
+        limiterRpm: Float,
         spatial: FloatArray,
         diagnosticsEnabled: Boolean,
     ): String?

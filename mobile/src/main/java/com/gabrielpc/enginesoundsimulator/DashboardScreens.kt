@@ -247,142 +247,229 @@ internal fun MixerDashboardScreen(
             onSelectCar = onSelectCar,
             onToggleCarFavorite = onToggleCarFavorite,
         )
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(8.dp))
         var engineGain by remember(state.engineHostGain) { mutableStateOf(state.engineHostGain) }
         var effectsGain by remember(state.effectsHostGain) { mutableStateOf(state.effectsHostGain) }
-        MixerPerspectiveSelector(
-            perspective = soundPerspective,
-            onPerspectiveSelected = onSoundPerspectiveChange,
-            engineGain = engineGain,
-            effectsGain = effectsGain,
-            onHostGains = { engine, effects ->
-                engineGain = engine
-                effectsGain = effects
-                onHostGains(engine, effects)
-            },
-        )
-        Spacer(Modifier.height(20.dp))
-        BoxWithConstraints(
+        Row(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            val columnCount = (maxWidth.value / 390f).toInt().coerceIn(1, 4)
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = MIXER_PEDALS_OVERLAY_HEIGHT),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+            BoxWithConstraints(
+                modifier = Modifier
+                    .weight(0.58f)
+                    .fillMaxHeight(),
             ) {
-                sections.forEach { (section, sources) ->
-                    item(key = "section-${section.name}") {
-                        Text(
-                            text = section.displayName,
-                            color = CyanSoft,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 1.sp,
-                            modifier = Modifier.padding(top = 2.dp, start = 2.dp),
-                        )
-                    }
-                    items(sources.chunked(columnCount), key = { row -> "${state.selectedCarId}-${soundPerspective.name}-" + row.joinToString { it.id } }) { row ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            row.forEach { source ->
-                                FmodSourceMeter(
-                                    source = source,
-                                    highlight = source.id in highlightedIds,
-                                    muted = mutedEvents[source.eventName] == true,
-                                    soloed = soloedEvents[source.eventName] == true,
-                                    onMute = { muted ->
-                                        mutedEvents = mutedEvents + (source.eventName to muted)
-                                        onEventMute(source.eventName, muted)
-                                    },
-                                    onSolo = { solo ->
-                                        soloedEvents = soloedEvents + (source.eventName to solo)
-                                        onEventSolo(source.eventName, solo)
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                )
+                val columnCount = (maxWidth.value / 390f).toInt().coerceIn(1, 2)
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    sections.forEach { (section, sources) ->
+                        item(key = "section-${section.name}") {
+                            Text(
+                                text = section.displayName,
+                                color = CyanSoft,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 1.sp,
+                                modifier = Modifier.padding(top = 2.dp, start = 2.dp),
+                            )
+                        }
+                        items(sources.chunked(columnCount), key = { row -> "${state.selectedCarId}-${soundPerspective.name}-" + row.joinToString { it.id } }) { row ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                row.forEach { source ->
+                                    FmodSourceMeter(
+                                        source = source,
+                                        highlight = source.id in highlightedIds,
+                                        muted = mutedEvents[source.eventName] == true,
+                                        soloed = soloedEvents[source.eventName] == true,
+                                        onMute = { muted ->
+                                            mutedEvents = mutedEvents + (source.eventName to muted)
+                                            onEventMute(source.eventName, muted)
+                                        },
+                                        onSolo = { solo ->
+                                            soloedEvents = soloedEvents + (source.eventName to solo)
+                                            onEventSolo(source.eventName, solo)
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                                repeat(columnCount - row.size) {
+                                    Spacer(Modifier.weight(1f))
+                                }
                             }
-                            repeat(columnCount - row.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }
             }
-            MixerDriveControls(
-                state = state,
-                onThrottle = onThrottle,
-                onBrake = onBrake,
-                onSimulatedRegen = onSimulatedRegen,
-                onToggleSimulatedPedalLatch = onToggleSimulatedPedalLatch,
-                onTransmissionPositionChange = onTransmissionPositionChange,
-                onManualUpshift = onManualUpshift,
-                onManualDownshift = onManualDownshift,
+            Column(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = 2.dp),
-            )
+                    .weight(0.42f)
+                    .fillMaxHeight(),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                MixerControlsPanel(
+                    perspective = soundPerspective,
+                    onPerspectiveSelected = onSoundPerspectiveChange,
+                    engineGain = engineGain,
+                    effectsGain = effectsGain,
+                    onHostGains = { engine, effects ->
+                        engineGain = engine
+                        effectsGain = effects
+                        onHostGains(engine, effects)
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                )
+                MixerPedalsPanel(
+                    state = state,
+                    onThrottle = onThrottle,
+                    onBrake = onBrake,
+                    onSimulatedRegen = onSimulatedRegen,
+                    onToggleSimulatedPedalLatch = onToggleSimulatedPedalLatch,
+                    onTransmissionPositionChange = onTransmissionPositionChange,
+                    onManualUpshift = onManualUpshift,
+                    onManualDownshift = onManualDownshift,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun MixerPerspectiveSelector(
+private fun MixerControlsPanel(
     perspective: EngineSoundPerspective,
     onPerspectiveSelected: (EngineSoundPerspective) -> Unit,
     engineGain: Float,
     effectsGain: Float,
     onHostGains: (Float, Float) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Row(
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Panel)
+            .border(1.dp, Line, RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "LISTENING",
+                color = Muted,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+            )
+            Spacer(Modifier.width(10.dp))
+            EngineSoundPerspective.entries.forEach { option ->
+                val active = option == perspective
+                Text(
+                    text = option.displayName,
+                    color = if (active) Cyan else Muted,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(if (active) Cyan.copy(alpha = 0.14f) else Color.Transparent)
+                        .clickable { onPerspectiveSelected(option) }
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                )
+            }
+        }
+        MixerHostGainSlider(
+            label = "ENGINE",
+            value = engineGain,
+            valueRange = 0.5f..3f,
+            steps = 4,
+            onValueChange = { onHostGains(it, effectsGain) },
+        )
+        MixerHostGainSlider(
+            label = "EFFECTS",
+            value = effectsGain,
+            valueRange = 0.5f..4f,
+            steps = 6,
+            onValueChange = { onHostGains(engineGain, it) },
+        )
+    }
+}
+
+@Composable
+private fun MixerHostGainSlider(
+    label: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    onValueChange: (Float) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label,
+                color = CyanSoft,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 0.8.sp,
+            )
+            Text(
+                text = String.format(Locale.US, "%.1fx", value),
+                color = White,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            steps = steps,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun MixerPedalsPanel(
+    state: DriveSnapshot,
+    onThrottle: (Double) -> Unit,
+    onBrake: (Double) -> Unit,
+    onSimulatedRegen: (Double) -> Unit,
+    onToggleSimulatedPedalLatch: () -> Unit,
+    onTransmissionPositionChange: (TransmissionPosition) -> Unit,
+    onManualUpshift: () -> Unit,
+    onManualDownshift: () -> Unit,
+) {
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(Panel)
             .border(1.dp, Line, RoundedCornerShape(8.dp))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        contentAlignment = Alignment.CenterEnd,
     ) {
-        Text(
-            text = "LISTENING",
-            color = Muted,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp,
-        )
-        Spacer(Modifier.width(10.dp))
-        EngineSoundPerspective.entries.forEach { option ->
-            val active = option == perspective
-            Text(
-                text = option.displayName,
-                color = if (active) Cyan else Muted,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Black,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(if (active) Cyan.copy(alpha = 0.14f) else Color.Transparent)
-                    .clickable { onPerspectiveSelected(option) }
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            )
-        }
-        Spacer(Modifier.weight(1f))
-        Text("ENGINE ${String.format(Locale.US, "%.1fx", engineGain)}", color = CyanSoft, fontSize = 11.sp)
-        Slider(
-            value = engineGain,
-            onValueChange = { onHostGains(it, effectsGain) },
-            valueRange = 0.5f..3f,
-            steps = 4,
-            modifier = Modifier.width(220.dp),
-        )
-        Text("EFFECTS ${String.format(Locale.US, "%.1fx", effectsGain)}", color = CyanSoft, fontSize = 11.sp)
-        Slider(
-            value = effectsGain,
-            onValueChange = { onHostGains(engineGain, it) },
-            valueRange = 0.5f..4f,
-            steps = 6,
-            modifier = Modifier.width(220.dp),
+        MixerDriveControls(
+            state = state,
+            onThrottle = onThrottle,
+            onBrake = onBrake,
+            onSimulatedRegen = onSimulatedRegen,
+            onToggleSimulatedPedalLatch = onToggleSimulatedPedalLatch,
+            onTransmissionPositionChange = onTransmissionPositionChange,
+            onManualUpshift = onManualUpshift,
+            onManualDownshift = onManualDownshift,
         )
     }
 }
@@ -1056,9 +1143,6 @@ private fun BackfireSlider(
         Slider(value = value.toFloat().coerceIn(range.start, range.endInclusive), onValueChange = onChange, valueRange = range, steps = steps)
     }
 }
-
-// Reserve bottom space so FMOD cards never scroll under the mixer pedals row.
-private val MIXER_PEDALS_OVERLAY_HEIGHT = 240.dp
 
 @Composable
 private fun MixerHeaderRow(

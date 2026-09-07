@@ -1878,9 +1878,11 @@ private fun CarStage(
                 modifier = Modifier.align(Alignment.CenterStart),
             )
             Column(
-                modifier = Modifier.align(Alignment.CenterEnd),
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(top = CarStageTapDefaults.favoriteCornerHeight),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 CarSelectorSideIconZone(
                     imageVector = Icons.Filled.Shuffle,

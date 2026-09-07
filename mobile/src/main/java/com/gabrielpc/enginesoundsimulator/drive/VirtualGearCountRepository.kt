@@ -4,7 +4,7 @@ import android.content.Context
 import com.gabrielpc.enginesoundsimulator.AppPreferenceStores
 import com.gabrielpc.enginesoundsimulator.simulation.VirtualGearProfile
 
-/** Persists the global virtual forward-gear count (6–10, default 10). */
+/** Persists the global virtual forward-gear count (6–15, default 10). */
 internal class VirtualGearCountRepository(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences(
         AppPreferenceStores.VIRTUAL_GEAR_COUNT,

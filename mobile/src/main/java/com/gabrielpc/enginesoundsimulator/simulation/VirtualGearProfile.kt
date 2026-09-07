@@ -62,7 +62,7 @@ internal data class VirtualGearProfile(
 
     companion object {
         const val MIN_VIRTUAL_GEARS = 6
-        const val MAX_VIRTUAL_GEARS = 10
+        const val MAX_VIRTUAL_GEARS = 15
         const val DEFAULT_VIRTUAL_GEARS = 10
         private const val REFERENCE_GEAR_COUNT = 10
         private const val REFERENCE_ANCHOR_GEAR = 4

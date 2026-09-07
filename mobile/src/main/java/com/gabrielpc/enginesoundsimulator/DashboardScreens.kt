@@ -533,14 +533,24 @@ internal fun SettingsScreen(
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                 )
             }
-            VirtualForwardGearCountControl(
-                gearCount = virtualForwardGearCount,
-                onGearCountChange = onVirtualForwardGearCountChange,
-            )
-            SixGearOnLaunchControl(
-                enabled = sixGearOnLaunchEnabled,
-                onEnabledChange = onSixGearOnLaunchEnabledChange,
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                VirtualForwardGearCountControl(
+                    gearCount = virtualForwardGearCount,
+                    onGearCountChange = onVirtualForwardGearCountChange,
+                    modifier = Modifier.weight(2f),
+                )
+                SixGearOnLaunchControl(
+                    enabled = sixGearOnLaunchEnabled,
+                    onEnabledChange = onSixGearOnLaunchEnabledChange,
+                    modifier = Modifier.weight(1f),
+                )
+            }
             AutomaticTransmissionSettingsControl(
                 offsetRpm = cruisingShiftOffsetRpm,
                 onOffsetRpmChange = onCruisingShiftOffsetRpmChange,
@@ -669,27 +679,22 @@ private fun VirtualForwardGearCountControl(
 private fun SixGearOnLaunchControl(
     enabled: Boolean,
     onEnabledChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier.fillMaxWidth(),
+    modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
+            .fillMaxHeight()
             .border(1.dp, Line, RoundedCornerShape(8.dp))
             .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("6-GEAR ON LAUNCH", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
-            Switch(checked = enabled, onCheckedChange = onEnabledChange)
-        }
+        Text("6-GEAR ON LAUNCH", color = Cyan, fontSize = 13.sp, fontWeight = FontWeight.Black)
+        Switch(checked = enabled, onCheckedChange = onEnabledChange)
         Text(
-            text = "During a launch-control start, temporarily use the 6-gear ratio profile until you release the throttle or press the brake.",
+            text = "Launch control temporarily uses the 6-gear ratio profile until throttle lift or brake.",
             color = Muted,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
+            fontSize = 11.sp,
+            lineHeight = 14.sp,
         )
     }
 }

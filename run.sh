@@ -74,7 +74,9 @@ ensure_debug_apps() {
   wait_for_boot
   install_debug_apk "$PACKAGE_ORIGINAL" original
   install_debug_apk "$PACKAGE_MODDED" modded
-  if [[ "${BYD_SKIP_BANK_INSTALL:-0}" != "1" ]]; then
+  # Debug APKs omit embedded banks; opt in when packs changed or the AVD was reset:
+  #   BYD_INSTALL_BANKS=1 ./run.sh
+  if [[ "${BYD_INSTALL_BANKS:-0}" == "1" ]]; then
     python3 "$ROOT/tools/install_emulator_banks.py"
   fi
   "$ADB_BIN" shell am start -n "$PACKAGE_ORIGINAL/$MAIN_ACTIVITY" >/dev/null

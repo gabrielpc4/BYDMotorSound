@@ -51,6 +51,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -425,15 +426,22 @@ private fun MixerControlsPanel(
     modifier: Modifier = Modifier,
 ) {
     var gainScope by remember { mutableStateOf(MixerGainScope.GLOBAL) }
+    val cardShape = RoundedCornerShape(8.dp)
+    val cardModifier = modifier
+        .fillMaxHeight()
+        .clip(cardShape)
+        .then(
+            if (gainScope == MixerGainScope.GLOBAL) {
+                Modifier.border(1.dp, Line, cardShape)
+            } else {
+                Modifier
+                    .background(Panel)
+                    .border(1.dp, Line, cardShape)
+            },
+        )
+        .padding(horizontal = 12.dp, vertical = 10.dp)
 
-    Column(
-        modifier = modifier
-            .fillMaxHeight()
-            .clip(RoundedCornerShape(8.dp))
-            .background(Panel)
-            .border(1.dp, Line, RoundedCornerShape(8.dp))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-    ) {
+    Column(modifier = cardModifier) {
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -454,9 +462,14 @@ private fun MixerControlsPanel(
                     globalValue = mixerGains.engineInterior,
                     specificValue = mixerSpecificGains.engineInterior,
                     overall = mixerSpecificGains.overall,
+                    accentColor = Amber,
                     onValueChange = {
                         onMixerSpecificGainsChange(mixerSpecificGains.copy(overall = it))
                     },
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    color = Amber.copy(alpha = 0.45f),
                 )
             }
             MixerLayerGainSlider(
@@ -644,12 +657,20 @@ private fun MixerLayerGainSlider(
     globalValue: Float,
     specificValue: Float,
     overall: Float,
+    accentColor: Color = CyanSoft,
     onValueChange: (Float) -> Unit,
 ) {
     val snappedLayerValue = MixerGlobalGains.snap(layerValue)
     val effectiveValue = dashboardValue * globalValue * specificValue * overall
     val stopIndex = MixerGlobalGains.stopIndex(snappedLayerValue).toFloat()
     val lastStopIndex = (MixerGlobalGains.STOPS.size - 1).toFloat()
+    val sliderColors = SliderDefaults.colors(
+        thumbColor = accentColor,
+        activeTrackColor = accentColor,
+        inactiveTrackColor = Line,
+        activeTickColor = accentColor.copy(alpha = 0.55f),
+        inactiveTickColor = Line.copy(alpha = 0.85f),
+    )
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -659,14 +680,14 @@ private fun MixerLayerGainSlider(
         ) {
             Text(
                 text = label,
-                color = CyanSoft,
+                color = accentColor,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 0.8.sp,
             )
             Text(
                 text = "${MixerGlobalGains.formatMultiplier(snappedLayerValue)} → ${MixerGlobalGains.formatMultiplier(effectiveValue)}",
-                color = White,
+                color = if (accentColor == Amber) Amber else White,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -679,6 +700,7 @@ private fun MixerLayerGainSlider(
             },
             valueRange = 0f..lastStopIndex,
             steps = MixerGlobalGains.STOPS.size - 2,
+            colors = sliderColors,
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -1325,9 +1347,7 @@ private fun MixerHeaderRow(
             selectedCarName = selectedCarName,
             selectedCarPreviewAsset = selectedCarPreviewAsset,
             favoriteCarIds = favoriteCarIds,
-            isFavorite = selectedCarId in favoriteCarIds,
             onSelectCar = onSelectCar,
-            onToggleFavorite = { onToggleCarFavorite(selectedCarId) },
             onToggleCarFavorite = onToggleCarFavorite,
             modifier = Modifier.weight(0.42f).fillMaxHeight(),
         )
@@ -1409,9 +1429,7 @@ private fun CarDropdownSelector(
     selectedCarName: String,
     selectedCarPreviewAsset: String,
     favoriteCarIds: Set<String>,
-    isFavorite: Boolean,
     onSelectCar: (String) -> Unit,
-    onToggleFavorite: () -> Unit,
     onToggleCarFavorite: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1437,8 +1455,6 @@ private fun CarDropdownSelector(
                 profile = FmodBankProfiles.find(selectedCarId),
                 audioAssetResolver = audioAssetResolver,
                 contentDescription = CarDisplayNameFormatter.format(selectedCarName),
-                isFavorite = isFavorite,
-                onToggleFavorite = onToggleFavorite,
                 modifier = Modifier
                     .fillMaxHeight()
                     .clickable { expanded = true },

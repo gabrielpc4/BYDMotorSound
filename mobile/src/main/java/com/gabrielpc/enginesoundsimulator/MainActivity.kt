@@ -2286,7 +2286,7 @@ private fun TachometerGauge(
                 drawArc(
                     color = Red,
                     startAngle = startAngle + sweepAngle * (redlineRpm / gaugeMaxRpm).toFloat().coerceIn(0f, 1f),
-                    sweepAngle = sweepAngle * ((maxRpm - redlineRpm) / gaugeMaxRpm).toFloat().coerceAtLeast(0f),
+                    sweepAngle = sweepAngle * ((gaugeMaxRpm - redlineRpm) / gaugeMaxRpm).toFloat().coerceAtLeast(0f),
                     useCenter = false,
                     topLeft = zoneBandTopLeft,
                     size = zoneBandSize,

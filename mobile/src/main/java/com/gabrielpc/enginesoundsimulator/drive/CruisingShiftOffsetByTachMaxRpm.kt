@@ -1,6 +1,5 @@
 package com.gabrielpc.enginesoundsimulator.drive
 
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /** Cruising shift offset stored per authored tachometer maximum RPM tier. */
@@ -35,15 +34,10 @@ internal object CruisingShiftOffsetByTachMaxRpm {
         }
     }
 
-    /** Maps the car's authored tachometer maximum to the nearest configured tier. */
+    /** Maps the car's authored tachometer maximum to the next configured tier at or above it. */
     fun resolveTier(tachometerMaximumRpm: Double): Int {
         val rpm = tachometerMaximumRpm.roundToInt().coerceAtLeast(1)
-        val exactTier = TIERS.firstOrNull { it == rpm }
-        if (exactTier != null) {
-            return exactTier
-        }
-
-        return TIERS.minBy { abs(it - rpm) }
+        return TIERS.firstOrNull { tier -> tier >= rpm } ?: TIERS.last()
     }
 
     fun resolveOffset(offsets: Map<Int, Int>, tachometerMaximumRpm: Double): Int {

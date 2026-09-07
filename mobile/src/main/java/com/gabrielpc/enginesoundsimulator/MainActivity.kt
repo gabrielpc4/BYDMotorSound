@@ -1770,89 +1770,88 @@ private fun CarStage(
         }.getOrNull()
     }
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .padding(
-                start = DashboardLayoutDefaults.classicContentStartPadding,
-                top = 26.dp,
-                end = 8.dp,
-            ),
+            .padding(end = 8.dp),
     ) {
-        Text(
-            text = CarDisplayNameFormatter.format(state.selectedCarName).uppercase(),
-            color = White,
-            fontSize = 34.sp,
-            lineHeight = 42.sp,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 1.2.sp,
-        )
-        Text(
-            text = selectedCarSubtitle.uppercase(),
-            color = CyanSoft,
-            fontSize = 12.sp,
-            letterSpacing = 1.1.sp,
-            modifier = Modifier.padding(top = 2.dp),
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-        ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                if (preview != null) {
-                    Image(
-                        bitmap = preview,
-                        contentDescription = CarDisplayNameFormatter.format(state.selectedCarName),
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Image(
-                        painter = painterResource(R.drawable.apex_v10_car),
-                        contentDescription = CarDisplayNameFormatter.format(state.selectedCarName),
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = CarStageTapDefaults.sideStripWidth)
-                        .clickable { carPickerExpanded = true },
-                )
-
-                CarPreviewLoadingOverlay(
-                    visible = showCarAudioLoading,
-                    onOpenCarPicker = { carPickerExpanded = true },
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (preview != null) {
+                Image(
+                    bitmap = preview,
+                    contentDescription = CarDisplayNameFormatter.format(state.selectedCarName),
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
-
-                CarSelectorSideTapZone(
-                    label = "‹",
-                    contentDescription = "Previous car",
-                    onClick = onPreviousCar,
-                    modifier = Modifier.align(Alignment.CenterStart),
-                )
-                CarSelectorSideTapZone(
-                    label = "›",
-                    contentDescription = "Next car",
-                    onClick = onNextCar,
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(top = CarStageTapDefaults.favoriteCornerHeight),
-                )
-                CarFavoriteStarButton(
-                    isFavorite = state.selectedCarId in state.favoriteCarIds,
-                    onToggle = { onToggleCarFavorite(state.selectedCarId) },
-                    scale = 2f,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp),
+            } else {
+                Image(
+                    painter = painterResource(R.drawable.apex_v10_car),
+                    contentDescription = CarDisplayNameFormatter.format(state.selectedCarName),
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = CarStageTapDefaults.sideStripWidth)
+                    .clickable { carPickerExpanded = true },
+            )
+
+            CarPreviewLoadingOverlay(
+                visible = showCarAudioLoading,
+                onOpenCarPicker = { carPickerExpanded = true },
+                modifier = Modifier.fillMaxSize(),
+            )
+
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(
+                        start = DashboardLayoutDefaults.classicContentStartPadding,
+                        top = 26.dp,
+                    ),
+            ) {
+                Text(
+                    text = CarDisplayNameFormatter.format(state.selectedCarName).uppercase(),
+                    color = White,
+                    fontSize = 34.sp,
+                    lineHeight = 42.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.2.sp,
+                )
+                Text(
+                    text = selectedCarSubtitle.uppercase(),
+                    color = CyanSoft,
+                    fontSize = 12.sp,
+                    letterSpacing = 1.1.sp,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+
+            CarSelectorSideTapZone(
+                label = "‹",
+                contentDescription = "Previous car",
+                onClick = onPreviousCar,
+                modifier = Modifier.align(Alignment.CenterStart),
+            )
+            CarSelectorSideTapZone(
+                label = "›",
+                contentDescription = "Next car",
+                onClick = onNextCar,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(top = CarStageTapDefaults.favoriteCornerHeight),
+            )
+            CarFavoriteStarButton(
+                isFavorite = state.selectedCarId in state.favoriteCarIds,
+                onToggle = { onToggleCarFavorite(state.selectedCarId) },
+                scale = 2f,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp),
+            )
         }
     }
 

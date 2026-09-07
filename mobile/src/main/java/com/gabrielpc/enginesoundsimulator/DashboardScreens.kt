@@ -102,6 +102,7 @@ import com.gabrielpc.enginesoundsimulator.audio.FmodBankProfiles
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankResolver
 import com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective
 import com.gabrielpc.enginesoundsimulator.audio.FmodEventSection
+import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains
 import com.gabrielpc.enginesoundsimulator.audio.FmodSourceState
 import com.gabrielpc.enginesoundsimulator.audio.FmodUpdateRate
 import com.gabrielpc.enginesoundsimulator.drive.DriveSnapshot
@@ -158,8 +159,7 @@ internal fun MixerDashboardScreen(
     onTransmissionPositionChange: (TransmissionPosition) -> Unit,
     onManualUpshift: () -> Unit,
     onManualDownshift: () -> Unit,
-    onHostGains: (Float, Float) -> Unit,
-    onCategoryGains: (Float, Float, Float, Float) -> Unit,
+    onMixerGlobalGainsChange: (com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains) -> Unit,
     onEventMute: (String, Boolean) -> Unit,
     onEventSolo: (String, Boolean) -> Unit,
     soundPerspective: EngineSoundPerspective,
@@ -248,8 +248,7 @@ internal fun MixerDashboardScreen(
             onToggleCarFavorite = onToggleCarFavorite,
         )
         Spacer(Modifier.height(8.dp))
-        var engineGain by remember(state.engineHostGain) { mutableStateOf(state.engineHostGain) }
-        var effectsGain by remember(state.effectsHostGain) { mutableStateOf(state.effectsHostGain) }
+        var mixerGains by remember(state.mixerGlobalGains) { mutableStateOf(state.mixerGlobalGains) }
         Row(
             modifier = Modifier
                 .weight(1f)
@@ -316,12 +315,18 @@ internal fun MixerDashboardScreen(
                 MixerControlsPanel(
                     perspective = soundPerspective,
                     onPerspectiveSelected = onSoundPerspectiveChange,
-                    engineGain = engineGain,
-                    effectsGain = effectsGain,
-                    onHostGains = { engine, effects ->
-                        engineGain = engine
-                        effectsGain = effects
-                        onHostGains(engine, effects)
+                    carEngineHostGain = state.engineHostGain,
+                    carEffectsHostGain = state.effectsHostGain,
+                    carTransmissionGain = state.transmissionGain,
+                    carGearShiftGain = state.gearShiftGain,
+                    carTurboGain = state.turboGain,
+                    carBackfireGain = state.backfireGain,
+                    carLimiterGain = state.limiterGain,
+                    hasTurbo = state.hasTurbo,
+                    mixerGains = mixerGains,
+                    onMixerGainsChange = { updated ->
+                        mixerGains = updated
+                        onMixerGlobalGainsChange(updated)
                     },
                     modifier = Modifier
                         .weight(1f)
@@ -346,18 +351,25 @@ internal fun MixerDashboardScreen(
 private fun MixerControlsPanel(
     perspective: EngineSoundPerspective,
     onPerspectiveSelected: (EngineSoundPerspective) -> Unit,
-    engineGain: Float,
-    effectsGain: Float,
-    onHostGains: (Float, Float) -> Unit,
+    carEngineHostGain: Float,
+    carEffectsHostGain: Float,
+    carTransmissionGain: Float,
+    carGearShiftGain: Float,
+    carTurboGain: Float,
+    carBackfireGain: Float,
+    carLimiterGain: Float,
+    hasTurbo: Boolean,
+    mixerGains: MixerGlobalGains,
+    onMixerGainsChange: (MixerGlobalGains) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
+            .fillMaxHeight()
             .clip(RoundedCornerShape(8.dp))
             .background(Panel)
             .border(1.dp, Line, RoundedCornerShape(8.dp))
             .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -386,31 +398,57 @@ private fun MixerControlsPanel(
                 )
             }
         }
-        MixerHostGainSlider(
-            label = "ENGINE",
-            value = engineGain,
-            valueRange = 0.5f..3f,
-            steps = 4,
-            onValueChange = { onHostGains(it, effectsGain) },
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "GLOBAL MIX (× car dashboard)",
+            color = Muted,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 0.8.sp,
         )
-        MixerHostGainSlider(
-            label = "EFFECTS",
-            value = effectsGain,
-            valueRange = 0.5f..4f,
-            steps = 6,
-            onValueChange = { onHostGains(engineGain, it) },
-        )
+        Spacer(Modifier.height(6.dp))
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MixerGlobalGainSlider("ENGINE", mixerGains.engineHost, carEngineHostGain) {
+                onMixerGainsChange(mixerGains.copy(engineHost = it))
+            }
+            MixerGlobalGainSlider("EFFECTS", mixerGains.effectsHost, carEffectsHostGain) {
+                onMixerGainsChange(mixerGains.copy(effectsHost = it))
+            }
+            MixerGlobalGainSlider("TRANSMISSION", mixerGains.transmission, carTransmissionGain) {
+                onMixerGainsChange(mixerGains.copy(transmission = it))
+            }
+            MixerGlobalGainSlider("SHIFT", mixerGains.gearShift, carGearShiftGain) {
+                onMixerGainsChange(mixerGains.copy(gearShift = it))
+            }
+            if (hasTurbo) {
+                MixerGlobalGainSlider("TURBO", mixerGains.turbo, carTurboGain) {
+                    onMixerGainsChange(mixerGains.copy(turbo = it))
+                }
+            }
+            MixerGlobalGainSlider("POPS & BANGS", mixerGains.backfire, carBackfireGain) {
+                onMixerGainsChange(mixerGains.copy(backfire = it))
+            }
+            MixerGlobalGainSlider("LIMITER", mixerGains.limiter, carLimiterGain) {
+                onMixerGainsChange(mixerGains.copy(limiter = it))
+            }
+        }
     }
 }
 
 @Composable
-private fun MixerHostGainSlider(
+private fun MixerGlobalGainSlider(
     label: String,
-    value: Float,
-    valueRange: ClosedFloatingPointRange<Float>,
-    steps: Int,
+    globalValue: Float,
+    carValue: Float,
     onValueChange: (Float) -> Unit,
 ) {
+    val effectiveValue = carValue * globalValue
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -425,17 +463,17 @@ private fun MixerHostGainSlider(
                 letterSpacing = 0.8.sp,
             )
             Text(
-                text = String.format(Locale.US, "%.1fx", value),
+                text = String.format(Locale.US, "%.1fx → %.1fx", globalValue, effectiveValue),
                 color = White,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
             )
         }
         Slider(
-            value = value,
+            value = globalValue,
             onValueChange = onValueChange,
-            valueRange = valueRange,
-            steps = steps,
+            valueRange = MixerGlobalGains.MIN..MixerGlobalGains.MAX,
+            steps = 4,
             modifier = Modifier.fillMaxWidth(),
         )
     }

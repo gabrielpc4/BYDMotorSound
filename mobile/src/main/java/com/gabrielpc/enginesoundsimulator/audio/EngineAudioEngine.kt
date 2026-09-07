@@ -485,7 +485,13 @@ class EngineAudioEngine(context: Context) {
                     transmission = configuredGains.transmission * globalTransmissionGain.get(),
                 )
                 if (gains != sentCategoryGains) {
-                    bridge.setCategoryGains(gains.transmission, gains.gearShift, gains.turbo, gains.backfire)
+                    bridge.setCategoryGains(
+                        gains.transmission,
+                        gains.gearShift,
+                        gains.turbo,
+                        gains.backfire,
+                        gains.limiter,
+                    )
                     sentCategoryGains = gains
                     categoryGainCalls = 1
                 }

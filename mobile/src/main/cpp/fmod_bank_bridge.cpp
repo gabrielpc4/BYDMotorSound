@@ -412,6 +412,17 @@ bool isBlockedSkylineSubSound(const char* name) {
     return lowered.find(kSkylineBlockedOffmidSample) != std::string::npos;
 }
 
+bool isLimiterSoundName(const std::string& name) {
+    if (name.empty()) {
+        return false;
+    }
+    const std::string lowered = lowercaseCopy(name.c_str());
+    if (lowered == "limiter") {
+        return true;
+    }
+    return lowered.find("limiter") != std::string::npos;
+}
+
 void muteBlockedSkylineChannelsInGroup(FMOD::ChannelGroup* group) {
     if (group == nullptr) {
         return;
@@ -901,23 +912,26 @@ public:
         loadedProfileId_ = profileId;
     }
 
-    void setCategoryGains(float transmissionGain, float gearShiftGain, float turboGain, float backfireGain) {
+    void setCategoryGains(float transmissionGain, float gearShiftGain, float turboGain, float backfireGain, float limiterGain) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!active_) return;
         const float transmission = std::max(0.0f, transmissionGain);
         const float gearShift = std::max(0.0f, gearShiftGain);
         const float turbo = std::max(0.0f, turboGain);
         const float backfire = std::max(0.0f, backfireGain);
+        const float limiter = std::max(0.0f, limiterGain);
         if (
             transmission == transmissionGain_ &&
             gearShift == gearShiftGain_ &&
             turbo == turboGain_ &&
-            backfire == backfireGain_
+            backfire == backfireGain_ &&
+            limiter == limiterGain_
         ) return;
         transmissionGain_ = transmission;
         gearShiftGain_ = gearShift;
         turboGain_ = turbo;
         backfireGain_ = backfire;
+        limiterGain_ = limiter;
         if (alfaBackfireChannel_ != nullptr) alfaBackfireChannel_->setVolume(hostEffectsGain_ * backfireGain_);
         applyEventOverridesLocked();
     }
@@ -1551,6 +1565,136 @@ private:
             const float categoryGain = eventCategoryGain(pair.first);
             pair.second->instance->setVolume((disabledBackfire || disabledShift || disabledShiftAudio || disabledTransmission || disabledTurbo || muted || soloed) ? 0.0f : baseGain * categoryGain);
         }
+        applyEmbeddedEngineChannelGainsLocked();
+    }
+
+    bool limiterDedicatedEventHasAudibleVoicesLocked() const {
+        const auto iterator = slots_.find("limiter");
+        if (iterator == slots_.end() || iterator->second->instance == nullptr) {
+            return false;
+        }
+        FMOD::ChannelGroup* root = nullptr;
+        if (iterator->second->instance->getChannelGroup(&root) != FMOD_OK || root == nullptr) {
+            return false;
+        }
+        return eventGroupHasAudibleVoicesLocked(root);
+    }
+
+    bool eventGroupHasAudibleVoicesLocked(FMOD::ChannelGroup* group) const {
+        if (group == nullptr) {
+            return false;
+        }
+        int channelCount = 0;
+        if (group->getNumChannels(&channelCount) == FMOD_OK) {
+            for (int index = 0; index < channelCount; ++index) {
+                FMOD::Channel* channel = nullptr;
+                if (group->getChannel(index, &channel) != FMOD_OK || channel == nullptr) {
+                    continue;
+                }
+                float audibility = 0.0f;
+                if (channel->getAudibility(&audibility) == FMOD_OK && audibility > 0.001f) {
+                    return true;
+                }
+            }
+        }
+        int childCount = 0;
+        if (group->getNumGroups(&childCount) == FMOD_OK) {
+            for (int index = 0; index < childCount; ++index) {
+                FMOD::ChannelGroup* child = nullptr;
+                if (group->getGroup(index, &child) == FMOD_OK && eventGroupHasAudibleVoicesLocked(child)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    float embeddedEngineChannelMultiplierLocked(const std::string& eventName, const std::string& soundName) const {
+        if (eventName != "engine_int" && eventName != "engine_ext") {
+            return 1.0f;
+        }
+        if (!isLimiterSoundName(soundName)) {
+            return 1.0f;
+        }
+        if (limiterDedicatedEventHasAudibleVoicesLocked()) {
+            return 1.0f;
+        }
+        const float engineHost = std::max(hostEngineGain_, 0.0001f);
+        return (hostEffectsGain_ * limiterGain_) / engineHost;
+    }
+
+    void applyEmbeddedChannelGainLocked(FMOD::Channel* channel, float multiplier) {
+        if (channel == nullptr) {
+            return;
+        }
+        const uintptr_t channelKey = reinterpret_cast<uintptr_t>(channel);
+        float currentVolume = 1.0f;
+        if (channel->getVolume(&currentVolume) != FMOD_OK) {
+            return;
+        }
+        const float previousMultiplier = [&]() {
+            const auto iterator = embeddedChannelMultipliers_.find(channelKey);
+            if (iterator == embeddedChannelMultipliers_.end()) {
+                return 1.0f;
+            }
+            return std::max(iterator->second, 0.0001f);
+        }();
+        const float authoredVolume = currentVolume / previousMultiplier;
+        channel->setVolume(authoredVolume * multiplier);
+        embeddedChannelMultipliers_[channelKey] = multiplier;
+    }
+
+    void applyEmbeddedEngineChannelGainsInGroupLocked(
+        const std::string& eventName,
+        FMOD::ChannelGroup* group
+    ) {
+        if (group == nullptr) {
+            return;
+        }
+        int channelCount = 0;
+        if (group->getNumChannels(&channelCount) == FMOD_OK) {
+            for (int index = 0; index < channelCount; ++index) {
+                FMOD::Channel* channel = nullptr;
+                if (group->getChannel(index, &channel) != FMOD_OK || channel == nullptr) {
+                    continue;
+                }
+                FMOD::Sound* sound = nullptr;
+                if (channel->getCurrentSound(&sound) != FMOD_OK || sound == nullptr) {
+                    continue;
+                }
+                char soundName[512]{};
+                if (sound->getName(soundName, sizeof(soundName)) != FMOD_OK || soundName[0] == '\0') {
+                    std::strncpy(soundName, "<unnamed sound>", sizeof(soundName) - 1);
+                }
+                applyEmbeddedChannelGainLocked(
+                    channel,
+                    embeddedEngineChannelMultiplierLocked(eventName, soundName)
+                );
+            }
+        }
+        int childCount = 0;
+        if (group->getNumGroups(&childCount) == FMOD_OK) {
+            for (int index = 0; index < childCount; ++index) {
+                FMOD::ChannelGroup* child = nullptr;
+                if (group->getGroup(index, &child) == FMOD_OK) {
+                    applyEmbeddedEngineChannelGainsInGroupLocked(eventName, child);
+                }
+            }
+        }
+    }
+
+    void applyEmbeddedEngineChannelGainsLocked() {
+        for (const char* engineEventName : {"engine_int", "engine_ext"}) {
+            const auto iterator = slots_.find(engineEventName);
+            if (iterator == slots_.end() || iterator->second->instance == nullptr) {
+                continue;
+            }
+            FMOD::ChannelGroup* root = nullptr;
+            if (iterator->second->instance->getChannelGroup(&root) != FMOD_OK || root == nullptr) {
+                continue;
+            }
+            applyEmbeddedEngineChannelGainsInGroupLocked(engineEventName, root);
+        }
     }
 
     float eventCategoryGain(const std::string& name) const {
@@ -1560,6 +1704,7 @@ private:
         if (name == "gear_int" || name == "gear_ext" || name == "gear_grind") return gearShiftGain_;
         if (name == "turbo") return turboGain_;
         if (name == "backfire_int" || name == "backfire_ext") return backfireGain_;
+        if (name == "limiter") return limiterGain_;
         return 1.0f;
     }
 
@@ -2398,6 +2543,8 @@ private:
     float gearShiftGain_ = 1.0f;
     float turboGain_ = 1.0f;
     float backfireGain_ = 1.0f;
+    float limiterGain_ = 1.0f;
+    std::unordered_map<uintptr_t, float> embeddedChannelMultipliers_;
     bool backfireAudioEnabled_ = true;
     bool backfireUseOriginal_ = true;
     bool shiftSoundOverride_ = false;
@@ -2659,9 +2806,9 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setLoadedProf
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setCategoryGains(
-    JNIEnv*, jobject, jfloat transmission, jfloat gearShift, jfloat turbo, jfloat backfire
+    JNIEnv*, jobject, jfloat transmission, jfloat gearShift, jfloat turbo, jfloat backfire, jfloat limiter
 ) {
-    runtime.setCategoryGains(transmission, gearShift, turbo, backfire);
+    runtime.setCategoryGains(transmission, gearShift, turbo, backfire, limiter);
 }
 
 extern "C" JNIEXPORT void JNICALL

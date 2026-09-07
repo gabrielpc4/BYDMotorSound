@@ -25,6 +25,9 @@ import com.gabrielpc.enginesoundsimulator.audio.AudioMixGainRepository
 import com.gabrielpc.enginesoundsimulator.audio.AudioMixGains
 import com.gabrielpc.enginesoundsimulator.audio.CarEffectModes
 import com.gabrielpc.enginesoundsimulator.audio.CarEffectModesRepository
+import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGainRepository
+import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains
+import com.gabrielpc.enginesoundsimulator.audio.effectiveWith
 import com.gabrielpc.enginesoundsimulator.AppPreferenceStores
 import com.gabrielpc.enginesoundsimulator.audio.SelectedCarRepository
 import com.gabrielpc.enginesoundsimulator.diagnostics.DebugScenarioOverride
@@ -88,6 +91,8 @@ data class DriveSnapshot(
     val gearShiftGain: Float = 1.0f,
     val turboGain: Float = 1.0f,
     val backfireGain: Float = 1.0f,
+    val limiterGain: Float = 1.0f,
+    val mixerGlobalGains: MixerGlobalGains = MixerGlobalGains(),
     /** Global backfire policy, deliberately independent of each car bank's authored thresholds. */
     val backfireSettings: BackfireSettings = BackfireSettings(),
     val shiftSoundSettings: ShiftSoundSettings = ShiftSoundSettings(),
@@ -142,6 +147,7 @@ class DriveController(context: Context) {
     private val shiftModeRepository = ShiftModeRepository(appContext)
     private val soundPerspectiveRepository = EngineSoundPerspectiveRepository(appContext)
     private val audioMixGainRepository = AudioMixGainRepository(appContext)
+    private val mixerGlobalGainRepository = MixerGlobalGainRepository(appContext)
     private val fmodUpdateRateRepository = FmodUpdateRateRepository(appContext)
     private val exteriorAudioModeRepository = ExteriorAudioModeRepository(appContext)
     private val backfireSettingsRepository = BackfireSettingsRepository(appContext)
@@ -181,6 +187,7 @@ class DriveController(context: Context) {
     private val exteriorPureAudioSettings = AtomicReference(ExteriorPureAudioSettings())
     private val carEffectModes = AtomicReference(CarEffectModes())
     private val audioMixGains = AtomicReference(AudioMixGains())
+    private val mixerGlobalGains = AtomicReference(MixerGlobalGains())
     private val fmodUpdateRateHz = AtomicInteger(fmodUpdateRateRepository.load())
     private val virtualForwardGearCount = AtomicInteger(virtualGearCountRepository.load())
     private val exteriorPureAudio = AtomicBoolean(false)
@@ -231,6 +238,7 @@ class DriveController(context: Context) {
             .apply()
         loadPhysics(selectedProfile.get())
         simulation.manualShiftEnabled = manualShiftEnabled.get()
+        mixerGlobalGains.set(mixerGlobalGainRepository.load())
         audioEngine.setFocusChangeListener(::handleAudioFocusChange)
         audioEngine.setFmodUpdateRateHz(fmodUpdateRateHz.get())
         applyCarAudioPreferences(selectedProfile.get())
@@ -284,6 +292,8 @@ class DriveController(context: Context) {
             gearShiftGain = audioMixGains.get().gearShift,
             turboGain = audioMixGains.get().turbo,
             backfireGain = audioMixGains.get().backfire,
+            limiterGain = audioMixGains.get().limiter,
+            mixerGlobalGains = mixerGlobalGains.get(),
             backfireSettings = backfireSettings.get(),
             shiftSoundSettings = shiftSoundSettings.get(),
             transmissionSoundSettings = transmissionSoundSettings.get(),
@@ -462,14 +472,26 @@ class DriveController(context: Context) {
         simulation.updateAutomaticTransmissionSettings(updated)
     }
 
+    fun setMixerGlobalGains(updated: MixerGlobalGains) {
+        val normalized = updated.normalized()
+        mixerGlobalGains.set(normalized)
+        mixerGlobalGainRepository.save(normalized)
+        syncEffectiveMixGainsToAudioEngine()
+    }
+
+    private fun syncEffectiveMixGainsToAudioEngine() {
+        val effective = audioMixGains.get().effectiveWith(mixerGlobalGains.get())
+        audioEngine.setHostGains(effective.engineHost, effective.effectsHost)
+        audioEngine.setCategoryGains(effective)
+    }
+
     fun setFmodHostGains(engine: Float, effects: Float) {
-        val gains = audioMixGains.get().copy(
-            engineHost = engine.coerceIn(0.5f, 3.0f),
-            effectsHost = effects.coerceIn(0.5f, 4.0f),
+        setMixerGlobalGains(
+            mixerGlobalGains.get().copy(
+                engineHost = engine.coerceIn(MixerGlobalGains.MIN, MixerGlobalGains.MAX),
+                effectsHost = effects.coerceIn(MixerGlobalGains.MIN, MixerGlobalGains.MAX),
+            ),
         )
-        audioMixGains.set(gains)
-        audioMixGainRepository.save(selectedProfile.get(), gains)
-        audioEngine.setHostGains(gains.engineHost, gains.effectsHost)
     }
 
     fun setMinimumAudioThrottle(minimum: Float) {
@@ -574,7 +596,7 @@ class DriveController(context: Context) {
         )
         audioMixGains.set(gains)
         audioMixGainRepository.save(selectedProfile.get(), gains)
-        audioEngine.setCategoryGains(gains)
+        syncEffectiveMixGainsToAudioEngine()
     }
 
     fun setBackfireSettings(updated: BackfireSettings) {
@@ -589,7 +611,7 @@ class DriveController(context: Context) {
             val updatedGains = currentGains.copy(backfire = normalized.backfireGain)
             audioMixGains.set(updatedGains)
             audioMixGainRepository.save(selectedProfile.get(), updatedGains)
-            audioEngine.setCategoryGains(updatedGains)
+            syncEffectiveMixGainsToAudioEngine()
         }
     }
 
@@ -623,7 +645,10 @@ class DriveController(context: Context) {
         carEffectModesRepository.resetAll()
         fmodUpdateRateRepository.reset()
         exteriorAudioModeRepository.reset()
+        audioMixGainRepository.resetAll()
+        mixerGlobalGainRepository.resetAll()
         audioMixGains.set(AudioMixGains())
+        mixerGlobalGains.set(MixerGlobalGains())
         fmodUpdateRateHz.set(FmodUpdateRate.DEFAULT_HZ)
         exteriorPureAudio.set(false)
         backfireSettings.set(BackfireSettings())
@@ -652,7 +677,7 @@ class DriveController(context: Context) {
         audioEngine.setFmodUpdateRateHz(FmodUpdateRate.DEFAULT_HZ)
         audioEngine.setExteriorPureAudio(false)
         applyMinimumAudioThrottleSettings(MinimumAudioThrottleSettings())
-        audioEngine.setHostGains(DEFAULT_ENGINE_HOST_GAIN, DEFAULT_EFFECTS_HOST_GAIN)
+        syncEffectiveMixGainsToAudioEngine()
         simulation.reset()
         audioEngine.setSoundProgram(selectedProfile.get(), selectedPerspective.get())
     }
@@ -972,8 +997,7 @@ class DriveController(context: Context) {
 
         val gains = audioMixGainRepository.load(profile)
         audioMixGains.set(gains)
-        audioEngine.setCategoryGains(gains)
-        audioEngine.setHostGains(gains.engineHost, gains.effectsHost)
+        syncEffectiveMixGainsToAudioEngine()
 
         val modes = carEffectModesRepository.load(profile)
         carEffectModes.set(modes)

@@ -62,7 +62,7 @@ available. The current original-bank audit covers the usable official profiles, 
 group.
 
 Each active car package contains one source `.bank`, an optional preview selected from
-`ui/dlc_preview.png` or an official skin preview, and that car's exported
+`preview1`, a default skin preview, or (as a last resort) `ui/dlc_preview.png`, and that car's exported
 `profiles/<id>/physics.json`. Shared original `common.strings.bank` and `common.bank` packages are
 included as dependencies. The generated `fmod_bank_packs/` directory is ignored and must not be
 committed.

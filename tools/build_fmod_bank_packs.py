@@ -141,22 +141,46 @@ def read_display_name(directory: Path) -> str:
     return directory.name.replace("_", " ").replace("-", " ").title()
 
 
+def preview_candidates(directory: Path) -> list[Path]:
+    """Prefer clean showroom/skin previews; keep dlc_preview.png as a last resort."""
+    candidates: list[Path] = []
+
+    for ui_name in ("ui_car.json", "dlc_ui_car.json"):
+        ui_path = directory / "ui" / ui_name
+        if not ui_path.is_file():
+            continue
+        try:
+            value = json.loads(ui_path.read_text(encoding="utf-8", errors="replace"))
+            skin = value.get("skin") if isinstance(value, dict) else None
+            if isinstance(skin, str) and skin.strip():
+                skin_directory = directory / "skins" / skin.strip()
+                candidates.extend([
+                    skin_directory / "preview.jpg",
+                    skin_directory / "preview.png",
+                ])
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    candidates.extend([
+        directory / "preview1.jpg",
+        directory / "preview1.png",
+    ])
+    candidates.extend(sorted((directory / "skins").glob("*/preview.jpg")))
+    candidates.extend(sorted((directory / "skins").glob("*/preview.png")))
+    candidates.append(directory / "ui" / "dlc_preview.png")
+    return candidates
+
+
+def pick_preview(directory: Path) -> Path | None:
+    return next((path for path in preview_candidates(directory) if path.is_file()), None)
+
+
 def preview_for_original(directory: Path) -> Path | None:
-    preferred = [directory / "ui" / "dlc_preview.png"]
-    preferred.extend(sorted((directory / "skins").glob("*/preview.jpg")))
-    preferred.extend(sorted((directory / "skins").glob("*/preview.png")))
-    preferred.extend([directory / "preview1.jpg", directory / "preview1.png"])
-    return next((path for path in preferred if path.is_file()), None)
+    return pick_preview(directory)
 
 
 def preview_for_modded(directory: Path) -> Path | None:
-    # Modded intake folders ship a user-facing preview1 image at the car root.
-    # Skin previews are in-game liveries and must not replace that artwork.
-    preferred = [directory / "preview1.jpg", directory / "preview1.png"]
-    preferred.extend([directory / "ui" / "dlc_preview.png"])
-    preferred.extend(sorted((directory / "skins").glob("*/preview.jpg")))
-    preferred.extend(sorted((directory / "skins").glob("*/preview.png")))
-    return next((path for path in preferred if path.is_file()), None)
+    return pick_preview(directory)
 
 
 def bank_for(directory: Path) -> Path:

@@ -133,11 +133,17 @@ val prepareCarPreviewAssets = tasks.register<Sync>("prepareCarPreviewAssets") {
     )
     originalSources.forEach { (assetName, sourceId) ->
         val directory = originalCarsRoot.resolve(sourceId)
-        val preview = directory.resolve("ui/dlc_preview.png").takeIf { it.isFile }
-            ?: directory.resolve("skins").walkTopDown()
-                .filter { it.isFile && (it.name == "preview.jpg" || it.name == "preview.png") }
-                .sortedBy { it.path }
-                .firstOrNull()
+        val preview = sequenceOf(
+            directory.resolve("preview1.jpg"),
+            directory.resolve("preview1.png"),
+        )
+            .plus(
+                directory.resolve("skins").walkTopDown()
+                    .filter { it.isFile && (it.name == "preview.jpg" || it.name == "preview.png") }
+                    .sortedBy { it.path },
+            )
+            .plus(directory.resolve("ui/dlc_preview.png"))
+            .firstOrNull { it.isFile }
         preview?.let { source ->
             from(source) {
                 rename { "$assetName.jpg" }

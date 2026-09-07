@@ -6,7 +6,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -61,6 +62,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -1331,8 +1333,8 @@ internal fun CarFavoriteStarButton(
     }
 }
 
-/** Spacious main-screen picker; thumbnails are capped by their decoded native dimensions. */
-private suspend fun LazyGridState.scrollItemToCenter(index: Int) {
+/** Positions the selected car in the center of the grid without animation. */
+private suspend fun LazyGridState.scrollItemToCenterInstant(index: Int) {
     if (index < 0) {
         return
     }
@@ -1340,21 +1342,27 @@ private suspend fun LazyGridState.scrollItemToCenter(index: Int) {
     snapshotFlow { layoutInfo.viewportSize.height }
         .first { height -> height > 0 }
 
-    animateScrollToItem(index)
+    snapshotFlow { layoutInfo.totalItemsCount }
+        .first { count -> count > index }
 
-    repeat(6) {
+    scrollToItem(index)
+
+    repeat(12) {
         val itemInfo = layoutInfo.visibleItemsInfo.find { visibleItem -> visibleItem.index == index }
         if (itemInfo != null) {
             val viewportCenter = layoutInfo.viewportSize.height / 2f
             val itemCenter = itemInfo.offset.y + itemInfo.size.height / 2f
             val delta = itemCenter - viewportCenter
             if (kotlin.math.abs(delta) > 1f) {
-                animateScrollBy(delta)
+                scroll {
+                    scrollBy(delta)
+                }
             }
             return
         }
 
         delay(16)
+        scrollToItem(index)
     }
 }
 
@@ -1401,6 +1409,7 @@ internal fun CarGridSelectionDialog(
         groupProfiles.filter { profile -> carPickerProfileMatchesSearch(profile, searchQuery) }
     }
     val gridState = rememberLazyGridState()
+    var isGridReady by remember { mutableStateOf(false) }
     var didInitialScroll by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     LaunchedEffect(Unit) {
@@ -1414,11 +1423,15 @@ internal fun CarGridSelectionDialog(
 
         val selectedIndex = visibleProfiles.indexOfFirst { profile -> profile.id == selectedCarId }
         if (selectedIndex < 0) {
+            didInitialScroll = true
+            isGridReady = true
             return@LaunchedEffect
         }
 
-        gridState.scrollItemToCenter(selectedIndex)
+        isGridReady = false
+        gridState.scrollItemToCenterInstant(selectedIndex)
         didInitialScroll = true
+        isGridReady = true
     }
     // Disable the platform's narrow default dialog width so the picker can span the display.
     Dialog(
@@ -1494,50 +1507,69 @@ internal fun CarGridSelectionDialog(
                 } else {
                     Spacer(modifier = Modifier.height(8.dp))
                 }
-                LazyVerticalGrid(
-                    state = gridState,
-                    // Choose as many cards as fit at runtime; this remains usable on both the
-                    // 1920x1080 emulator and narrower vehicle displays.
-                    columns = GridCells.Adaptive(minSize = 260.dp),
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    items(visibleProfiles, key = { it.id }) { profile ->
-                        Column(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(if (profile.id == selectedCarId) Cyan.copy(alpha = 0.18f) else Panel)
-                                .border(1.dp, if (profile.id == selectedCarId) Cyan else Line, RoundedCornerShape(10.dp))
-                                .clickable {
-                                    onDismiss()
-                                    onSelectCar(profile.id)
-                                }
-                                .padding(10.dp),
-                        ) {
-                            CarPreviewThumbnail(
-                                profile = profile,
-                                audioAssetResolver = resolver,
-                                contentDescription = CarDisplayNameFormatter.format(profile.displayName),
-                                isFavorite = profile.id in favoriteCarIds,
-                                onToggleFavorite = { onToggleFavorite(profile.id) },
-                                favoriteStarPadding = 2.dp,
-                                showFavoriteStarOnlyWhenFavorited = true,
+                Box(modifier = Modifier.fillMaxSize()) {
+                    LazyVerticalGrid(
+                        state = gridState,
+                        // Choose as many cards as fit at runtime; this remains usable on both the
+                        // 1920x1080 emulator and narrower vehicle displays.
+                        columns = GridCells.Adaptive(minSize = 260.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .alpha(if (isGridReady) 1f else 0f),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        items(visibleProfiles, key = { it.id }) { profile ->
+                            Column(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(128.dp)
-                                    .clip(RoundedCornerShape(6.dp)),
-                            )
-                            Text(
-                                text = CarDisplayNameFormatter.format(profile.displayName),
-                                color = White,
-                                fontSize = 15.sp,
-                                lineHeight = 18.sp,
-                                fontWeight = if (profile.id == selectedCarId) FontWeight.Black else FontWeight.Bold,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = 9.dp),
-                            )
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (profile.id == selectedCarId) Cyan.copy(alpha = 0.18f) else Panel)
+                                    .border(1.dp, if (profile.id == selectedCarId) Cyan else Line, RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        onDismiss()
+                                        onSelectCar(profile.id)
+                                    }
+                                    .padding(10.dp),
+                            ) {
+                                CarPreviewThumbnail(
+                                    profile = profile,
+                                    audioAssetResolver = resolver,
+                                    contentDescription = CarDisplayNameFormatter.format(profile.displayName),
+                                    isFavorite = profile.id in favoriteCarIds,
+                                    onToggleFavorite = { onToggleFavorite(profile.id) },
+                                    favoriteStarPadding = 2.dp,
+                                    showFavoriteStarOnlyWhenFavorited = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(128.dp)
+                                        .clip(RoundedCornerShape(6.dp)),
+                                )
+                                Text(
+                                    text = CarDisplayNameFormatter.format(profile.displayName),
+                                    color = White,
+                                    fontSize = 15.sp,
+                                    lineHeight = 18.sp,
+                                    fontWeight = if (profile.id == selectedCarId) FontWeight.Black else FontWeight.Bold,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(top = 9.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    if (!isGridReady) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable(
+                                    indication = null,
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    onClick = {},
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator(color = Cyan)
                         }
                     }
                 }

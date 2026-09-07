@@ -225,6 +225,7 @@ class MainActivity : ComponentActivity() {
                         onEffectOverrideChange = controller::setEffectOverride,
                         onEngineExternalChange = { enabled -> controller.setSoundPerspective(if (enabled) com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective.EXTERIOR else com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective.CABIN) },
                         onEnginePureChange = controller::setExteriorPureAudio,
+                        onCruisingLogicChange = controller::setCruisingLogicEnabled,
                         onResetAllPreferences = controller::resetAllPreferences,
                         onToggleManualShiftMode = controller::toggleManualShiftMode,
                         onMediaShiftButton = controller::handleMediaShiftButton,
@@ -328,6 +329,7 @@ private fun MotorSoundDashboard(
     onEffectOverrideChange: (EffectSoundKind, Boolean) -> Unit,
     onEngineExternalChange: (Boolean) -> Unit,
     onEnginePureChange: (Boolean) -> Unit,
+    onCruisingLogicChange: (Boolean) -> Unit,
     onResetAllPreferences: () -> Unit,
     onToggleManualShiftMode: () -> Unit,
     onMediaShiftButton: (Int) -> Boolean,
@@ -493,6 +495,7 @@ private fun MotorSoundDashboard(
                                             onMinimumAudioThrottleChange = onMinimumAudioThrottleChange,
                                             onEngineExternalChange = onEngineExternalChange,
                                             onEnginePureChange = onEnginePureChange,
+                                            onCruisingLogicChange = onCruisingLogicChange,
                                             modifier = Modifier.padding(bottom = 6.dp),
                                         )
                                         DashboardEffectControls(
@@ -1106,6 +1109,8 @@ private object DashboardClassicEffectLayout {
             width += columnGap + toggleColumnOuterWidth()
             width += columnGap + enginePureLabelOuterWidth()
             width += columnGap + toggleColumnOuterWidth()
+            width += columnGap + engineCruisingLabelOuterWidth()
+            width += columnGap + toggleColumnOuterWidth()
             width += columnGap
             return width
         }
@@ -1116,6 +1121,9 @@ private object DashboardClassicEffectLayout {
     /** Outer width for PURE label column (10sp text + horizontal padding). */
     private fun enginePureLabelOuterWidth(): Dp = 30.dp + columnPadding * 2
 
+    /** Outer width for CRUISING label column (10sp text + horizontal padding). */
+    private fun engineCruisingLabelOuterWidth(): Dp = 56.dp + columnPadding * 2
+
     val minimumThrottleSliderWidth: Dp
         get() = (matrixWidthAfterLabel - engineRowWidthBeforeSlider).coerceAtLeast(120.dp)
 
@@ -1123,7 +1131,7 @@ private object DashboardClassicEffectLayout {
     val minimumThrottleSliderWidthAfterEngineLabel: Dp
         get() {
             val trailingControlsWidth = engineRowWidthBeforeSlider - columnGap
-            val gapCountAfterEngineLabel = 5
+            val gapCountAfterEngineLabel = 7
             return (matrixWidthAfterLabel - trailingControlsWidth - (columnGap * gapCountAfterEngineLabel))
                 .coerceAtLeast(120.dp)
         }
@@ -1135,6 +1143,7 @@ private fun DashboardEngineControls(
     onMinimumAudioThrottleChange: (Float) -> Unit,
     onEngineExternalChange: (Boolean) -> Unit,
     onEnginePureChange: (Boolean) -> Unit,
+    onCruisingLogicChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val external = state.soundPerspective == com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective.EXTERIOR
@@ -1212,6 +1221,26 @@ private fun DashboardEngineControls(
         ) {
             DashboardSwitchCell(rowHeight, state.exteriorPureAudio, Line) {
                 onEnginePureChange(!state.exteriorPureAudio)
+            }
+        }
+        Column(
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(rowGap),
+            modifier = Modifier
+                .wrapContentWidth()
+                .padding(layout.columnPadding),
+        ) {
+            DashboardColumnTextCell("CRUISING", state.cruisingLogicEnabled, rowHeight)
+        }
+        Column(
+            horizontalAlignment = Alignment.Start,
+            verticalArrangement = Arrangement.spacedBy(rowGap),
+            modifier = Modifier
+                .width(layout.toggleColumnWidth)
+                .padding(layout.columnPadding),
+        ) {
+            DashboardSwitchCell(rowHeight, state.cruisingLogicEnabled, Line) {
+                onCruisingLogicChange(!state.cruisingLogicEnabled)
             }
         }
     }

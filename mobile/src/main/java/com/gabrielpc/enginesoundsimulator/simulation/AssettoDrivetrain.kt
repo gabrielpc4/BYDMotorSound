@@ -116,6 +116,7 @@ internal class AssettoDrivetrain(
     private var racingReturnMaxThrottle = 0.30
     private var manualRedlineHoldSeconds = 1.0
     private var manualAutodownshiftRpm = 2_000.0
+    private var cruisingLogicEnabled = true
     private var automaticTransmissionMode = AutomaticTransmissionMode.CRUISING
     private var racingReturnArmed = false
     private var manualRedlineElapsedSeconds = 0.0
@@ -343,6 +344,7 @@ internal class AssettoDrivetrain(
         racingReturnMaxThrottle = automaticTransmissionConfig.racingReturnMaxThrottle.coerceIn(0.0, 1.0)
         manualRedlineHoldSeconds = automaticTransmissionConfig.manualRedlineHoldSeconds.coerceAtLeast(0.0)
         manualAutodownshiftRpm = automaticTransmissionConfig.manualAutodownshiftRpm.coerceAtLeast(0.0)
+        cruisingLogicEnabled = automaticTransmissionConfig.cruisingLogicEnabled
         currentTransmissionPosition = transmissionPosition
         sessionElapsedMilliseconds += dt * 1_000.0
         externalVehicleSpeedMetersPerSecond?.let(::anchorVehicleSpeed)
@@ -901,9 +903,20 @@ internal class AssettoDrivetrain(
         )
     }
 
+    fun applyCruisingLogicToggle(enabled: Boolean) {
+        cruisingLogicEnabled = enabled
+        automaticTransmissionMode = AutomaticTransmissionMode.CRUISING
+        racingReturnArmed = false
+        racingStompPendingTargetGear = null
+
+        if (!enabled) {
+            automaticTransmissionMode = AutomaticTransmissionMode.RACING
+        }
+    }
+
     private fun effectiveUpshiftTriggerRpm(): Double {
         val base = upshiftTriggerRpmForGear()
-        if (automaticTransmissionMode == AutomaticTransmissionMode.RACING || cruisingShiftOffsetRpm <= 0) {
+        if (!cruisingLogicEnabled || automaticTransmissionMode == AutomaticTransmissionMode.RACING || cruisingShiftOffsetRpm <= 0) {
             return base
         }
 
@@ -925,6 +938,10 @@ internal class AssettoDrivetrain(
     ): Boolean {
         if (shiftRpm < upshiftRpm) {
             return false
+        }
+
+        if (!cruisingLogicEnabled) {
+            return gas > 0.2
         }
 
         if (automaticTransmissionMode == AutomaticTransmissionMode.CRUISING) {
@@ -953,7 +970,7 @@ internal class AssettoDrivetrain(
 
     private fun effectiveDownshiftRpmForCurrentGear(): Double {
         val base = downshiftRpmForCurrentGear()
-        if (automaticTransmissionMode == AutomaticTransmissionMode.RACING || cruisingShiftOffsetRpm <= 0) {
+        if (!cruisingLogicEnabled || automaticTransmissionMode == AutomaticTransmissionMode.RACING || cruisingShiftOffsetRpm <= 0) {
             return base
         }
 
@@ -1088,6 +1105,12 @@ internal class AssettoDrivetrain(
         }
 
         if (!automaticShifting) {
+            return
+        }
+
+        if (!cruisingLogicEnabled) {
+            automaticTransmissionMode = AutomaticTransmissionMode.RACING
+            racingReturnArmed = false
             return
         }
 

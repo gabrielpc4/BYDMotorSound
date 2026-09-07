@@ -108,6 +108,7 @@ data class DriveSnapshot(
     val virtualForwardGearCount: Int = VirtualGearProfile.DEFAULT_VIRTUAL_GEARS,
     val exteriorPureAudio: Boolean = false,
     val minimumAudioThrottle: Float = MinimumAudioThrottle.DEFAULT,
+    val cruisingLogicEnabled: Boolean = true,
     val pedalAudioThrottleRampUpMilliseconds: Int = PedalAudioThrottleRampMilliseconds.DEFAULT,
     val pedalAudioThrottleRampDownMilliseconds: Int = PedalAudioThrottleRampMilliseconds.DEFAULT,
     val cruisingShiftOffsetRpm: Int = CruisingShiftOffsetRpm.DEFAULT,
@@ -440,6 +441,12 @@ class DriveController(context: Context) {
     fun setManualAutodownshiftRpm(rpm: Int) {
         updateAutomaticTransmissionSettings {
             it.copy(manualAutodownshiftRpm = ManualAutodownshiftRpm.normalize(rpm))
+        }
+    }
+
+    fun setCruisingLogicEnabled(enabled: Boolean) {
+        updateAutomaticTransmissionSettings {
+            it.copy(cruisingLogicEnabled = enabled)
         }
     }
 
@@ -1269,6 +1276,7 @@ class DriveController(context: Context) {
                 availableCarCount = installedProfiles().size,
                 soundPerspective = selectedPerspective.get(),
                 virtualForwardGearCount = virtualForwardGearCount.get(),
+                cruisingLogicEnabled = automaticTransmissionSettings.get().cruisingLogicEnabled,
                 cruisingShiftOffsetRpm = automaticTransmissionSettings.get().cruisingShiftOffsetRpm,
                 racingReturnThrottlePercent = automaticTransmissionSettings.get().racingReturnThrottlePercent,
                 racingReturnHoldSeconds = automaticTransmissionSettings.get().racingReturnHoldSeconds,

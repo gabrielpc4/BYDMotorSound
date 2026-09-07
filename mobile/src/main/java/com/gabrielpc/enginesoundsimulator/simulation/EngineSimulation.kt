@@ -103,7 +103,11 @@ class EngineSimulation {
     val state: DrivetrainState get() = latestState
 
     internal fun updateAutomaticTransmissionSettings(settings: com.gabrielpc.enginesoundsimulator.drive.AutomaticTransmissionSettings) {
+        val previous = automaticTransmissionConfig
         automaticTransmissionConfig = AutomaticTransmissionConfig.fromSettings(settings)
+        if (previous.cruisingLogicEnabled != settings.cruisingLogicEnabled) {
+            drivetrain?.applyCruisingLogicToggle(settings.cruisingLogicEnabled)
+        }
     }
 
     internal fun captureMotionContinuity(

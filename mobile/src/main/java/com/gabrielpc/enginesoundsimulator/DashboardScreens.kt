@@ -6,6 +6,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -30,8 +31,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -53,7 +56,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -1326,6 +1331,32 @@ internal fun CarFavoriteStarButton(
 }
 
 /** Spacious main-screen picker; thumbnails are capped by their decoded native dimensions. */
+private suspend fun LazyGridState.scrollItemToCenter(index: Int) {
+    if (index < 0) {
+        return
+    }
+
+    snapshotFlow { layoutInfo.viewportSize.height }
+        .first { height -> height > 0 }
+
+    animateScrollToItem(index)
+
+    repeat(6) {
+        val itemInfo = layoutInfo.visibleItemsInfo.find { visibleItem -> visibleItem.index == index }
+        if (itemInfo != null) {
+            val viewportCenter = layoutInfo.viewportSize.height / 2f
+            val itemCenter = itemInfo.offset.y + itemInfo.size.height / 2f
+            val delta = itemCenter - viewportCenter
+            if (kotlin.math.abs(delta) > 1f) {
+                animateScrollBy(delta)
+            }
+            return
+        }
+
+        delay(16)
+    }
+}
+
 @Composable
 internal fun CarGridSelectionDialog(
     selectedCarId: String,
@@ -1340,13 +1371,24 @@ internal fun CarGridSelectionDialog(
         context.getSharedPreferences(AppPreferenceStores.CAR_PICKER_GROUP, android.content.Context.MODE_PRIVATE)
     }
     val installedProfiles = remember(resolver) { FmodBankProfiles.all.filter(resolver::isInstalled) }
-    var selectedGroup by remember {
+    var selectedGroup by remember(selectedCarId) {
         mutableStateOf(
-            FmodBankProfiles.catalogGroup ?: pickerPreferences.getString(
-                "selected",
-                FmodBankProfiles.moddedCarsPackId,
-            )?.takeIf { it == FmodBankProfiles.moddedCarsPackId || it == FmodBankProfiles.originalCarsPackId }
-                ?: FmodBankProfiles.moddedCarsPackId,
+            FmodBankProfiles.catalogGroup ?: run {
+                val selectedPackGroup = FmodBankProfiles.find(selectedCarId).packGroup
+                if (
+                    selectedPackGroup == FmodBankProfiles.moddedCarsPackId ||
+                    selectedPackGroup == FmodBankProfiles.originalCarsPackId
+                ) {
+                    selectedPackGroup
+                } else {
+                    pickerPreferences.getString(
+                        "selected",
+                        FmodBankProfiles.moddedCarsPackId,
+                    )?.takeIf {
+                        it == FmodBankProfiles.moddedCarsPackId || it == FmodBankProfiles.originalCarsPackId
+                    } ?: FmodBankProfiles.moddedCarsPackId
+                }
+            },
         )
     }
     var searchQuery by remember { mutableStateOf("") }
@@ -1357,10 +1399,25 @@ internal fun CarGridSelectionDialog(
     val visibleProfiles = remember(groupProfiles, searchQuery) {
         groupProfiles.filter { profile -> carPickerProfileMatchesSearch(profile, searchQuery) }
     }
+    val gridState = rememberLazyGridState()
+    var didInitialScroll by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     LaunchedEffect(Unit) {
         delay(1)
         focusManager.clearFocus()
+    }
+    LaunchedEffect(selectedCarId, visibleProfiles) {
+        if (didInitialScroll) {
+            return@LaunchedEffect
+        }
+
+        val selectedIndex = visibleProfiles.indexOfFirst { profile -> profile.id == selectedCarId }
+        if (selectedIndex < 0) {
+            return@LaunchedEffect
+        }
+
+        gridState.scrollItemToCenter(selectedIndex)
+        didInitialScroll = true
     }
     // Disable the platform's narrow default dialog width so the picker can span the display.
     Dialog(
@@ -1437,6 +1494,7 @@ internal fun CarGridSelectionDialog(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
                 LazyVerticalGrid(
+                    state = gridState,
                     // Choose as many cards as fit at runtime; this remains usable on both the
                     // 1920x1080 emulator and narrower vehicle displays.
                     columns = GridCells.Adaptive(minSize = 260.dp),

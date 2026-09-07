@@ -111,6 +111,7 @@ internal object SettingsExporter {
             put("turbo", gains.turbo.toDouble())
             put("backfire", gains.backfire.toDouble())
             put("limiter", gains.limiter.toDouble())
+            put("supercharger", gains.supercharger.toDouble())
         }
     }
 
@@ -124,6 +125,7 @@ internal object SettingsExporter {
             put("turbo", gains.turbo.toDouble())
             put("backfire", gains.backfire.toDouble())
             put("limiter", gains.limiter.toDouble())
+            put("supercharger", gains.supercharger.toDouble())
         }
     }
 
@@ -138,6 +140,7 @@ internal object SettingsExporter {
             put("turbo", gains.turbo.toDouble())
             put("backfire", gains.backfire.toDouble())
             put("limiter", gains.limiter.toDouble())
+            put("supercharger", gains.supercharger.toDouble())
         }
     }
 

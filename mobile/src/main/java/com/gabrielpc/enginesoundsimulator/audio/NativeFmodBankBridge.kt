@@ -63,7 +63,8 @@ internal class NativeFmodBankBridge {
     /** Identifies the loaded car bank so native code can apply per-car audio policies. */
     external fun setLoadedProfileId(profileId: String)
 
-    external fun setCategoryGains(transmission: Float, gearShift: Float, turbo: Float, backfire: Float, limiter: Float)
+    external fun setCategoryGains(transmission: Float, gearShift: Float, turbo: Float, backfire: Float, limiter: Float, supercharger: Float)
+    external fun hasEmbeddedSupercharger(): Boolean
 
     external fun setBackfireAudioEnabled(enabled: Boolean)
 

@@ -423,6 +423,42 @@ bool isLimiterSoundName(const std::string& name) {
     return lowered.find("limiter") != std::string::npos;
 }
 
+bool isSuperchargerSoundName(const std::string& name) {
+    if (name.empty()) {
+        return false;
+    }
+    const std::string lowered = lowercaseCopy(name.c_str());
+    static constexpr char kSuffix[] = "_supercharger";
+    if (lowered.size() >= sizeof(kSuffix) - 1) {
+        return lowered.compare(
+            lowered.size() - (sizeof(kSuffix) - 1),
+            sizeof(kSuffix) - 1,
+            kSuffix
+        ) == 0;
+    }
+    return false;
+}
+
+bool scanCarBankForSuperchargerSamples(const std::string& bankPath) {
+    std::ifstream input(bankPath, std::ios::binary);
+    if (!input.is_open()) {
+        return false;
+    }
+    static constexpr char kNeedle[] = "_supercharger";
+    std::array<char, 8192> buffer{};
+    std::string carry;
+    while (input.read(buffer.data(), static_cast<std::streamsize>(buffer.size())) || input.gcount() > 0) {
+        carry.append(buffer.data(), static_cast<std::size_t>(input.gcount()));
+        if (carry.find(kNeedle) != std::string::npos) {
+            return true;
+        }
+        if (carry.size() > sizeof(kNeedle) - 1) {
+            carry.erase(0, carry.size() - (sizeof(kNeedle) - 1));
+        }
+    }
+    return carry.find(kNeedle) != std::string::npos;
+}
+
 void muteBlockedSkylineChannelsInGroup(FMOD::ChannelGroup* group) {
     if (group == nullptr) {
         return;
@@ -682,6 +718,10 @@ public:
         }
 
         discoverEventsLocked(carBankPath);
+        hasEmbeddedSupercharger_.store(
+            scanCarBankForSuperchargerSamples(carBankPath),
+            std::memory_order_relaxed
+        );
         if (events_.find("engine_int") == events_.end() || events_.find("engine_ext") == events_.end()) {
             return failAndCloseLocked("The installed bank has no engine_int/engine_ext event pair.");
         }
@@ -918,7 +958,14 @@ public:
         loadedProfileId_ = profileId;
     }
 
-    void setCategoryGains(float transmissionGain, float gearShiftGain, float turboGain, float backfireGain, float limiterGain) {
+    void setCategoryGains(
+        float transmissionGain,
+        float gearShiftGain,
+        float turboGain,
+        float backfireGain,
+        float limiterGain,
+        float superchargerGain
+    ) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!active_) return;
         const float transmission = std::max(0.0f, transmissionGain);
@@ -926,18 +973,21 @@ public:
         const float turbo = std::max(0.0f, turboGain);
         const float backfire = std::max(0.0f, backfireGain);
         const float limiter = std::max(0.0f, limiterGain);
+        const float supercharger = std::max(0.0f, superchargerGain);
         if (
             transmission == transmissionGain_ &&
             gearShift == gearShiftGain_ &&
             turbo == turboGain_ &&
             backfire == backfireGain_ &&
-            limiter == limiterGain_
+            limiter == limiterGain_ &&
+            supercharger == superchargerGain_
         ) return;
         transmissionGain_ = transmission;
         gearShiftGain_ = gearShift;
         turboGain_ = turbo;
         backfireGain_ = backfire;
         limiterGain_ = limiter;
+        superchargerGain_ = supercharger;
         if (alfaBackfireChannel_ != nullptr) alfaBackfireChannel_->setVolume(hostEffectsGain_ * backfireGain_);
         applyEventOverridesLocked();
     }
@@ -1119,6 +1169,10 @@ public:
         return engineSampleDataReadyLocked();
     }
 
+    bool hasEmbeddedSupercharger() {
+        return hasEmbeddedSupercharger_.load(std::memory_order_relaxed);
+    }
+
     void onSoundCallback(EventSlot& event, FMOD_STUDIO_EVENT_CALLBACK_TYPE type, FMOD::Sound* sound) {
         if (sound == nullptr) {
             return;
@@ -1146,6 +1200,12 @@ public:
             recent.sampleRateHz = sourceMetadata.rateHz;
         }
         if (type == FMOD_STUDIO_EVENT_CALLBACK_SOUND_PLAYED) {
+            if (
+                (event.name == "engine_int" || event.name == "engine_ext") &&
+                isSuperchargerSoundName(name)
+            ) {
+                hasEmbeddedSupercharger_.store(true, std::memory_order_relaxed);
+            }
             recent.callbackVoiceCount = std::min(recent.callbackVoiceCount + 1, 32767);
             if (loadedProfileId_ == kSkylineProfileId && isBlockedSkylineSubSound(name)) {
                 muteBlockedSkylineSubSoundsInEventLocked(event);
@@ -1623,13 +1683,16 @@ private:
         if (eventName != "engine_int" && eventName != "engine_ext") {
             return 1.0f;
         }
+        const float engineHost = std::max(hostGainForEventLocked(eventName), 0.0001f);
+        if (isSuperchargerSoundName(soundName)) {
+            return (hostEffectsGain_ * superchargerGain_) / engineHost;
+        }
         if (!isLimiterSoundName(soundName)) {
             return 1.0f;
         }
         if (limiterDedicatedEventHasAudibleVoicesLocked()) {
             return 1.0f;
         }
-        const float engineHost = std::max(hostGainForEventLocked(eventName), 0.0001f);
         return (hostEffectsGain_ * limiterGain_) / engineHost;
     }
 
@@ -1817,6 +1880,8 @@ private:
         commonStringsBank_ = nullptr;
         active_ = false;
         hasTurbo_ = false;
+        hasEmbeddedSupercharger_.store(false, std::memory_order_relaxed);
+        superchargerGain_ = 1.0f;
         idleRpm_ = 1000.0f;
         limiterRunning_ = false;
         limiterDecay_ = 10.0f;
@@ -2554,6 +2619,8 @@ private:
     float turboGain_ = 1.0f;
     float backfireGain_ = 1.0f;
     float limiterGain_ = 1.0f;
+    float superchargerGain_ = 1.0f;
+    std::atomic<bool> hasEmbeddedSupercharger_{false};
     std::unordered_map<uintptr_t, float> embeddedChannelMultipliers_;
     bool backfireAudioEnabled_ = true;
     bool backfireUseOriginal_ = true;
@@ -2815,9 +2882,16 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setLoadedProf
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setCategoryGains(
-    JNIEnv*, jobject, jfloat transmission, jfloat gearShift, jfloat turbo, jfloat backfire, jfloat limiter
+    JNIEnv*, jobject, jfloat transmission, jfloat gearShift, jfloat turbo, jfloat backfire, jfloat limiter, jfloat supercharger
 ) {
-    runtime.setCategoryGains(transmission, gearShift, turbo, backfire, limiter);
+    runtime.setCategoryGains(transmission, gearShift, turbo, backfire, limiter, supercharger);
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_hasEmbeddedSupercharger(
+    JNIEnv*, jobject
+) {
+    return runtime.hasEmbeddedSupercharger() ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT void JNICALL

@@ -14,6 +14,7 @@ data class MixerCarSpecificGains(
     val turbo: Float = 1.0f,
     val backfire: Float = 1.0f,
     val limiter: Float = 1.0f,
+    val supercharger: Float = 1.0f,
 ) {
     fun normalized(): MixerCarSpecificGains = copy(
         overall = MixerGlobalGains.snap(overall),
@@ -25,6 +26,7 @@ data class MixerCarSpecificGains(
         turbo = MixerGlobalGains.snap(turbo),
         backfire = MixerGlobalGains.snap(backfire),
         limiter = MixerGlobalGains.snap(limiter),
+        supercharger = MixerGlobalGains.snap(supercharger),
     )
 }
 
@@ -45,6 +47,7 @@ internal class MixerCarSpecificGainRepository(context: Context) {
             turbo = read(profile, "turbo"),
             backfire = read(profile, "backfire"),
             limiter = read(profile, "limiter"),
+            supercharger = read(profile, "supercharger"),
         ).normalized()
     }
 
@@ -60,6 +63,7 @@ internal class MixerCarSpecificGainRepository(context: Context) {
             .putFloat(key(profile, "turbo"), normalized.turbo)
             .putFloat(key(profile, "backfire"), normalized.backfire)
             .putFloat(key(profile, "limiter"), normalized.limiter)
+            .putFloat(key(profile, "supercharger"), normalized.supercharger)
             .commit()
     }
 

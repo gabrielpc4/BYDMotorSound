@@ -13,6 +13,7 @@ internal data class AudioMixGains(
     val turbo: Float = 1.0f,
     val backfire: Float = 1.0f,
     val limiter: Float = 1.0f,
+    val supercharger: Float = 1.0f,
     val engineHost: Float = DEFAULT_ENGINE_HOST_GAIN,
     val effectsHost: Float = DEFAULT_EFFECTS_HOST_GAIN,
 )
@@ -29,6 +30,7 @@ internal class AudioMixGainRepository(context: Context) {
         turbo = read(profile, "turbo"),
         backfire = read(profile, "backfire"),
         limiter = read(profile, "limiter"),
+        supercharger = read(profile, "supercharger"),
         engineHost = readHost(profile, "engine_host", 0.5f, 3.0f, DEFAULT_ENGINE_HOST_GAIN),
         effectsHost = readHost(profile, "effects_host", 0.5f, 4.0f, DEFAULT_EFFECTS_HOST_GAIN),
     )
@@ -40,6 +42,7 @@ internal class AudioMixGainRepository(context: Context) {
             .putFloat(key(profile, "turbo"), gains.turbo.coerceAtLeast(0f))
             .putFloat(key(profile, "backfire"), gains.backfire.coerceAtLeast(0f))
             .putFloat(key(profile, "limiter"), gains.limiter.coerceAtLeast(0f))
+            .putFloat(key(profile, "supercharger"), gains.supercharger.coerceAtLeast(0f))
             .putFloat(key(profile, "engine_host"), gains.engineHost.coerceIn(0.5f, 3.0f))
             .putFloat(key(profile, "effects_host"), gains.effectsHost.coerceIn(0.5f, 4.0f))
             .commit()

@@ -16,6 +16,7 @@ data class MixerGlobalGains(
     val turbo: Float = 1.0f,
     val backfire: Float = 1.0f,
     val limiter: Float = 1.0f,
+    val supercharger: Float = 1.0f,
 ) {
     fun normalized(): MixerGlobalGains = copy(
         engineInterior = snap(engineInterior),
@@ -26,6 +27,7 @@ data class MixerGlobalGains(
         turbo = snap(turbo),
         backfire = snap(backfire),
         limiter = snap(limiter),
+        supercharger = snap(supercharger),
     )
 
     companion object {
@@ -81,6 +83,7 @@ internal fun AudioMixGains.effectiveWith(
         turbo = turbo * mixerGlobal.turbo * mixerSpecific.turbo * overall,
         backfire = backfire * mixerGlobal.backfire * mixerSpecific.backfire * overall,
         limiter = limiter * mixerGlobal.limiter * mixerSpecific.limiter * overall,
+        supercharger = supercharger * mixerGlobal.supercharger * mixerSpecific.supercharger * overall,
     )
 }
 
@@ -101,6 +104,7 @@ internal class MixerGlobalGainRepository(context: Context) {
             turbo = read("turbo"),
             backfire = read("backfire"),
             limiter = read("limiter"),
+            supercharger = read("supercharger"),
         ).normalized()
     }
 
@@ -115,6 +119,7 @@ internal class MixerGlobalGainRepository(context: Context) {
             .putFloat("turbo", normalized.turbo)
             .putFloat("backfire", normalized.backfire)
             .putFloat("limiter", normalized.limiter)
+            .putFloat("supercharger", normalized.supercharger)
             .commit()
     }
 

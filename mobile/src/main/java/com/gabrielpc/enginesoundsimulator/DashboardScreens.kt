@@ -333,7 +333,9 @@ internal fun MixerDashboardScreen(
                 carTurboGain = state.turboGain,
                 carBackfireGain = state.backfireGain,
                 carLimiterGain = state.limiterGain,
+                carSuperchargerGain = state.superchargerGain,
                 hasTurbo = state.hasTurbo,
+                hasSupercharger = state.hasSupercharger,
                 mixerGains = mixerGains,
                 mixerSpecificGains = mixerSpecificGains,
                 mutedEvents = mutedEvents,
@@ -438,7 +440,9 @@ private fun MixerControlsPanel(
     carTurboGain: Float,
     carBackfireGain: Float,
     carLimiterGain: Float,
+    carSuperchargerGain: Float,
     hasTurbo: Boolean,
+    hasSupercharger: Boolean,
     mixerGains: MixerGlobalGains,
     mixerSpecificGains: MixerCarSpecificGains,
     mutedEvents: Map<String, Boolean>,
@@ -613,6 +617,23 @@ private fun MixerControlsPanel(
                             onMixerGainsChange(mixerGains.copy(turbo = value))
                         } else {
                             onMixerSpecificGainsChange(mixerSpecificGains.copy(turbo = value))
+                        }
+                    },
+                )
+            }
+            if (hasSupercharger) {
+                MixerLayerGainSlider(
+                    label = "SUPERCHARGER",
+                    layerValue = layerValueForScope(gainScope, mixerGains.supercharger, mixerSpecificGains.supercharger),
+                    dashboardValue = carSuperchargerGain,
+                    globalValue = mixerGains.supercharger,
+                    specificValue = mixerSpecificGains.supercharger,
+                    overall = mixerSpecificGains.overall,
+                    onValueChange = { value ->
+                        if (gainScope == MixerGainScope.GLOBAL) {
+                            onMixerGainsChange(mixerGains.copy(supercharger = value))
+                        } else {
+                            onMixerSpecificGainsChange(mixerSpecificGains.copy(supercharger = value))
                         }
                     },
                 )

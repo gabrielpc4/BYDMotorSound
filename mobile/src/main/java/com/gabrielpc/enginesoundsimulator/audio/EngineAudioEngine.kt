@@ -74,6 +74,7 @@ class EngineAudioEngine(context: Context) {
     private val pedalAudioThrottleRampUpMilliseconds = AtomicReference(PedalAudioThrottleRampMilliseconds.DEFAULT)
     private val pedalAudioThrottleRampDownMilliseconds = AtomicReference(PedalAudioThrottleRampMilliseconds.DEFAULT)
     private val engineSampleDataReady = AtomicBoolean(false)
+    private val hasEmbeddedSupercharger = AtomicBoolean(false)
     private var sentExteriorPureAudio: Boolean? = null
     private var sentMinimumAudioThrottle: Float? = null
     private var sentPedalAudioThrottleRampUpMilliseconds: Int? = null
@@ -133,6 +134,8 @@ class EngineAudioEngine(context: Context) {
     fun hostEffectsGain(): Float = hostEffectsGain.get()
 
     fun engineSampleDataReady(): Boolean = engineSampleDataReady.get()
+
+    fun hasEmbeddedSupercharger(): Boolean = hasEmbeddedSupercharger.get()
 
     internal fun setCategoryGains(gains: AudioMixGains) {
         categoryGains.set(gains)
@@ -270,6 +273,7 @@ class EngineAudioEngine(context: Context) {
 
             loadedBankProfileId.set(null)
             engineSampleDataReady.set(false)
+            hasEmbeddedSupercharger.set(false)
             nativeSources.set(emptyList())
             clearPendingShiftPulses()
             if (running.get() || controlThread.get()?.isAlive == true) {
@@ -392,6 +396,7 @@ class EngineAudioEngine(context: Context) {
             loadedBankProfileId.set(profile.id)
             bridge.setLoadedProfileId(profile.id)
             engineSampleDataReady.set(bridge.engineSampleDataReady())
+            hasEmbeddedSupercharger.set(bridge.hasEmbeddedSupercharger())
             Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
             lastTickNanos = System.nanoTime()
             nextControlNanos = lastTickNanos
@@ -479,6 +484,7 @@ class EngineAudioEngine(context: Context) {
                         configuredGains.turbo,
                         configuredGains.backfire,
                         configuredGains.limiter,
+                        configuredGains.supercharger,
                     )
                     sentCategoryGains = configuredGains
                     categoryGainCalls = 1
@@ -554,6 +560,7 @@ class EngineAudioEngine(context: Context) {
                     sentPedalAudioThrottleRampDownMilliseconds = requestedRampDownMilliseconds
                 }
                 engineSampleDataReady.set(bridge.engineSampleDataReady())
+                hasEmbeddedSupercharger.set(bridge.hasEmbeddedSupercharger())
                 val currentLimiterPulse = limiterPulseSerial.get()
                 val currentBackfirePulse = backfirePulseSerial.get()
                 val currentRejectedShift = rejectedShiftSerial.get()

@@ -94,6 +94,7 @@ data class DriveSnapshot(
     val turboGain: Float = 1.0f,
     val backfireGain: Float = 1.0f,
     val limiterGain: Float = 1.0f,
+    val superchargerGain: Float = 1.0f,
     val mixerGlobalGains: MixerGlobalGains = MixerGlobalGains(),
     val mixerCarSpecificGains: MixerCarSpecificGains = MixerCarSpecificGains(),
     /** Global backfire policy, deliberately independent of each car bank's authored thresholds. */
@@ -105,6 +106,7 @@ data class DriveSnapshot(
     val transmissionEnabled: Boolean = true,
     val turboEnabled: Boolean = true,
     val hasTurbo: Boolean = false,
+    val hasSupercharger: Boolean = false,
     val soundPerspective: EngineSoundPerspective = EngineSoundPerspective.CABIN,
     val transmissionLockedToVehicle: Boolean = false,
     val carAudioReady: Boolean = false,
@@ -286,6 +288,7 @@ class DriveController(context: Context) {
             turboGain = audioMixGains.get().turbo,
             backfireGain = audioMixGains.get().backfire,
             limiterGain = audioMixGains.get().limiter,
+            superchargerGain = audioMixGains.get().supercharger,
             mixerGlobalGains = mixerGlobalGains.get(),
             mixerCarSpecificGains = mixerCarSpecificGains.get(),
             backfireSettings = backfireSettings.get(),
@@ -296,6 +299,7 @@ class DriveController(context: Context) {
             transmissionEnabled = carEffectModes.get().transmissionEnabled,
             turboEnabled = carEffectModes.get().turboEnabled,
             hasTurbo = activePhysics.get()?.engine?.turbos?.isNotEmpty() == true,
+            hasSupercharger = resolveHasSupercharger(),
             fmodUpdateRateHz = fmodUpdateRateHz.get(),
             virtualForwardGearCount = virtualForwardGearCount.get(),
             exteriorPureAudio = exteriorPureAudio.get(),
@@ -475,6 +479,21 @@ class DriveController(context: Context) {
         mixerCarSpecificGains.set(normalized)
         mixerCarSpecificGainRepository.save(selectedProfile.get(), normalized)
         syncEffectiveMixGainsToAudioEngine()
+    }
+
+    private fun resolveHasSupercharger(): Boolean {
+        if (audioEngine.hasEmbeddedSupercharger()) {
+            return true
+        }
+
+        if (!uiActive.get() || !audioEngine.isMixerDiagnosticsActive()) {
+            return false
+        }
+
+        return audioEngine.sourceSnapshots().any { source ->
+            (source.eventName == "engine_int" || source.eventName == "engine_ext") &&
+                source.soundName.endsWith("_supercharger", ignoreCase = true)
+        }
     }
 
     private fun syncEffectiveMixGainsToAudioEngine() {

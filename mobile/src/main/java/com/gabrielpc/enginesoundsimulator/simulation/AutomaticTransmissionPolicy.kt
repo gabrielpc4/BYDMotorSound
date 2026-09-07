@@ -17,6 +17,8 @@ internal object AutomaticTransmissionPolicy {
     const val EMERGENCY_UPSHIFT_HOLD_SECONDS = 1.5
     /** Brake input that arms return-to-cruising on the next acceleration while racing. */
     const val RACING_RETURN_ARM_MIN_BRAKE = 0.05
+    /** Automatic transmission returns to cruising below this road speed in D. */
+    const val CRUISING_RETURN_MAX_SPEED_MPS = 1.0
     /** Racing upshift sits this many RPM below the authored limiter. */
     const val UPSHIFT_MARGIN_BELOW_LIMITER_RPM = 150.0
     private const val MINIMUM_THRESHOLD_ABOVE_IDLE_RPM = 250.0

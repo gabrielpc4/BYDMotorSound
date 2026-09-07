@@ -1114,6 +1114,12 @@ internal class AssettoDrivetrain(
             return
         }
 
+        if (speedMetersPerSecond <= AutomaticTransmissionPolicy.CRUISING_RETURN_MAX_SPEED_MPS) {
+            automaticTransmissionMode = AutomaticTransmissionMode.CRUISING
+            racingReturnArmed = false
+            racingStompPendingTargetGear = null
+        }
+
         val racingThrottleRequested = rawGas > AutomaticTransmissionPolicy.RACING_ENTER_MIN_THROTTLE
 
         if (

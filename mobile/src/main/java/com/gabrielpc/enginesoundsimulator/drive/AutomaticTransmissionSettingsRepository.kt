@@ -4,35 +4,6 @@ import android.content.Context
 import com.gabrielpc.enginesoundsimulator.AppPreferenceStores
 import kotlin.math.roundToInt
 
-/** RPM subtracted from automatic up/down thresholds while cruising. */
-internal object CruisingShiftOffsetRpm {
-    const val MIN = 0
-    const val MAX = 4_000
-    const val DEFAULT = 2_000
-    const val STEP = 1_000
-    const val HIGH_TACHOMETER_BONUS_RPM = 1_000
-    const val HIGH_TACHOMETER_THRESHOLD_RPM = 10_000
-    const val ULTRA_HIGH_TACHOMETER_THRESHOLD_RPM = 12_000
-
-    fun normalize(value: Int): Int {
-        val stepped = ((value.toFloat() / STEP).roundToInt() * STEP)
-        return stepped.coerceIn(MIN, MAX)
-    }
-
-    /** Extra cruising offset for cars whose authored tachometer scale reaches 10k or 12k RPM. */
-    fun tachometerMaximumBonus(tachometerMaximumRpm: Double): Int {
-        return when {
-            tachometerMaximumRpm >= ULTRA_HIGH_TACHOMETER_THRESHOLD_RPM -> HIGH_TACHOMETER_BONUS_RPM * 2
-            tachometerMaximumRpm >= HIGH_TACHOMETER_THRESHOLD_RPM -> HIGH_TACHOMETER_BONUS_RPM
-            else -> 0
-        }
-    }
-
-    fun effectiveForTachometer(userOffsetRpm: Int, tachometerMaximumRpm: Double): Int {
-        return (normalize(userOffsetRpm) + tachometerMaximumBonus(tachometerMaximumRpm)).coerceAtLeast(MIN)
-    }
-}
-
 /** Light-acceleration threshold used after braking in racing mode to return to cruising. */
 internal object RacingReturnThrottlePercent {
     const val MIN = 20
@@ -92,7 +63,7 @@ internal object ManualAutodownshiftRpm {
 internal data class AutomaticTransmissionSettings(
     val cruisingLogicEnabled: Boolean = true,
     val sixGearOnLaunchEnabled: Boolean = true,
-    val cruisingShiftOffsetRpm: Int = CruisingShiftOffsetRpm.DEFAULT,
+    val cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int> = CruisingShiftOffsetByTachMaxRpm.defaultOffsets(),
     val racingReturnThrottlePercent: Int = RacingReturnThrottlePercent.DEFAULT,
     val racingReturnHoldSeconds: Int = RacingReturnHoldSeconds.DEFAULT,
     val manualRedlineHoldSeconds: Int = ManualRedlineHoldSeconds.DEFAULT,
@@ -112,9 +83,7 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
         return AutomaticTransmissionSettings(
             cruisingLogicEnabled = preferences.getBoolean(KEY_CRUISING_LOGIC_ENABLED, true),
             sixGearOnLaunchEnabled = preferences.getBoolean(KEY_SIX_GEAR_ON_LAUNCH_ENABLED, true),
-            cruisingShiftOffsetRpm = CruisingShiftOffsetRpm.normalize(
-                preferences.getInt(KEY_CRUISING_SHIFT_OFFSET_RPM, CruisingShiftOffsetRpm.DEFAULT),
-            ),
+            cruisingShiftOffsetsByTachMaxRpm = loadCruisingShiftOffsetsByTachMaxRpm(),
             racingReturnThrottlePercent = RacingReturnThrottlePercent.normalize(
                 preferences.getInt(
                     KEY_RACING_RETURN_THROTTLE_PERCENT,
@@ -138,10 +107,17 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
     }
 
     fun save(settings: AutomaticTransmissionSettings) {
-        preferences.edit()
+        val normalizedOffsets = CruisingShiftOffsetByTachMaxRpm.normalizeMap(settings.cruisingShiftOffsetsByTachMaxRpm)
+        val editor = preferences.edit()
             .putBoolean(KEY_CRUISING_LOGIC_ENABLED, settings.cruisingLogicEnabled)
             .putBoolean(KEY_SIX_GEAR_ON_LAUNCH_ENABLED, settings.sixGearOnLaunchEnabled)
-            .putInt(KEY_CRUISING_SHIFT_OFFSET_RPM, CruisingShiftOffsetRpm.normalize(settings.cruisingShiftOffsetRpm))
+        CruisingShiftOffsetByTachMaxRpm.TIERS.forEach { tier ->
+            editor.putInt(
+                CruisingShiftOffsetByTachMaxRpm.preferenceKey(tier),
+                normalizedOffsets.getValue(tier),
+            )
+        }
+        editor
             .putInt(
                 KEY_RACING_RETURN_THROTTLE_PERCENT,
                 RacingReturnThrottlePercent.normalize(settings.racingReturnThrottlePercent),
@@ -169,27 +145,53 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
         preferences.edit().clear().commit()
     }
 
-    private fun migrateLegacyOffsetIfNeeded() {
-        if (preferences.contains(KEY_CRUISING_SHIFT_OFFSET_RPM)) {
-            return
-        }
-
-        val legacyPreferences = appContext.getSharedPreferences(
-            AppPreferenceStores.CRUISING_SHIFT_OFFSET_RPM,
-            Context.MODE_PRIVATE,
-        )
-        if (!legacyPreferences.contains(LEGACY_OFFSET_RPM_KEY)) {
-            return
-        }
-
-        preferences.edit()
-            .putInt(
-                KEY_CRUISING_SHIFT_OFFSET_RPM,
-                CruisingShiftOffsetRpm.normalize(
-                    legacyPreferences.getInt(LEGACY_OFFSET_RPM_KEY, CruisingShiftOffsetRpm.DEFAULT),
+    private fun loadCruisingShiftOffsetsByTachMaxRpm(): Map<Int, Int> {
+        val loaded = CruisingShiftOffsetByTachMaxRpm.TIERS.associateWith { tier ->
+            CruisingShiftOffsetByTachMaxRpm.normalize(
+                preferences.getInt(
+                    CruisingShiftOffsetByTachMaxRpm.preferenceKey(tier),
+                    CruisingShiftOffsetByTachMaxRpm.defaultOffsets().getValue(tier),
                 ),
             )
-            .commit()
+        }
+        return CruisingShiftOffsetByTachMaxRpm.normalizeMap(loaded)
+    }
+
+    private fun migrateLegacyOffsetIfNeeded() {
+        if (CruisingShiftOffsetByTachMaxRpm.TIERS.all { preferences.contains(CruisingShiftOffsetByTachMaxRpm.preferenceKey(it)) }) {
+            return
+        }
+
+        val legacySingleOffset = when {
+            preferences.contains(KEY_CRUISING_SHIFT_OFFSET_RPM) -> {
+                CruisingShiftOffsetByTachMaxRpm.normalize(
+                    preferences.getInt(KEY_CRUISING_SHIFT_OFFSET_RPM, 2_000),
+                )
+            }
+            else -> {
+                val legacyPreferences = appContext.getSharedPreferences(
+                    AppPreferenceStores.CRUISING_SHIFT_OFFSET_RPM,
+                    Context.MODE_PRIVATE,
+                )
+                if (legacyPreferences.contains(LEGACY_OFFSET_RPM_KEY)) {
+                    CruisingShiftOffsetByTachMaxRpm.normalize(
+                        legacyPreferences.getInt(LEGACY_OFFSET_RPM_KEY, 2_000),
+                    )
+                } else {
+                    null
+                }
+            }
+        }
+
+        if (legacySingleOffset == null) {
+            return
+        }
+
+        val editor = preferences.edit()
+        CruisingShiftOffsetByTachMaxRpm.TIERS.forEach { tier ->
+            editor.putInt(CruisingShiftOffsetByTachMaxRpm.preferenceKey(tier), legacySingleOffset)
+        }
+        editor.commit()
     }
 
     private companion object {

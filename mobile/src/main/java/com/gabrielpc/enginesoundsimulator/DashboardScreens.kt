@@ -113,6 +113,7 @@ import com.gabrielpc.enginesoundsimulator.audio.MixerEventCategory
 import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains
 import com.gabrielpc.enginesoundsimulator.audio.FmodSourceState
 import com.gabrielpc.enginesoundsimulator.audio.FmodUpdateRate
+import com.gabrielpc.enginesoundsimulator.drive.CruisingShiftOffsetByTachMaxRpm
 import com.gabrielpc.enginesoundsimulator.drive.DriveSnapshot
 import com.gabrielpc.enginesoundsimulator.drive.BackfireSettings
 import com.gabrielpc.enginesoundsimulator.drive.MinimumAudioThrottle
@@ -624,6 +625,11 @@ private fun MixerControlsPanel(
             if (hasSupercharger) {
                 MixerLayerGainSlider(
                     label = "SUPERCHARGER",
+                    eventCategory = MixerEventCategory.SUPERCHARGER,
+                    mutedEvents = mutedEvents,
+                    soloedEvents = soloedEvents,
+                    onToggleCategoryMute = onToggleCategoryMute,
+                    onToggleCategorySolo = onToggleCategorySolo,
                     layerValue = layerValueForScope(gainScope, mixerGains.supercharger, mixerSpecificGains.supercharger),
                     dashboardValue = carSuperchargerGain,
                     globalValue = mixerGains.supercharger,
@@ -846,6 +852,8 @@ internal fun SettingsScreen(
     onPedalAudioThrottleRampDownMillisecondsChange: (Int) -> Unit,
     tachometerCruisingShiftRangeOverlayEnabled: Boolean,
     onTachometerCruisingShiftRangeOverlayEnabledChange: (Boolean) -> Unit,
+    cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int>,
+    onCruisingShiftOffsetForTachMaxRpmChange: (Int, Int) -> Unit,
     onPreviewBackfireSample: (Int) -> Unit,
 ) {
     var backfireTab by remember { mutableStateOf(false) }
@@ -897,6 +905,10 @@ internal fun SettingsScreen(
                 description = "Semi-transparent wedge on the tachometer showing min/max automatic shift RPM while cruising.",
                 enabled = tachometerCruisingShiftRangeOverlayEnabled,
                 onEnabledChange = onTachometerCruisingShiftRangeOverlayEnabledChange,
+            )
+            CruisingShiftOffsetsByTachMaxRpmControl(
+                offsets = cruisingShiftOffsetsByTachMaxRpm,
+                onOffsetChange = onCruisingShiftOffsetForTachMaxRpmChange,
             )
             AutomaticTransmissionSettingsControl(
                 minimumAudioThrottle = minimumAudioThrottle,
@@ -1110,6 +1122,81 @@ private fun SixGearOnLaunchSetting(
             fontSize = 11.sp,
             lineHeight = 14.sp,
         )
+    }
+}
+
+@Composable
+private fun CruisingShiftOffsetsByTachMaxRpmControl(
+    offsets: Map<Int, Int>,
+    onOffsetChange: (Int, Int) -> Unit,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+) {
+    val offsetSteps = (CruisingShiftOffsetByTachMaxRpm.MAX - CruisingShiftOffsetByTachMaxRpm.MIN) /
+        CruisingShiftOffsetByTachMaxRpm.STEP - 1
+
+    Column(
+        modifier = modifier
+            .border(1.dp, Line, RoundedCornerShape(8.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("CRUISING OFFSET BY TACH MAX", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
+        Text(
+            text = "Cruising shift RPM offset stored per tachometer maximum. Cars that share the same max RPM use the same value.",
+            color = Muted,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+        )
+
+        CruisingShiftOffsetByTachMaxRpm.TIERS.chunked(2).forEach { rowTiers ->
+            SettingsGridRow {
+                rowTiers.forEach { tier ->
+                    val offset = offsets[tier] ?: CruisingShiftOffsetByTachMaxRpm.defaultOffsets().getValue(tier)
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "${tier / 1_000}K RPM",
+                                color = CyanSoft,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Black,
+                            )
+                            Text(
+                                text = "$offset RPM",
+                                color = White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+
+                        Slider(
+                            value = offset.toFloat(),
+                            onValueChange = { value ->
+                                val normalized = CruisingShiftOffsetByTachMaxRpm.normalize(value.roundToInt())
+                                if (normalized != offset) {
+                                    onOffsetChange(tier, normalized)
+                                }
+                            },
+                            valueRange = CruisingShiftOffsetByTachMaxRpm.MIN.toFloat()..CruisingShiftOffsetByTachMaxRpm.MAX.toFloat(),
+                            steps = offsetSteps.coerceAtLeast(0),
+                        )
+                    }
+                }
+
+                if (rowTiers.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
     }
 }
 

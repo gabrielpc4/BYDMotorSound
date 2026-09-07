@@ -112,7 +112,7 @@ import com.gabrielpc.enginesoundsimulator.drive.EffectSoundKind
 import com.gabrielpc.enginesoundsimulator.drive.UserVisibleMessage
 import com.gabrielpc.enginesoundsimulator.drive.UserVisibleMessageSeverity
 import com.gabrielpc.enginesoundsimulator.drive.InputMode
-import com.gabrielpc.enginesoundsimulator.drive.CruisingShiftOffsetRpm
+import com.gabrielpc.enginesoundsimulator.drive.CruisingShiftOffsetByTachMaxRpm
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankProfiles
 import com.gabrielpc.enginesoundsimulator.audio.CarSubtitleCatalog
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankResolver
@@ -234,7 +234,7 @@ class MainActivity : ComponentActivity() {
                         onSixGearOnLaunchEnabledChange = controller::setSixGearOnLaunchEnabled,
                         onTachometerCruisingShiftRangeOverlayEnabledChange =
                             controller::setTachometerCruisingShiftRangeOverlayEnabled,
-                        onCruisingShiftOffsetRpmChange = controller::setCruisingShiftOffsetRpm,
+                        onCruisingShiftOffsetForTachMaxRpmChange = controller::setCruisingShiftOffsetForTachMaxRpm,
                         onRacingReturnThrottlePercentChange = controller::setRacingReturnThrottlePercent,
                         onRacingReturnHoldSecondsChange = controller::setRacingReturnHoldSeconds,
                         onManualRedlineHoldSecondsChange = controller::setManualRedlineHoldSeconds,
@@ -339,7 +339,7 @@ private fun MotorSoundDashboard(
     onVirtualForwardGearCountChange: (Int) -> Unit,
     onSixGearOnLaunchEnabledChange: (Boolean) -> Unit,
     onTachometerCruisingShiftRangeOverlayEnabledChange: (Boolean) -> Unit,
-    onCruisingShiftOffsetRpmChange: (Int) -> Unit,
+    onCruisingShiftOffsetForTachMaxRpmChange: (Int, Int) -> Unit,
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
     onRacingReturnHoldSecondsChange: (Int) -> Unit,
     onManualRedlineHoldSecondsChange: (Int) -> Unit,
@@ -496,7 +496,7 @@ private fun MotorSoundDashboard(
                                     ) {
                                         DashboardEngineControls(
                                             state = state,
-                                            onCruisingShiftOffsetRpmChange = onCruisingShiftOffsetRpmChange,
+                                            onCruisingShiftOffsetForTachMaxRpmChange = onCruisingShiftOffsetForTachMaxRpmChange,
                                             onEngineExternalChange = onEngineExternalChange,
                                             onEnginePureChange = onEnginePureChange,
                                             onCruisingLogicChange = onCruisingLogicChange,
@@ -599,6 +599,8 @@ private fun MotorSoundDashboard(
                             tachometerCruisingShiftRangeOverlayEnabled = state.tachometerCruisingShiftRangeOverlayEnabled,
                             onTachometerCruisingShiftRangeOverlayEnabledChange =
                                 onTachometerCruisingShiftRangeOverlayEnabledChange,
+                            cruisingShiftOffsetsByTachMaxRpm = state.cruisingShiftOffsetsByTachMaxRpm,
+                            onCruisingShiftOffsetForTachMaxRpmChange = onCruisingShiftOffsetForTachMaxRpmChange,
                             onPreviewBackfireSample = onPreviewBackfireSample,
                         )
                     }
@@ -1151,7 +1153,7 @@ private object DashboardClassicEffectLayout {
 @Composable
 private fun DashboardEngineControls(
     state: DriveSnapshot,
-    onCruisingShiftOffsetRpmChange: (Int) -> Unit,
+    onCruisingShiftOffsetForTachMaxRpmChange: (Int, Int) -> Unit,
     onEngineExternalChange: (Boolean) -> Unit,
     onEnginePureChange: (Boolean) -> Unit,
     onCruisingLogicChange: (Boolean) -> Unit,
@@ -1161,8 +1163,9 @@ private fun DashboardEngineControls(
     val layout = DashboardClassicEffectLayout
     val rowHeight = 42.dp
     val rowGap = 7.dp
-    val cruisingOffsetSteps = (CruisingShiftOffsetRpm.MAX - CruisingShiftOffsetRpm.MIN) /
-        CruisingShiftOffsetRpm.STEP - 1
+    val cruisingOffsetSteps = (CruisingShiftOffsetByTachMaxRpm.MAX - CruisingShiftOffsetByTachMaxRpm.MIN) /
+        CruisingShiftOffsetByTachMaxRpm.STEP - 1
+    val tierLabel = CruisingShiftOffsetByTachMaxRpm.formatTierLabel(state.cruisingShiftOffsetTachMaxRpm)
 
     Row(
         modifier = modifier,
@@ -1185,15 +1188,18 @@ private fun DashboardEngineControls(
         ) {
             DashboardPedalAudioSettingSlider(
                 label = "CRUISING OFFSET",
-                valueLabel = "${state.cruisingShiftOffsetRpm} RPM",
+                valueLabel = "${state.cruisingShiftOffsetRpm} RPM · $tierLabel",
                 value = state.cruisingShiftOffsetRpm.toFloat(),
                 onValueChange = { value ->
-                    val selectedOffset = CruisingShiftOffsetRpm.normalize(value.roundToInt())
+                    val selectedOffset = CruisingShiftOffsetByTachMaxRpm.normalize(value.roundToInt())
                     if (selectedOffset != state.cruisingShiftOffsetRpm) {
-                        onCruisingShiftOffsetRpmChange(selectedOffset)
+                        onCruisingShiftOffsetForTachMaxRpmChange(
+                            state.cruisingShiftOffsetTachMaxRpm,
+                            selectedOffset,
+                        )
                     }
                 },
-                valueRange = CruisingShiftOffsetRpm.MIN.toFloat()..CruisingShiftOffsetRpm.MAX.toFloat(),
+                valueRange = CruisingShiftOffsetByTachMaxRpm.MIN.toFloat()..CruisingShiftOffsetByTachMaxRpm.MAX.toFloat(),
                 steps = cruisingOffsetSteps.coerceAtLeast(0),
                 modifier = Modifier.fillMaxWidth(),
             )

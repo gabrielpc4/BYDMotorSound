@@ -120,7 +120,9 @@ data class DriveSnapshot(
     val sixGearOnLaunchEnabled: Boolean = true,
     val pedalAudioThrottleRampUpMilliseconds: Int = PedalAudioThrottleRampMilliseconds.DEFAULT,
     val pedalAudioThrottleRampDownMilliseconds: Int = PedalAudioThrottleRampMilliseconds.DEFAULT,
-    val cruisingShiftOffsetRpm: Int = CruisingShiftOffsetRpm.DEFAULT,
+    val cruisingShiftOffsetTachMaxRpm: Int = CruisingShiftOffsetByTachMaxRpm.TIERS.first(),
+    val cruisingShiftOffsetRpm: Int = CruisingShiftOffsetByTachMaxRpm.defaultOffsets().getValue(7_000),
+    val cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int> = CruisingShiftOffsetByTachMaxRpm.defaultOffsets(),
     val racingReturnThrottlePercent: Int = RacingReturnThrottlePercent.DEFAULT,
     val racingReturnHoldSeconds: Int = RacingReturnHoldSeconds.DEFAULT,
     val manualRedlineHoldSeconds: Int = ManualRedlineHoldSeconds.DEFAULT,
@@ -418,9 +420,18 @@ class DriveController(context: Context) {
         simulation.updateVirtualGearCount(normalized)
     }
 
-    fun setCruisingShiftOffsetRpm(offsetRpm: Int) {
-        updateAutomaticTransmissionSettings {
-            it.copy(cruisingShiftOffsetRpm = CruisingShiftOffsetRpm.normalize(offsetRpm))
+    fun setCruisingShiftOffsetForTachMaxRpm(tachMaxRpmTier: Int, offsetRpm: Int) {
+        if (tachMaxRpmTier !in CruisingShiftOffsetByTachMaxRpm.TIERS) {
+            return
+        }
+
+        updateAutomaticTransmissionSettings { settings ->
+            val normalized = CruisingShiftOffsetByTachMaxRpm.normalize(offsetRpm)
+            val updatedOffsets = settings.cruisingShiftOffsetsByTachMaxRpm.toMutableMap()
+            updatedOffsets[tachMaxRpmTier] = normalized
+            settings.copy(
+                cruisingShiftOffsetsByTachMaxRpm = CruisingShiftOffsetByTachMaxRpm.normalizeMap(updatedOffsets),
+            )
         }
     }
 
@@ -1338,7 +1349,12 @@ class DriveController(context: Context) {
                 virtualForwardGearCount = virtualForwardGearCount.get(),
                 cruisingLogicEnabled = automaticTransmissionSettings.get().cruisingLogicEnabled,
                 sixGearOnLaunchEnabled = automaticTransmissionSettings.get().sixGearOnLaunchEnabled,
-                cruisingShiftOffsetRpm = automaticTransmissionSettings.get().cruisingShiftOffsetRpm,
+                cruisingShiftOffsetTachMaxRpm = CruisingShiftOffsetByTachMaxRpm.resolveTier(drivetrain.tachometerMaximumRpm),
+                cruisingShiftOffsetRpm = CruisingShiftOffsetByTachMaxRpm.resolveOffset(
+                    offsets = automaticTransmissionSettings.get().cruisingShiftOffsetsByTachMaxRpm,
+                    tachometerMaximumRpm = drivetrain.tachometerMaximumRpm,
+                ),
+                cruisingShiftOffsetsByTachMaxRpm = automaticTransmissionSettings.get().cruisingShiftOffsetsByTachMaxRpm,
                 racingReturnThrottlePercent = automaticTransmissionSettings.get().racingReturnThrottlePercent,
                 racingReturnHoldSeconds = automaticTransmissionSettings.get().racingReturnHoldSeconds,
                 manualRedlineHoldSeconds = automaticTransmissionSettings.get().manualRedlineHoldSeconds,

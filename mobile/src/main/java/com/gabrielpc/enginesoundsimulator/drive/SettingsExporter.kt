@@ -167,7 +167,18 @@ internal object SettingsExporter {
         return JSONObject().apply {
             put("cruisingLogicEnabled", settings.cruisingLogicEnabled)
             put("sixGearOnLaunchEnabled", settings.sixGearOnLaunchEnabled)
-            put("cruisingShiftOffsetRpm", settings.cruisingShiftOffsetRpm)
+            put(
+                "cruisingShiftOffsetsByTachMaxRpm",
+                JSONObject().apply {
+                    CruisingShiftOffsetByTachMaxRpm.TIERS.forEach { tier ->
+                        put(
+                            tier.toString(),
+                            settings.cruisingShiftOffsetsByTachMaxRpm[tier]
+                                ?: CruisingShiftOffsetByTachMaxRpm.defaultOffsets().getValue(tier),
+                        )
+                    }
+                },
+            )
             put("racingReturnThrottlePercent", settings.racingReturnThrottlePercent)
             put("racingReturnHoldSeconds", settings.racingReturnHoldSeconds)
             put("manualRedlineHoldSeconds", settings.manualRedlineHoldSeconds)

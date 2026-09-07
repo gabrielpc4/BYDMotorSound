@@ -1,7 +1,7 @@
 package com.gabrielpc.enginesoundsimulator.simulation
 
 import com.gabrielpc.enginesoundsimulator.drive.BackfireSettings
-import com.gabrielpc.enginesoundsimulator.drive.CruisingShiftOffsetRpm
+import com.gabrielpc.enginesoundsimulator.drive.CruisingShiftOffsetByTachMaxRpm
 import android.util.Log
 import kotlin.math.PI
 import kotlin.math.abs
@@ -407,8 +407,8 @@ internal class AssettoDrivetrain(
         automaticTransmissionConfig: AutomaticTransmissionConfig,
     ): AssettoDrivetrainFrame {
         val dt = f32(deltaSeconds.coerceIn(0.0001, 0.050))
-        cruisingShiftOffsetRpm = CruisingShiftOffsetRpm.effectiveForTachometer(
-            userOffsetRpm = automaticTransmissionConfig.cruisingShiftOffsetRpm,
+        cruisingShiftOffsetRpm = CruisingShiftOffsetByTachMaxRpm.resolveOffset(
+            offsets = automaticTransmissionConfig.cruisingShiftOffsetsByTachMaxRpm,
             tachometerMaximumRpm = physics.engine.tachometerMaximumRpm,
         )
         racingReturnMaxThrottle = automaticTransmissionConfig.racingReturnMaxThrottle.coerceIn(0.0, 1.0)
@@ -1069,7 +1069,11 @@ internal class AssettoDrivetrain(
     }
 
     private fun effectiveDownshiftRpmForCurrentGear(): Double {
-        val base = downshiftRpmForCurrentGear()
+        val base = if (gear <= 1) {
+            physics.engine.idleRpm
+        } else {
+            downshiftRpmForCurrentGear()
+        }
         if (!cruisingLogicEnabled || automaticTransmissionMode == AutomaticTransmissionMode.RACING || cruisingShiftOffsetRpm <= 0) {
             return base
         }

@@ -779,13 +779,28 @@ class DriveController(context: Context) {
 
     fun selectPreviousCar() {
         synchronized(lifecycleLock) {
-            if (carNavigationIndex <= 0) {
+            if (carNavigationIndex > 0) {
+                carNavigationIndex--
+                val profileId = carNavigationHistory[carNavigationIndex]
+                installedProfiles().firstOrNull { it.id == profileId }?.let(::applySelectedCar)
                 return
             }
 
-            carNavigationIndex--
-            val profileId = carNavigationHistory[carNavigationIndex]
-            installedProfiles().firstOrNull { it.id == profileId }?.let(::applySelectedCar)
+            val installed = installedProfiles()
+            if (installed.size <= 1) {
+                return
+            }
+
+            val currentId = selectedProfile.get().id
+            val currentIndex = installed.indexOfFirst { profile -> profile.id == currentId }.coerceAtLeast(0)
+            val previousProfile = installed[(currentIndex - 1 + installed.size) % installed.size]
+
+            if (carNavigationHistory.firstOrNull() != previousProfile.id) {
+                carNavigationHistory.add(0, previousProfile.id)
+            }
+            carNavigationIndex = 0
+            randomCycleVisitedCarIds.add(previousProfile.id)
+            applySelectedCar(previousProfile)
         }
     }
 

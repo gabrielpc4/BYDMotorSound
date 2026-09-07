@@ -159,7 +159,7 @@ class DriveController(context: Context) {
     private val fmodUpdateRateRepository = FmodUpdateRateRepository(appContext)
     private val exteriorAudioModeRepository = ExteriorAudioModeRepository(appContext)
     private val backfireSettingsRepository = BackfireSettingsRepository(appContext)
-    private val shiftSoundSettingsRepository = ShiftSoundSettingsRepository(appContext)
+    private val effectSoundOverrideRepository = EffectSoundOverrideRepository(appContext)
     private val carEffectModesRepository = CarEffectModesRepository(appContext)
     private val virtualGearCountRepository = VirtualGearCountRepository(appContext)
     private val minimumAudioThrottleRepository = MinimumAudioThrottleRepository(appContext)
@@ -188,7 +188,7 @@ class DriveController(context: Context) {
     private val audioMuted = AtomicBoolean(false)
     // Deliberately session-only: this diagnostic/listening mode must never become a car preference.
     private val backfireSettings = AtomicReference(BackfireSettings())
-    private val shiftSoundSettings = AtomicReference(ShiftSoundSettings())
+    private val effectSoundOverrides = AtomicReference(EffectSoundOverrideSettings())
     private val carEffectModes = AtomicReference(CarEffectModes())
     private val audioMixGains = AtomicReference(AudioMixGains())
     private val mixerGlobalGains = AtomicReference(MixerGlobalGains())
@@ -249,9 +249,9 @@ class DriveController(context: Context) {
         applyCarAudioPreferences(selectedProfile.get())
         audioEngine.setSoundProgram(selectedProfile.get(), selectedPerspective.get())
         backfireSettings.set(backfireSettingsRepository.load())
-        shiftSoundSettings.set(shiftSoundSettingsRepository.load())
+        effectSoundOverrides.set(effectSoundOverrideRepository.load())
         simulation.updateBackfireSettings(backfireSettings.get())
-        simulation.setUseOriginalBackfire(!carEffectModes.get().popsAndBangsOverride)
+        applyEffectSoundOverrides()
         simulation.updateVirtualGearCount(virtualForwardGearCount.get())
         audioEngine.setBackfireAllowedSamples(backfireSettings.get().allowedSamples)
         applyMinimumAudioThrottleSettings(minimumAudioThrottleSettings.get())
@@ -298,9 +298,9 @@ class DriveController(context: Context) {
             mixerCarSpecificGains = mixerCarSpecificGains.get(),
             backfireSettings = backfireSettings.get(),
             popsAndBangsEnabled = carEffectModes.get().popsAndBangsEnabled,
-            popsAndBangsOverride = carEffectModes.get().popsAndBangsOverride,
+            popsAndBangsOverride = effectSoundOverrides.get().popsAndBangsOverride,
             shiftSoundsEnabled = carEffectModes.get().shiftSoundsEnabled,
-            shiftSoundsOverride = carEffectModes.get().shiftSoundsOverride,
+            shiftSoundsOverride = effectSoundOverrides.get().shiftSoundsOverride,
             transmissionEnabled = carEffectModes.get().transmissionEnabled,
             turboEnabled = carEffectModes.get().turboEnabled,
             hasTurbo = activePhysics.get()?.engine?.turbos?.isNotEmpty() == true,
@@ -614,19 +614,27 @@ class DriveController(context: Context) {
     }
 
     fun setEffectOverride(kind: EffectSoundKind, override: Boolean) {
-        val updated = carEffectModes.get().withOverride(kind, override)
-        carEffectModes.set(updated)
-        carEffectModesRepository.save(selectedProfile.get(), updated)
+        val updated = effectSoundOverrides.get().withOverride(kind, override)
+        effectSoundOverrides.set(updated)
+        effectSoundOverrideRepository.save(updated)
+        applyEffectSoundOverride(kind, updated)
+    }
+
+    private fun applyEffectSoundOverrides() {
+        val overrides = effectSoundOverrides.get()
+        applyEffectSoundOverride(EffectSoundKind.POPS_AND_BANGS, overrides)
+        applyEffectSoundOverride(EffectSoundKind.SHIFT, overrides)
+    }
+
+    private fun applyEffectSoundOverride(kind: EffectSoundKind, overrides: EffectSoundOverrideSettings) {
         when (kind) {
             EffectSoundKind.POPS_AND_BANGS -> {
+                val override = overrides.popsAndBangsOverride
                 audioEngine.setBackfireUseOriginal(!override)
                 simulation.setUseOriginalBackfire(!override)
             }
             EffectSoundKind.SHIFT -> {
-                audioEngine.setShiftSoundOverride(override)
-                val current = shiftSoundSettings.get()
-                shiftSoundSettings.set(current.copy(overrideEnabled = override))
-                shiftSoundSettingsRepository.save(shiftSoundSettings.get())
+                audioEngine.setShiftSoundOverride(overrides.shiftSoundsOverride)
             }
             EffectSoundKind.TRANSMISSION, EffectSoundKind.TURBO -> Unit
         }
@@ -681,7 +689,7 @@ class DriveController(context: Context) {
         appContext.getSharedPreferences(AppPreferenceStores.ENGINE_SOUND_PERSPECTIVE, Context.MODE_PRIVATE).edit().clear().apply()
         appContext.getSharedPreferences(AppPreferenceStores.CAR_PICKER_GROUP, Context.MODE_PRIVATE).edit().clear().apply()
         backfireSettingsRepository.reset()
-        shiftSoundSettingsRepository.reset()
+        effectSoundOverrideRepository.reset()
         virtualGearCountRepository.reset()
         minimumAudioThrottleRepository.reset()
         automaticTransmissionSettingsRepository.reset()
@@ -697,7 +705,7 @@ class DriveController(context: Context) {
         fmodUpdateRateHz.set(FmodUpdateRate.DEFAULT_HZ)
         exteriorPureAudio.set(false)
         backfireSettings.set(BackfireSettings())
-        shiftSoundSettings.set(ShiftSoundSettings())
+        effectSoundOverrides.set(EffectSoundOverrideSettings())
         virtualForwardGearCount.set(VirtualGearProfile.DEFAULT_VIRTUAL_GEARS)
         minimumAudioThrottleSettings.set(MinimumAudioThrottleSettings())
         automaticTransmissionSettings.set(AutomaticTransmissionSettings())
@@ -706,9 +714,8 @@ class DriveController(context: Context) {
         carEffectModes.set(CarEffectModes())
         simulation.updateBackfireSettings(backfireSettings.get())
         audioEngine.setBackfireAudioEnabled(true)
-        audioEngine.setBackfireUseOriginal(true)
         audioEngine.setShiftSoundEnabled(true)
-        audioEngine.setShiftSoundOverride(false)
+        applyEffectSoundOverrides()
         audioEngine.setTransmissionAudioEnabled(true)
         audioEngine.setTurboAudioEnabled(true)
         selectedProfile.set(defaultInstalledProfile())
@@ -1034,9 +1041,8 @@ class DriveController(context: Context) {
     }
 
     /**
-     * Reloads every dashboard control that is stored per car before FMOD switches banks.
-     * Centralizing this prevents stale EXTERNAL / PURE / OVERRIDE / gain presets from leaking
-     * across vehicle changes.
+     * Reloads per-car dashboard controls before FMOD switches banks. Global effect overrides are
+     * intentionally excluded so they survive car changes.
      */
     private fun applyCarAudioPreferences(
         profile: FmodBankProfile,
@@ -1060,14 +1066,8 @@ class DriveController(context: Context) {
 
         val modes = carEffectModesRepository.load(profile)
         carEffectModes.set(modes)
-        shiftSoundSettings.set(
-            shiftSoundSettingsRepository.load().copy(overrideEnabled = modes.shiftSoundsOverride),
-        )
         audioEngine.setBackfireAudioEnabled(modes.popsAndBangsEnabled)
-        audioEngine.setBackfireUseOriginal(!modes.popsAndBangsOverride)
-        simulation.setUseOriginalBackfire(!modes.popsAndBangsOverride)
         audioEngine.setShiftSoundEnabled(modes.shiftSoundsEnabled)
-        audioEngine.setShiftSoundOverride(modes.shiftSoundsOverride)
         audioEngine.setTransmissionAudioEnabled(modes.transmissionEnabled)
         audioEngine.setTurboAudioEnabled(modes.turboEnabled)
     }
@@ -1473,6 +1473,7 @@ class DriveController(context: Context) {
                 profile = baseline.profile,
                 perspectiveOverride = baseline.perspective,
             )
+            applyEffectSoundOverrides()
             audioEngine.setSoundProgram(selectedProfile.get(), selectedPerspective.get())
         }
     }

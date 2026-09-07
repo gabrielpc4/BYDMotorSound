@@ -16,6 +16,7 @@ internal object AppPreferenceStores {
     const val EXTERIOR_AUDIO_MODE = "exterior_audio_mode_v1"
     const val EXTERIOR_PURE_AUDIO_SETTINGS = "exterior_pure_audio_settings_v1"
     const val SHIFT_SOUND_SETTINGS = "shift_sound_settings_v1"
+    const val EFFECT_SOUND_OVERRIDES = "effect_sound_overrides_v1"
     const val TRANSMISSION_SOUND_SETTINGS = "transmission_sound_settings_v1"
     const val CAR_EFFECT_MODES = "car_effect_modes_v2"
     const val VIRTUAL_GEAR_COUNT = "virtual_gear_count_v1"

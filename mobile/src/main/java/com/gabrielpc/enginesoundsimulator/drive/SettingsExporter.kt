@@ -42,7 +42,7 @@ internal object SettingsExporter {
         val minimumAudioThrottleRepository = MinimumAudioThrottleRepository(appContext)
         val automaticTransmissionSettingsRepository = AutomaticTransmissionSettingsRepository(appContext)
         val backfireSettingsRepository = BackfireSettingsRepository(appContext)
-        val shiftSoundSettingsRepository = ShiftSoundSettingsRepository(appContext)
+        val effectSoundOverrideRepository = EffectSoundOverrideRepository(appContext)
         val mixerGlobalGainRepository = MixerGlobalGainRepository(appContext)
         val audioMixGainRepository = AudioMixGainRepository(appContext)
         val mixerCarSpecificGainRepository = MixerCarSpecificGainRepository(appContext)
@@ -71,7 +71,7 @@ internal object SettingsExporter {
                 put("minimumAudioThrottle", minimumAudioThrottleToJson(minimumAudioThrottleRepository.load()))
                 put("automaticTransmission", automaticTransmissionToJson(automaticTransmissionSettingsRepository.load()))
                 put("backfire", backfireToJson(backfireSettingsRepository.load()))
-                put("shiftSoundGlobalOverride", shiftSoundSettingsRepository.load().overrideEnabled)
+                put("effectSoundOverrides", effectSoundOverridesToJson(effectSoundOverrideRepository.load()))
                 put("mixerGlobalGains", mixerGlobalGainsToJson(mixerGlobalGainRepository.load()))
             },
         )
@@ -161,12 +161,17 @@ internal object SettingsExporter {
         }
     }
 
+    private fun effectSoundOverridesToJson(overrides: EffectSoundOverrideSettings): JSONObject {
+        return JSONObject().apply {
+            put("popsAndBangsOverride", overrides.popsAndBangsOverride)
+            put("shiftSoundsOverride", overrides.shiftSoundsOverride)
+        }
+    }
+
     private fun carEffectModesToJson(modes: CarEffectModes): JSONObject {
         return JSONObject().apply {
             put("popsAndBangsEnabled", modes.popsAndBangsEnabled)
-            put("popsAndBangsOverride", modes.popsAndBangsOverride)
             put("shiftSoundsEnabled", modes.shiftSoundsEnabled)
-            put("shiftSoundsOverride", modes.shiftSoundsOverride)
             put("transmissionEnabled", modes.transmissionEnabled)
             put("turboEnabled", modes.turboEnabled)
         }

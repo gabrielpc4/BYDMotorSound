@@ -162,16 +162,18 @@ internal object CarSubtitleCatalog {
         "modded-toyota-supra-wangan" to CarSubtitle(648, "3,8s · 71 kgfm · 1.432 kg"),
     )
 
-    private val catalogHorsepowerRange: IntRange by lazy {
-        val values = subtitles.values.mapNotNull { it.horsepower }
-        values.min()..values.max()
+    private val catalogMinHorsepower: Int by lazy {
+        subtitles.values.mapNotNull { it.horsepower }.min()
     }
+
+    /** Catalog max HP (e.g. 1500) is an outlier; cap the red end so the scale stays useful. */
+    private const val HORSEPOWER_COLOR_MAX_HP = 1000
 
     fun forProfileId(profileId: String): CarSubtitle = subtitles[profileId] ?: fallback
 
     fun horsepowerColor(horsepower: Int): Color {
-        val minHorsepower = catalogHorsepowerRange.first
-        val maxHorsepower = catalogHorsepowerRange.last
+        val minHorsepower = catalogMinHorsepower
+        val maxHorsepower = HORSEPOWER_COLOR_MAX_HP
         val span = (maxHorsepower - minHorsepower).coerceAtLeast(1)
         val fraction = ((horsepower - minHorsepower).toFloat() / span).coerceIn(0f, 1f)
 

@@ -533,24 +533,12 @@ internal fun SettingsScreen(
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                 )
             }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                VirtualForwardGearCountControl(
-                    gearCount = virtualForwardGearCount,
-                    onGearCountChange = onVirtualForwardGearCountChange,
-                    modifier = Modifier.weight(2f),
-                )
-                SixGearOnLaunchControl(
-                    enabled = sixGearOnLaunchEnabled,
-                    onEnabledChange = onSixGearOnLaunchEnabledChange,
-                    modifier = Modifier.weight(1f),
-                )
-            }
+            VirtualForwardGearCountControl(
+                gearCount = virtualForwardGearCount,
+                onGearCountChange = onVirtualForwardGearCountChange,
+                sixGearOnLaunchEnabled = sixGearOnLaunchEnabled,
+                onSixGearOnLaunchEnabledChange = onSixGearOnLaunchEnabledChange,
+            )
             AutomaticTransmissionSettingsControl(
                 offsetRpm = cruisingShiftOffsetRpm,
                 onOffsetRpmChange = onCruisingShiftOffsetRpmChange,
@@ -638,6 +626,8 @@ private fun SettingsGainPresetCard(
 private fun VirtualForwardGearCountControl(
     gearCount: Int,
     onGearCountChange: (Int) -> Unit,
+    sixGearOnLaunchEnabled: Boolean,
+    onSixGearOnLaunchEnabledChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
     Column(
@@ -659,6 +649,31 @@ private fun VirtualForwardGearCountControl(
                 fontWeight = FontWeight.Black,
             )
         }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text("6-GEAR ON LAUNCH", color = Cyan, fontSize = 13.sp, fontWeight = FontWeight.Black)
+                Text(
+                    text = "Launch control temporarily uses the 6-gear ratio profile until throttle lift or brake.",
+                    color = Muted,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
+                )
+            }
+
+            Switch(
+                checked = sixGearOnLaunchEnabled,
+                onCheckedChange = onSixGearOnLaunchEnabledChange,
+            )
+        }
+
         Slider(
             value = gearCount.toFloat(),
             onValueChange = { value ->
@@ -671,31 +686,8 @@ private fun VirtualForwardGearCountControl(
             valueRange = VirtualGearProfile.MIN_VIRTUAL_GEARS.toFloat()..VirtualGearProfile.MAX_VIRTUAL_GEARS.toFloat(),
             steps = VirtualGearProfile.MAX_VIRTUAL_GEARS - VirtualGearProfile.MIN_VIRTUAL_GEARS - 1,
         )
-        VirtualGearDistributionChart(gearCount = gearCount)
-    }
-}
 
-@Composable
-private fun SixGearOnLaunchControl(
-    enabled: Boolean,
-    onEnabledChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxHeight()
-            .border(1.dp, Line, RoundedCornerShape(8.dp))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text("6-GEAR ON LAUNCH", color = Cyan, fontSize = 13.sp, fontWeight = FontWeight.Black)
-        Switch(checked = enabled, onCheckedChange = onEnabledChange)
-        Text(
-            text = "Launch control temporarily uses the 6-gear ratio profile until throttle lift or brake.",
-            color = Muted,
-            fontSize = 11.sp,
-            lineHeight = 14.sp,
-        )
+        VirtualGearDistributionChart(gearCount = gearCount)
     }
 }
 

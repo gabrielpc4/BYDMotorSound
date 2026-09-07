@@ -1870,13 +1870,37 @@ private fun CarStage(
                     fontWeight = FontWeight.Black,
                     letterSpacing = 1.2.sp,
                 )
-                Text(
-                    text = selectedCarSubtitle.uppercase(),
-                    color = CyanSoft,
-                    fontSize = 12.sp,
-                    letterSpacing = 1.1.sp,
+                Row(
                     modifier = Modifier.padding(top = 2.dp),
-                )
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    selectedCarSubtitle.horsepower?.let { horsepower ->
+                        Text(
+                            text = "$horsepower HP",
+                            color = Amber,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.1.sp,
+                        )
+
+                        if (selectedCarSubtitle.details.isNotBlank()) {
+                            Text(
+                                text = " · ",
+                                color = CyanSoft,
+                                fontSize = 12.sp,
+                            )
+                        }
+                    }
+
+                    if (selectedCarSubtitle.details.isNotBlank()) {
+                        Text(
+                            text = selectedCarSubtitle.details.uppercase(),
+                            color = CyanSoft,
+                            fontSize = 12.sp,
+                            letterSpacing = 1.1.sp,
+                        )
+                    }
+                }
             }
 
             CarSelectorSideTapZone(

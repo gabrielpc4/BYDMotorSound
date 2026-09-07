@@ -1507,7 +1507,6 @@ private fun DashboardOverrideSwitch(override: Boolean, onToggle: () -> Unit) {
 }
 
 private const val CLASSIC_DRIVE_CONTROL_SCALE = 0.7f
-private const val MIXER_DRIVE_CONTROL_SCALE = 0.60f
 private const val CAR_ENGINE_AUDIO_LOAD_TIMEOUT_MS = 15_000L
 
 private fun Float.scaledDp(base: Int): Dp = (base * this).dp
@@ -1679,72 +1678,17 @@ internal fun MixerDriveControls(
     onManualDownshift: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    ClassicDriveControls(
+        state = state,
+        onThrottle = onThrottle,
+        onBrake = onBrake,
+        onSimulatedRegen = onSimulatedRegen,
+        onToggleSimulatedPedalLatch = onToggleSimulatedPedalLatch,
+        onTransmissionPositionChange = onTransmissionPositionChange,
+        onManualUpshift = onManualUpshift,
+        onManualDownshift = onManualDownshift,
         modifier = modifier,
-        horizontalAlignment = Alignment.End,
-        verticalArrangement = Arrangement.spacedBy(MIXER_DRIVE_CONTROL_SCALE.scaledDp(10)),
-    ) {
-        // Keep the mixer diagnostics paired with the same live tachometer shown on the classic
-        // dashboard, so the pedal test has an immediate RPM reference without leaving the mixer.
-        Tachometer(
-            drivetrain = state.drivetrain,
-            transmissionPosition = state.transmissionPosition,
-            manualShiftModeEnabled = state.manualShiftModeEnabled,
-            maxRpm = state.drivetrain.tachometerMaximumRpm,
-            redlineRpm = state.drivetrain.redlineRpm,
-            upshiftRpm = state.drivetrain.automaticUpshiftRpm,
-            modifier = Modifier.size(MIXER_DRIVE_CONTROL_SCALE.scaledDp(808)),
-        )
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(MIXER_DRIVE_CONTROL_SCALE.scaledDp(16)),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            if (state.manualShiftModeEnabled && !state.inputSourceIsRealPedals) {
-                ManualShiftButtons(
-                    onUpshift = onManualUpshift,
-                    onDownshift = onManualDownshift,
-                    scale = MIXER_DRIVE_CONTROL_SCALE,
-                )
-            }
-            if (!state.inputSourceIsRealPedals) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(MIXER_DRIVE_CONTROL_SCALE.scaledDp(6)),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    SimulatedPedalLatchToggle(
-                        enabled = state.simulatedPedalsLatched,
-                        onToggle = onToggleSimulatedPedalLatch,
-                        scale = MIXER_DRIVE_CONTROL_SCALE,
-                    )
-                    SimulatedRegenControl(state.simulatedRegen, onSimulatedRegen, MIXER_DRIVE_CONTROL_SCALE)
-                }
-            }
-            PedalControl(
-            label = "BRAKE",
-            value = state.brake,
-            accent = Red,
-            width = MIXER_DRIVE_CONTROL_SCALE.scaledDp(92),
-            height = MIXER_DRIVE_CONTROL_SCALE.scaledDp(154),
-            contentScale = MIXER_DRIVE_CONTROL_SCALE,
-            onValue = onBrake,
-            )
-            PedalControl(
-            label = "THROTTLE",
-            value = state.throttle,
-            accent = Green,
-            width = MIXER_DRIVE_CONTROL_SCALE.scaledDp(84),
-            height = MIXER_DRIVE_CONTROL_SCALE.scaledDp(202),
-            contentScale = MIXER_DRIVE_CONTROL_SCALE,
-            onValue = onThrottle,
-            )
-            TransmissionShifter(
-            position = state.transmissionPosition,
-            lockedToVehicle = state.transmissionLockedToVehicle,
-            scale = MIXER_DRIVE_CONTROL_SCALE,
-            onPositionSelected = onTransmissionPositionChange,
-            )
-        }
-    }
+    )
 }
 
 @Composable
@@ -1877,7 +1821,7 @@ private fun CarStage(
                     selectedCarSubtitle.horsepower?.let { horsepower ->
                         Text(
                             text = "$horsepower HP",
-                            color = Amber,
+                            color = CarSubtitleCatalog.horsepowerColor(horsepower),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Black,
                             letterSpacing = 1.1.sp,
@@ -1974,16 +1918,6 @@ internal fun TransmissionShifter(
         verticalArrangement = Arrangement.spacedBy((6f * scale).dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (lockedToVehicle) {
-            Text(
-                text = "BYD",
-                color = Green,
-                fontSize = (8f * scale).sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 0.8.sp,
-            )
-        }
-
         TransmissionPosition.entries.forEach { option ->
             val selected = option == position
             Box(

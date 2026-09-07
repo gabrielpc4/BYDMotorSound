@@ -19,6 +19,8 @@ import com.gabrielpc.enginesoundsimulator.audio.FmodUpdateRate
 import com.gabrielpc.enginesoundsimulator.audio.FmodUpdateRateRepository
 import com.gabrielpc.enginesoundsimulator.audio.ExteriorAudioModeRepository
 import com.gabrielpc.enginesoundsimulator.audio.MediaShiftButtonCoordinator
+import com.gabrielpc.enginesoundsimulator.audio.DEFAULT_EFFECTS_HOST_GAIN
+import com.gabrielpc.enginesoundsimulator.audio.DEFAULT_ENGINE_HOST_GAIN
 import com.gabrielpc.enginesoundsimulator.audio.AudioMixGainRepository
 import com.gabrielpc.enginesoundsimulator.audio.AudioMixGains
 import com.gabrielpc.enginesoundsimulator.audio.CarEffectModes
@@ -81,7 +83,7 @@ data class DriveSnapshot(
     val fmodSources: List<FmodSourceState> = emptyList(),
     /** Host-level engine trim applied before category routing. */
     val engineHostGain: Float = 1.0f,
-    val effectsHostGain: Float = 1.0f,
+    val effectsHostGain: Float = DEFAULT_EFFECTS_HOST_GAIN,
     val transmissionGain: Float = 1.0f,
     val gearShiftGain: Float = 1.0f,
     val turboGain: Float = 1.0f,
@@ -662,7 +664,7 @@ class DriveController(context: Context) {
         audioEngine.setFmodUpdateRateHz(FmodUpdateRate.DEFAULT_HZ)
         audioEngine.setExteriorPureAudio(false)
         applyMinimumAudioThrottleSettings(MinimumAudioThrottleSettings())
-        audioEngine.setHostGains(1.0f, 1.0f)
+        audioEngine.setHostGains(DEFAULT_ENGINE_HOST_GAIN, DEFAULT_EFFECTS_HOST_GAIN)
         simulation.reset()
         audioEngine.setSoundProgram(selectedProfile.get(), selectedPerspective.get())
     }

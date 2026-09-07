@@ -53,8 +53,8 @@ def format_brl_amount(value: int) -> str:
 
 def format_brl_range(low: int, high: int | None = None) -> str:
     if high is None:
-        return f"~R${format_brl_amount(low)}"
-    return f"~R${format_brl_amount(low)}–{format_brl_amount(high)}"
+        return f"~ R$: {format_brl_amount(low)}"
+    return f"~ R$: {format_brl_amount(low)}–{format_brl_amount(high)}"
 
 
 def format_weight_kg(value: int) -> str:
@@ -66,7 +66,7 @@ def format_seconds(value: float) -> str:
     text = f"{rounded:.1f}".replace(".", ",")
     if text.endswith(",0"):
         text = text[:-2]
-    return f"{text}s 0-100"
+    return f"{text}s"
 
 
 def parse_acceleration_seconds(specs: dict[str, Any]) -> float | None:
@@ -276,6 +276,9 @@ def write_outputs(rows: list[tuple[Any, dict[str, Any], int | None, str]]) -> No
     KOTLIN_OUTPUT.write_text(
         """package com.gabrielpc.enginesoundsimulator.audio
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+
 /**
  * Human-facing facts for the exact Assetto/mod variants packaged by this project.
  *
@@ -295,7 +298,25 @@ internal object CarSubtitleCatalog {
 """ + entries + """
     )
 
+    private val catalogHorsepowerRange: IntRange by lazy {
+        val values = subtitles.values.mapNotNull { it.horsepower }
+        values.min()..values.max()
+    }
+
     fun forProfileId(profileId: String): CarSubtitle = subtitles[profileId] ?: fallback
+
+    fun horsepowerColor(horsepower: Int): Color {
+        val minHorsepower = catalogHorsepowerRange.first
+        val maxHorsepower = catalogHorsepowerRange.last
+        val span = (maxHorsepower - minHorsepower).coerceAtLeast(1)
+        val fraction = ((horsepower - minHorsepower).toFloat() / span).coerceIn(0f, 1f)
+
+        return lerp(
+            Color(0xFF38E58C),
+            Color(0xFFFF394F),
+            fraction,
+        )
+    }
 }
 """,
         encoding="utf-8",

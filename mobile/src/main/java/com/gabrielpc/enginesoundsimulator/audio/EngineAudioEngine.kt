@@ -55,7 +55,7 @@ class EngineAudioEngine(context: Context) {
     private val rejectedShiftSerial = AtomicLong(0L)
     private val tractionPulseSerial = AtomicLong(0L)
     private val hostEngineGain = AtomicReference(1.0f)
-    private val hostEffectsGain = AtomicReference(1.0f)
+    private val hostEffectsGain = AtomicReference(DEFAULT_EFFECTS_HOST_GAIN)
     private val categoryGains = AtomicReference(AudioMixGains())
     private val nativeEventMutes = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
     private val nativeEventSolos = java.util.concurrent.ConcurrentHashMap<String, Boolean>()

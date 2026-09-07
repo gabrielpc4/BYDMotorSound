@@ -1093,9 +1093,8 @@ private fun BackfireSlider(
     }
 }
 
-// The enlarged mixer pedals and adjacent tach need a protected bottom area so cards never slide
-// underneath the controls while the diagnostics list is scrolled.
-private val MIXER_PEDALS_OVERLAY_HEIGHT = 500.dp
+// Reserve bottom space so FMOD cards never scroll under the mixer pedals row.
+private val MIXER_PEDALS_OVERLAY_HEIGHT = 240.dp
 
 @Composable
 private fun MixerHeaderRow(

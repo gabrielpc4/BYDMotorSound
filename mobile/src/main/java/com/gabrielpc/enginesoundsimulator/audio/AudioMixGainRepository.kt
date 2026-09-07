@@ -4,13 +4,16 @@ import android.content.Context
 import com.gabrielpc.enginesoundsimulator.AppPreferenceStores
 
 /** Per-car authored-event trim controls shown in the mixer. */
+internal const val DEFAULT_ENGINE_HOST_GAIN = 1.0f
+internal const val DEFAULT_EFFECTS_HOST_GAIN = 2.0f
+
 internal data class AudioMixGains(
     val transmission: Float = 1.0f,
     val gearShift: Float = 1.0f,
     val turbo: Float = 1.0f,
     val backfire: Float = 1.0f,
-    val engineHost: Float = 1.0f,
-    val effectsHost: Float = 1.0f,
+    val engineHost: Float = DEFAULT_ENGINE_HOST_GAIN,
+    val effectsHost: Float = DEFAULT_EFFECTS_HOST_GAIN,
 )
 
 internal class AudioMixGainRepository(context: Context) {
@@ -24,8 +27,8 @@ internal class AudioMixGainRepository(context: Context) {
         gearShift = read(profile, "gear_shift"),
         turbo = read(profile, "turbo"),
         backfire = read(profile, "backfire"),
-        engineHost = readHost(profile, "engine_host", 0.5f, 3.0f),
-        effectsHost = readHost(profile, "effects_host", 0.5f, 4.0f),
+        engineHost = readHost(profile, "engine_host", 0.5f, 3.0f, DEFAULT_ENGINE_HOST_GAIN),
+        effectsHost = readHost(profile, "effects_host", 0.5f, 4.0f, DEFAULT_EFFECTS_HOST_GAIN),
     )
 
     fun save(profile: FmodBankProfile, gains: AudioMixGains) {
@@ -52,9 +55,10 @@ internal class AudioMixGainRepository(context: Context) {
         category: String,
         min: Float,
         max: Float,
+        default: Float,
     ): Float {
         return preferences
-            .getFloat(key(profile, category), 1.0f)
+            .getFloat(key(profile, category), default)
             .coerceIn(min, max)
     }
 

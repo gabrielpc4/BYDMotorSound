@@ -2404,7 +2404,7 @@ private:
     std::unordered_map<std::string, bool> mutedEvents_;
     std::unordered_map<std::string, bool> soloEvents_;
     float hostEngineGain_ = 1.0f;
-    float hostEffectsGain_ = 1.0f;
+    float hostEffectsGain_ = 2.0f;
     std::string loadedProfileId_;
     float transmissionGain_ = 1.0f;
     float gearShiftGain_ = 1.0f;

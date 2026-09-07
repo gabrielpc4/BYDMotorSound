@@ -1,0 +1,59 @@
+---
+description: Finish every task with build, run, commit, and push (BYD Motor Sound)
+alwaysApply: true
+---
+
+# Finish workflow (mandatory)
+
+When you finish a task in this repo — including small fixes — run this sequence before ending the turn. Do not skip steps because the change looks trivial.
+
+## 1. Build (increments build number)
+
+`mobile/build.gradle.kts` auto-increments `mobile/build-number.properties` on every `assemble*` (file is gitignored). One Gradle invocation = one bump.
+
+From repo root:
+
+```bash
+./gradlew :mobile:assembleOriginalDebug :mobile:assembleModdedDebug --no-daemon
+```
+
+Do not hand-edit `build-number.properties`.
+
+## 2. Run on emulator
+
+```bash
+./run.sh
+```
+
+- Installs both debug APKs if needed and launches **original**.
+- Banks are **not** installed by default. Use `BYD_INSTALL_BANKS=1 ./run.sh` only when packs changed or the AVD was reset.
+
+If the BYD emulator is already running, `run.sh` still ensures APKs are installed and relaunches original.
+
+## 3. Commit and push
+
+Always commit and push when the task is done, even if the user did not repeat "commit" in that message.
+
+- Stage only files related to the task.
+- Never commit secrets, `mobile/build-number.properties`, or local device overrides (`NetworkClient.swift`, `Local.xcscheme` — N/A here).
+- Use a 1–2 sentence message focused on **why**.
+- Push to the current branch after a successful commit.
+
+```bash
+git add <relevant files>
+git commit -m "$(cat <<'EOF'
+Why-focused message here.
+
+EOF
+)"
+git push
+```
+
+## Order
+
+1. Implement/fix the task
+2. Build both debug flavors
+3. Run `./run.sh`
+4. Commit + push
+
+If build or run fails, fix the blocker and repeat from step 2 before committing.

@@ -608,6 +608,25 @@ class DriveController(context: Context) {
         audioEngine.setBackfireAudioEnabled(carEffectModes.get().popsAndBangsEnabled)
     }
 
+    fun exportAllPreferences() {
+        try {
+            val path = SettingsExporter.export(appContext)
+            userMessage = UserVisibleMessage(
+                id = SystemClock.elapsedRealtime(),
+                title = "Settings exported",
+                detail = "Saved to $path",
+                severity = UserVisibleMessageSeverity.INFO,
+            )
+        } catch (error: Exception) {
+            userMessage = UserVisibleMessage(
+                id = SystemClock.elapsedRealtime(),
+                title = "Settings export failed",
+                detail = error.message ?: error.javaClass.simpleName,
+                severity = UserVisibleMessageSeverity.ERROR,
+            )
+        }
+    }
+
     fun resetAllPreferences() {
         audioMixGainRepository.resetAll()
         appContext.getSharedPreferences(AppPreferenceStores.SELECTED_CAR, Context.MODE_PRIVATE).edit().clear().apply()

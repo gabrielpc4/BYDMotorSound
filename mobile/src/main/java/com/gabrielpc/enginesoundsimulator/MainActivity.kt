@@ -226,6 +226,7 @@ class MainActivity : ComponentActivity() {
                         onEnginePureChange = controller::setExteriorPureAudio,
                         onCruisingLogicChange = controller::setCruisingLogicEnabled,
                         onResetAllPreferences = controller::resetAllPreferences,
+                        onExportSettings = controller::exportAllPreferences,
                         onToggleManualShiftMode = controller::toggleManualShiftMode,
                         onMediaShiftButton = controller::handleMediaShiftButton,
                         onVirtualForwardGearCountChange = controller::setVirtualForwardGearCount,
@@ -329,6 +330,7 @@ private fun MotorSoundDashboard(
     onEnginePureChange: (Boolean) -> Unit,
     onCruisingLogicChange: (Boolean) -> Unit,
     onResetAllPreferences: () -> Unit,
+    onExportSettings: () -> Unit,
     onToggleManualShiftMode: () -> Unit,
     onMediaShiftButton: (Int) -> Boolean,
     onVirtualForwardGearCountChange: (Int) -> Unit,
@@ -565,6 +567,7 @@ private fun MotorSoundDashboard(
                                 .weight(1f),
                         )
                         DashboardMainScreen.SETTINGS -> SettingsScreen(
+                            onExportSettings = onExportSettings,
                             onResetAll = onResetAllPreferences,
                             fmodUpdateRateHz = state.fmodUpdateRateHz,
                             onFmodUpdateRateChange = onFmodUpdateRateChange,

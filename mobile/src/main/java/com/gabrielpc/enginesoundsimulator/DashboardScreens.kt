@@ -48,8 +48,11 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
@@ -796,6 +799,7 @@ private fun MixerLayerGainSlider(
 
 @Composable
 internal fun SettingsScreen(
+    onExportSettings: () -> Unit,
     onResetAll: () -> Unit,
     fmodUpdateRateHz: Int,
     onFmodUpdateRateChange: (Int) -> Unit,
@@ -822,6 +826,7 @@ internal fun SettingsScreen(
     onPreviewBackfireSample: (Int) -> Unit,
 ) {
     var backfireTab by remember { mutableStateOf(false) }
+    var showResetConfirmation by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -874,12 +879,24 @@ internal fun SettingsScreen(
                 manualAutodownshiftRpm = manualAutodownshiftRpm,
                 onManualAutodownshiftRpmChange = onManualAutodownshiftRpmChange,
             )
-            Button(
-                onClick = onResetAll,
-                colors = ButtonDefaults.buttonColors(containerColor = Red.copy(alpha = 0.85f)),
+            Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("RESET ALL", color = White, fontWeight = FontWeight.Black)
+                OutlinedButton(
+                    onClick = onExportSettings,
+                    modifier = Modifier.weight(1f),
+                    border = BorderStroke(1.dp, Line),
+                ) {
+                    Text("EXPORT SETTINGS", color = CyanSoft, fontWeight = FontWeight.Black)
+                }
+                Button(
+                    onClick = { showResetConfirmation = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = Red.copy(alpha = 0.85f)),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("RESET ALL", color = White, fontWeight = FontWeight.Black)
+                }
             }
         } else {
             BackfireSettingsPanel(
@@ -888,6 +905,37 @@ internal fun SettingsScreen(
                 onPreview = onPreviewBackfireSample,
             )
         }
+    }
+
+    if (showResetConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirmation = false },
+            title = {
+                Text("Reset all settings?", color = White, fontWeight = FontWeight.Black)
+            },
+            text = {
+                Text(
+                    "This clears every saved preference, per-car mix, and dashboard setting. It cannot be undone.",
+                    color = Muted,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showResetConfirmation = false
+                        onResetAll()
+                    },
+                ) {
+                    Text("RESET", color = Red, fontWeight = FontWeight.Black)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirmation = false }) {
+                    Text("CANCEL", color = CyanSoft, fontWeight = FontWeight.Black)
+                }
+            },
+            containerColor = Panel,
+        )
     }
 }
 

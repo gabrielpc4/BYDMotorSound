@@ -1516,7 +1516,12 @@ internal fun CarGridSelectionDialog(
                         modifier = Modifier
                             .fillMaxSize()
                             .alpha(if (isGridReady) 1f else 0f),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                        contentPadding = PaddingValues(
+                            start = 8.dp,
+                            end = 8.dp,
+                            top = 8.dp,
+                            bottom = 32.dp,
+                        ),
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {

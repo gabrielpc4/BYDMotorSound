@@ -153,6 +153,8 @@ private object DashboardLayoutDefaults {
     const val CANVAS_ASPECT_RATIO = 1920f / 990f
     /** Classic layout keeps the tach as a right-side overlay sized like the old 0.88 row weight. */
     const val TACHOMETER_OVERLAY_WIDTH_FRACTION = 0.88f / (1.12f + 0.88f)
+    /** Car preview/header slot matches the old 1.12 row beside the tach. */
+    const val CLASSIC_CAR_STAGE_WIDTH_FRACTION = 1.12f / (1.12f + 0.88f)
 }
 
 class MainActivity : ComponentActivity() {
@@ -457,6 +459,7 @@ private fun MotorSoundDashboard(
                                 .weight(1f)
                                 .padding(horizontal = 34.dp, vertical = 6.dp),
                         ) {
+                            val carStageWidth = maxWidth * DashboardLayoutDefaults.CLASSIC_CAR_STAGE_WIDTH_FRACTION
                             Column(modifier = Modifier.fillMaxSize()) {
                                 CarStage(
                                     state = state,
@@ -465,7 +468,8 @@ private fun MotorSoundDashboard(
                                     onSelectCar = onSelectCar,
                                     onToggleCarFavorite = onToggleCarFavorite,
                                     modifier = Modifier
-                                        .fillMaxWidth()
+                                        .align(Alignment.Start)
+                                        .width(carStageWidth)
                                         .weight(1f),
                                 )
                                 Row(

@@ -155,11 +155,12 @@ private object DashboardLayoutDefaults {
     const val TACHOMETER_OVERLAY_WIDTH_FRACTION = 0.88f / (1.12f + 0.88f)
     /** Car preview/header slot matches the old 1.12 row beside the tach. */
     const val CLASSIC_CAR_STAGE_WIDTH_FRACTION = 1.12f / (1.12f + 0.88f)
+    val classicContentStartPadding = 8.dp
 }
 
 private object CarStageTapDefaults {
     val sideStripWidth = 58.dp
-    val favoriteCornerHeight = 52.dp
+    val favoriteCornerHeight = 88.dp
 }
 
 class MainActivity : ComponentActivity() {
@@ -482,7 +483,10 @@ private fun MotorSoundDashboard(
                                     verticalAlignment = Alignment.Bottom,
                                 ) {
                                     Column(
-                                        modifier = Modifier.padding(start = 8.dp, bottom = 2.dp),
+                                        modifier = Modifier.padding(
+                                            start = DashboardLayoutDefaults.classicContentStartPadding,
+                                            bottom = 2.dp,
+                                        ),
                                     ) {
                                         DashboardEngineControls(
                                             state = state,
@@ -1072,7 +1076,7 @@ private object DashboardClassicEffectLayout {
     val presetColumnWidth = 105.dp
     val columnGap = 8.dp
     val columnPadding = 3.dp
-    val labelColumnPadding = 4.dp
+    val labelColumnPadding = 0.dp
     val presetCount = 4
 
     private fun toggleColumnOuterWidth(): Dp = toggleColumnWidth + columnPadding * 2
@@ -1769,7 +1773,11 @@ private fun CarStage(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(start = 28.dp, top = 26.dp, end = 8.dp),
+            .padding(
+                start = DashboardLayoutDefaults.classicContentStartPadding,
+                top = 26.dp,
+                end = 8.dp,
+            ),
     ) {
         Text(
             text = CarDisplayNameFormatter.format(state.selectedCarName).uppercase(),
@@ -1839,6 +1847,7 @@ private fun CarStage(
                 CarFavoriteStarButton(
                     isFavorite = state.selectedCarId in state.favoriteCarIds,
                     onToggle = { onToggleCarFavorite(state.selectedCarId) },
+                    scale = 2f,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(8.dp),

@@ -1284,11 +1284,15 @@ private fun CarDropdownSelector(
 internal fun CarFavoriteStarButton(
     isFavorite: Boolean,
     onToggle: () -> Unit,
+    scale: Float = 1f,
     modifier: Modifier = Modifier,
 ) {
+    val buttonSize = (36f * scale).dp
+    val iconSize = (22f * scale).dp
+
     Box(
         modifier = modifier
-            .size(36.dp)
+            .size(buttonSize)
             .clip(CircleShape)
             .background(Color.Black.copy(alpha = 0.48f))
             .clickable(
@@ -1314,7 +1318,7 @@ internal fun CarFavoriteStarButton(
             } else {
                 Color.White.copy(alpha = 0.82f)
             },
-            modifier = Modifier.size(22.dp),
+            modifier = Modifier.size(iconSize),
         )
     }
 }

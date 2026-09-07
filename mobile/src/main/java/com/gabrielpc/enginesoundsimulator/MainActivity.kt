@@ -221,7 +221,6 @@ class MainActivity : ComponentActivity() {
                         onSelectRealPedals = controller::selectRealPedals,
                         onToggleInputSource = controller::toggleInputSource,
                         onToggleAudioMute = controller::toggleAudioMute,
-                        onEffectEnabledChange = controller::setEffectEnabled,
                         onEffectOverrideChange = controller::setEffectOverride,
                         onEngineExternalChange = { enabled -> controller.setSoundPerspective(if (enabled) com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective.EXTERIOR else com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective.CABIN) },
                         onEnginePureChange = controller::setExteriorPureAudio,
@@ -327,7 +326,6 @@ private fun MotorSoundDashboard(
     onSelectRealPedals: () -> Unit,
     onToggleInputSource: () -> Unit,
     onToggleAudioMute: () -> Boolean,
-    onEffectEnabledChange: (EffectSoundKind, Boolean) -> Unit,
     onEffectOverrideChange: (EffectSoundKind, Boolean) -> Unit,
     onEngineExternalChange: (Boolean) -> Unit,
     onEnginePureChange: (Boolean) -> Unit,
@@ -504,7 +502,6 @@ private fun MotorSoundDashboard(
                                         )
                                         DashboardEffectControls(
                                             state = state,
-                                            onEnabledChange = onEffectEnabledChange,
                                             onOverrideChange = onEffectOverrideChange,
                                             onOverrideGainChange = onOverrideGainChange,
                                         )
@@ -1090,7 +1087,7 @@ private val DASHBOARD_EFFECT_GAIN_PRESETS = listOf(
 )
 
 private object DashboardClassicEffectLayout {
-    val labelColumnWidth = 88.dp
+    val effectLabelColumnWidth = 220.dp
     val toggleColumnWidth = 82.dp
     val presetColumnWidth = 105.dp
     val columnGap = 8.dp
@@ -1102,14 +1099,9 @@ private object DashboardClassicEffectLayout {
 
     private fun presetColumnOuterWidth(): Dp = presetColumnWidth + columnPadding * 2
 
-    /** Outer width for OVERRIDE label column (10sp text + horizontal padding). */
-    private fun effectOverrideLabelOuterWidth(): Dp = 56.dp + columnPadding * 2
-
     val matrixWidthAfterLabel: Dp
         get() {
             var width = toggleColumnOuterWidth()
-            width += columnGap + effectOverrideLabelOuterWidth()
-            width += columnGap + toggleColumnOuterWidth()
             repeat(presetCount) { index ->
                 width += columnGap + presetColumnOuterWidth()
             }
@@ -1144,7 +1136,7 @@ private object DashboardClassicEffectLayout {
     val minimumThrottleSliderWidthAfterEngineLabel: Dp
         get() {
             val trailingControlsWidth = engineRowWidthBeforeSlider - columnGap
-            val gapCountAfterEngineLabel = 7
+            val gapCountAfterEngineLabel = 5
             return (matrixWidthAfterLabel - trailingControlsWidth - (columnGap * gapCountAfterEngineLabel))
                 .coerceAtLeast(120.dp)
         }
@@ -1174,7 +1166,7 @@ private fun DashboardEngineControls(
         Box(
             modifier = Modifier
                 .height(rowHeight)
-                .width(layout.labelColumnWidth)
+                .width(layout.effectLabelColumnWidth)
                 .padding(start = layout.labelColumnPadding, bottom = 12.dp),
             contentAlignment = Alignment.BottomStart,
         ) {
@@ -1305,15 +1297,14 @@ private fun DashboardPedalAudioSettingSlider(
 @Composable
 private fun DashboardEffectControls(
     state: DriveSnapshot,
-    onEnabledChange: (EffectSoundKind, Boolean) -> Unit,
     onOverrideChange: (EffectSoundKind, Boolean) -> Unit,
     onOverrideGainChange: (EffectSoundKind, Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val layout = DashboardClassicEffectLayout
     val rows = listOf(
-        "POPS & BANGS" to EffectSoundKind.POPS_AND_BANGS,
-        "SHIFT SOUNDS" to EffectSoundKind.SHIFT,
+        "POPS & BANGS SOUND OVERRIDE" to EffectSoundKind.POPS_AND_BANGS,
+        "SHIFT SOUNDS OVERRIDE" to EffectSoundKind.SHIFT,
     )
     val rowHeight = 42.dp
     val rowGap = 7.dp
@@ -1334,10 +1325,6 @@ private fun DashboardEffectControls(
         }
     }
 
-    fun showsOverrideGain(kind: EffectSoundKind): Boolean {
-        return overrideEnabled(kind)
-    }
-
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(layout.columnGap),
@@ -1345,43 +1332,19 @@ private fun DashboardEffectControls(
         Column(
             verticalArrangement = Arrangement.spacedBy(rowGap),
             modifier = Modifier
-                .width(layout.labelColumnWidth)
+                .width(layout.effectLabelColumnWidth)
                 .padding(layout.labelColumnPadding),
         ) {
-            rows.forEach { (label, kind) ->
+            rows.forEach { (label, _) ->
                 Box(Modifier.height(rowHeight), contentAlignment = Alignment.CenterStart) {
-                    Text(label, color = Cyan, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = label,
+                        color = Cyan,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 13.sp,
+                    )
                 }
-            }
-        }
-        Column(
-            horizontalAlignment = Alignment.Start,
-            verticalArrangement = Arrangement.spacedBy(rowGap),
-            modifier = Modifier
-                .width(layout.toggleColumnWidth)
-                .padding(layout.columnPadding),
-        ) {
-            rows.forEach { (_, kind) ->
-                val enabled = when (kind) {
-                    EffectSoundKind.POPS_AND_BANGS -> state.popsAndBangsEnabled
-                    EffectSoundKind.SHIFT -> state.shiftSoundsEnabled
-                    EffectSoundKind.TRANSMISSION, EffectSoundKind.TURBO -> true
-                }
-                DashboardSwitchCell(rowHeight, enabled, Line) {
-                    onEnabledChange(kind, !enabled)
-                }
-            }
-        }
-        Column(
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(rowGap),
-            modifier = Modifier
-                .wrapContentWidth()
-                .padding(layout.columnPadding),
-        ) {
-            rows.forEach { (_, kind) ->
-                val override = overrideEnabled(kind)
-                DashboardOverrideColumnCell(override, true, { onOverrideChange(kind, !override) }, rowHeight)
             }
         }
         Column(
@@ -1407,7 +1370,7 @@ private fun DashboardEffectControls(
                     .padding(layout.columnPadding),
             ) {
                 rows.forEach { (_, kind) ->
-                    if (showsOverrideGain(kind)) {
+                    if (overrideEnabled(kind)) {
                         val rowGain = overrideGain(kind)
                         val selected = kotlin.math.abs(rowGain - preset.gain) < 0.001f
                         DashboardGainButton(preset, selected, if (selected) Night else Cyan, Line) {
@@ -1438,20 +1401,6 @@ private fun DashboardColumnTextCell(label: String, active: Boolean, height: Dp) 
 private fun DashboardSwitchCell(height: Dp, checked: Boolean, borderColor: Color, onToggle: () -> Unit) {
     Box(Modifier.width(64.dp).height(height), contentAlignment = Alignment.Center) {
         DashboardEffectSwitch(checked, onToggle, borderColor)
-    }
-}
-
-@Composable
-private fun DashboardOverrideColumnCell(
-    override: Boolean,
-    available: Boolean,
-    onToggle: () -> Unit,
-    height: Dp,
-) {
-    if (available) {
-        DashboardColumnTextCell("OVERRIDE", override, height)
-    } else {
-        DashboardEmptyControlCell(height)
     }
 }
 
@@ -1491,15 +1440,6 @@ private fun DashboardEffectSwitch(enabled: Boolean, onToggle: () -> Unit, border
         contentAlignment = if (enabled) Alignment.CenterEnd else Alignment.CenterStart,
     ) {
         Box(Modifier.padding(4.dp).size(24.dp).clip(CircleShape).background(White))
-    }
-}
-
-@Composable
-private fun DashboardOverrideSwitch(override: Boolean, onToggle: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("OVERRIDE", color = if (override) Cyan else Muted, fontSize = 10.sp,
-            fontWeight = FontWeight.Black)
-        DashboardEffectSwitch(override, onToggle)
     }
 }
 

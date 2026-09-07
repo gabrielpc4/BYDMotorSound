@@ -3,8 +3,6 @@ package com.gabrielpc.enginesoundsimulator.drive
 import android.content.Context
 import com.gabrielpc.enginesoundsimulator.AppBuildInfo
 import com.gabrielpc.enginesoundsimulator.AppPreferenceStores
-import com.gabrielpc.enginesoundsimulator.audio.CarEffectModes
-import com.gabrielpc.enginesoundsimulator.audio.CarEffectModesRepository
 import com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective
 import com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspectiveRepository
 import com.gabrielpc.enginesoundsimulator.audio.ExteriorAudioModeRepository
@@ -44,7 +42,6 @@ internal object SettingsExporter {
         val mixerGlobalGainRepository = MixerGlobalGainRepository(appContext)
         val effectSoundOverrideGainRepository = EffectSoundOverrideGainRepository(appContext)
         val mixerCarSpecificGainRepository = MixerCarSpecificGainRepository(appContext)
-        val carEffectModesRepository = CarEffectModesRepository(appContext)
         val soundPerspectiveRepository = EngineSoundPerspectiveRepository(appContext)
         val exteriorAudioModeRepository = ExteriorAudioModeRepository(appContext)
         val carFavoritesRepository = CarFavoritesRepository(appContext)
@@ -99,7 +96,6 @@ internal object SettingsExporter {
                             )
                         },
                     )
-                    put("effectModes", carEffectModesToJson(carEffectModesRepository.load(profile)))
                     put("engineSoundPerspective", soundPerspectiveRepository.load(profile).name)
                     put("exteriorPureAudio", exteriorAudioModeRepository.load(profile))
                 },
@@ -159,13 +155,6 @@ internal object SettingsExporter {
         return JSONObject().apply {
             put("popsAndBangsOverride", overrides.popsAndBangsOverride)
             put("shiftSoundsOverride", overrides.shiftSoundsOverride)
-        }
-    }
-
-    private fun carEffectModesToJson(modes: CarEffectModes): JSONObject {
-        return JSONObject().apply {
-            put("popsAndBangsEnabled", modes.popsAndBangsEnabled)
-            put("shiftSoundsEnabled", modes.shiftSoundsEnabled)
         }
     }
 

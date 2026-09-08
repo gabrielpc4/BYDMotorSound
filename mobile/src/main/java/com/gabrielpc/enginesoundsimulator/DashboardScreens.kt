@@ -1393,7 +1393,7 @@ private fun AutomaticTransmissionSettingsControl(
             )
         }
         Text(
-            text = "When cruising switches to racing on a hard throttle, wait this long before the kickdown gear and RPM snap. Zero is instant.",
+            text = "When cruising switches to racing on a hard throttle, wait this long before the kickdown gear and RPM snap.",
             color = Muted,
             fontSize = 12.sp,
             lineHeight = 16.sp,

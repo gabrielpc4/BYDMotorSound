@@ -21,12 +21,12 @@ internal object RacingReturnThrottlePercent {
     }
 }
 
-/** Delay before cruising→racing kickdown snaps gear and RPM (0 = instant). */
+/** Delay before cruising→racing kickdown snaps gear and RPM. */
 internal object RacingEnterDelayMilliseconds {
     const val MIN = 0
-    const val MAX = 1_000
-    const val DEFAULT = 0
-    const val STEP = 100
+    const val MAX = 150
+    const val DEFAULT = 100
+    const val STEP = 25
 
     fun normalize(value: Int): Int {
         val stepped = ((value.toFloat() / STEP).roundToInt() * STEP)

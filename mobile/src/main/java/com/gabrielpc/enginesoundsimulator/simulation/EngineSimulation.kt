@@ -75,6 +75,16 @@ data class DrivetrainState(
     val requestAutomaticShiftMode: Boolean = false,
     val automaticTransmissionMode: AutomaticTransmissionMode = AutomaticTransmissionMode.CRUISING,
     val racingReturnArmed: Boolean = false,
+    val cruisingReturnActive: Boolean = false,
+    val cruisingReturnTargetGear: Int = 0,
+    val cruisingReturnChaseRpm: Double = 0.0,
+    val cruisingReturnLiveTargetRpm: Double = 0.0,
+    val cruisingReturnComputedTargetGear: Int = 0,
+    val cruisingReturnGlideRpmPerSecond: Double = 0.0,
+    val cruisingReturnNextGearCoupledRpm: Double = 0.0,
+    val cruisingReturnRequestUpshift: Boolean = false,
+    val cruisingReturnFinishedThisStep: Boolean = false,
+    val coupledRpmCurrentGear: Double = 0.0,
 )
 
 /** Motion snapshot preserved when swapping bank physics without stopping the vehicle. */
@@ -453,6 +463,16 @@ class EngineSimulation {
             requestAutomaticShiftMode = frame.requestAutomaticShiftMode,
             automaticTransmissionMode = frame.automaticTransmissionMode,
             racingReturnArmed = frame.racingReturnArmed,
+            cruisingReturnActive = frame.cruisingReturnActive,
+            cruisingReturnTargetGear = frame.cruisingReturnTargetGear,
+            cruisingReturnChaseRpm = frame.cruisingReturnChaseRpm,
+            cruisingReturnLiveTargetRpm = frame.cruisingReturnLiveTargetRpm,
+            cruisingReturnComputedTargetGear = frame.cruisingReturnComputedTargetGear,
+            cruisingReturnGlideRpmPerSecond = frame.cruisingReturnGlideRpmPerSecond,
+            cruisingReturnNextGearCoupledRpm = frame.cruisingReturnNextGearCoupledRpm,
+            cruisingReturnRequestUpshift = frame.cruisingReturnRequestUpshift,
+            cruisingReturnFinishedThisStep = frame.cruisingReturnFinishedThisStep,
+            coupledRpmCurrentGear = frame.coupledRpmCurrentGear,
         )
     }
 }

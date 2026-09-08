@@ -190,6 +190,8 @@ class MainActivity : ComponentActivity() {
     private val choreographer by lazy(LazyThreadSafetyMode.NONE) { Choreographer.getInstance() }
     private var driveState by mutableStateOf<DriveSnapshot?>(null)
     private var uiMonitoringActive by mutableStateOf(false)
+    private var driveCaptureActive by mutableStateOf(false)
+    private var driveCapturePath by mutableStateOf<String?>(null)
     private val backfirePreviewPlayer by lazy(LazyThreadSafetyMode.NONE) { BackfirePreviewPlayer(this) }
 
     private val refreshUi = object : Choreographer.FrameCallback {
@@ -237,6 +239,7 @@ class MainActivity : ComponentActivity() {
                             fontFamily = themeController.skin.displayFamily,
                         ),
                     ) {
+                        Box(modifier = Modifier.fillMaxSize()) {
                         MotorSoundDashboard(
                             state = state,
                             uiMonitoringActive = uiMonitoringActive,
@@ -293,6 +296,23 @@ class MainActivity : ComponentActivity() {
                         onSoundPerspectiveChange = controller::setSoundPerspective,
                             onDismissUserMessage = controller::dismissUserMessage,
                         )
+                        DriveCaptureOverlay(
+                            capturing = driveCaptureActive,
+                            lastPath = driveCapturePath,
+                            onToggle = {
+                                if (driveCaptureActive) {
+                                    driveCapturePath = controller.stopDriveCapture()
+                                    driveCaptureActive = false
+                                } else {
+                                    driveCapturePath = controller.startDriveCapture()
+                                    driveCaptureActive = true
+                                }
+                            },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 88.dp, end = 20.dp),
+                        )
+                        }
                     }
                 }
             }
@@ -326,6 +346,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        if (driveCaptureActive) {
+            controller.stopDriveCapture()
+        }
         backfirePreviewPlayer.release()
         if (isFinishing) {
             (application as EngineSoundsApplication).shutdownEngine()
@@ -632,6 +655,53 @@ private fun MotorSoundDashboard(
                 }
 
             }
+        }
+    }
+}
+
+@Composable
+private fun DriveCaptureOverlay(
+    capturing: Boolean,
+    lastPath: String?,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val fileName = lastPath?.substringAfterLast('/')
+    Column(
+        modifier = modifier.width(220.dp),
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .clip(softFillShape(12.dp))
+                .background(if (capturing) Danger else Surface)
+                .clickable(onClick = onToggle)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(if (capturing) OnSurface else Danger),
+            )
+            Text(
+                text = if (capturing) "STOP CAPTURE" else "START CAPTURE",
+                color = OnSurface,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 0.6.sp,
+            )
+        }
+        if (fileName != null) {
+            Text(
+                text = fileName,
+                color = Muted,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
 }

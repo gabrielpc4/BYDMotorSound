@@ -42,6 +42,16 @@ internal class AssettoDrivetrainFrame(
     var racingReturnArmed: Boolean = false,
     var launchSixGearOverrideActive: Boolean = false,
     var launchReturnArmed: Boolean = false,
+    var cruisingReturnActive: Boolean = false,
+    var cruisingReturnTargetGear: Int = 0,
+    var cruisingReturnChaseRpm: Double = 0.0,
+    var cruisingReturnLiveTargetRpm: Double = 0.0,
+    var cruisingReturnComputedTargetGear: Int = 0,
+    var cruisingReturnGlideRpmPerSecond: Double = 0.0,
+    var cruisingReturnNextGearCoupledRpm: Double = 0.0,
+    var cruisingReturnRequestUpshift: Boolean = false,
+    var cruisingReturnFinishedThisStep: Boolean = false,
+    var coupledRpmCurrentGear: Double = 0.0,
     /** Upshift threshold after cruising offset and mode, for the current gear. */
     var effectiveAutomaticUpshiftRpm: Double = 0.0,
     /** Per-gear downshift threshold after cruising offset and mode. */
@@ -1114,10 +1124,6 @@ internal class AssettoDrivetrain(
      * lock until that gear is selected and the needle is actually there.
      */
     private fun applyCruisingReturnTransitionRpm(dt: Double) {
-        if (!cruisingReturn.active) {
-            return
-        }
-
         val computedTargetGear = computeCruisingReturnTargetGear()
         val liveTargetRpm = coupledRpmForGear(computedTargetGear)
         val topGear = effectiveVirtualGearProfile().virtualForwardGearCount
@@ -1126,6 +1132,21 @@ internal class AssettoDrivetrain(
         } else {
             null
         }
+
+        if (!cruisingReturn.active) {
+            lastFrame.cruisingReturnActive = false
+            lastFrame.cruisingReturnTargetGear = computedTargetGear
+            lastFrame.cruisingReturnChaseRpm = 0.0
+            lastFrame.cruisingReturnLiveTargetRpm = liveTargetRpm
+            lastFrame.cruisingReturnComputedTargetGear = computedTargetGear
+            lastFrame.cruisingReturnGlideRpmPerSecond = 0.0
+            lastFrame.cruisingReturnNextGearCoupledRpm = nextGearCoupledRpm ?: 0.0
+            lastFrame.cruisingReturnRequestUpshift = false
+            lastFrame.cruisingReturnFinishedThisStep = false
+            lastFrame.coupledRpmCurrentGear = coupledRpmForGear(gear)
+            return
+        }
+
         val step = cruisingReturn.step(
             dt = dt,
             currentRpm = rpm,
@@ -1144,6 +1165,30 @@ internal class AssettoDrivetrain(
         if (step.requestUpshift) {
             manualShiftRequest = 1
         }
+
+        publishCruisingReturnDebug(
+            liveTargetRpm = liveTargetRpm,
+            computedTargetGear = computedTargetGear,
+            nextGearCoupledRpm = nextGearCoupledRpm,
+        )
+    }
+
+    private fun publishCruisingReturnDebug(
+        liveTargetRpm: Double,
+        computedTargetGear: Int,
+        nextGearCoupledRpm: Double?,
+    ) {
+        val debug = cruisingReturn.lastDebug
+        lastFrame.cruisingReturnActive = cruisingReturn.active || debug.finished
+        lastFrame.cruisingReturnTargetGear = debug.targetGear
+        lastFrame.cruisingReturnChaseRpm = debug.chaseRpm
+        lastFrame.cruisingReturnLiveTargetRpm = liveTargetRpm
+        lastFrame.cruisingReturnComputedTargetGear = computedTargetGear
+        lastFrame.cruisingReturnGlideRpmPerSecond = debug.glideRpmPerSecond
+        lastFrame.cruisingReturnNextGearCoupledRpm = nextGearCoupledRpm ?: 0.0
+        lastFrame.cruisingReturnRequestUpshift = debug.requestUpshift
+        lastFrame.cruisingReturnFinishedThisStep = debug.finished
+        lastFrame.coupledRpmCurrentGear = coupledRpmForGear(gear)
     }
 
     /**

@@ -21,6 +21,10 @@ internal class CruisingReturnTransition {
     var targetGear: Int = 1
         private set
 
+    /** Last values seen by [step], including the finishing frame after [active] clears. */
+    var lastDebug: CruisingReturnDebug = CruisingReturnDebug()
+        private set
+
     /** The RPM the needle is allowed to chase this frame. Falls immediately, rises only at glide rate. */
     private var chaseRpm: Double = 0.0
 
@@ -67,6 +71,17 @@ internal class CruisingReturnTransition {
         nextGearCoupledRpm: Double?,
     ): CruisingReturnStep {
         if (!active) {
+            lastDebug = CruisingReturnDebug(
+                active = false,
+                targetGear = targetGear,
+                chaseRpm = chaseRpm,
+                liveTargetRpm = liveTargetRpm,
+                computedTargetGear = computedTargetGear,
+                glideRpmPerSecond = glideRpmPerSecond,
+                nextGearCoupledRpm = nextGearCoupledRpm,
+                requestUpshift = false,
+                finished = false,
+            )
             return CruisingReturnStep(
                 rpm = currentRpm,
                 requestUpshift = false,
@@ -99,6 +114,18 @@ internal class CruisingReturnTransition {
             (reachedNextGear || onLiveTarget)
         val finished = !shifting && currentGear >= targetGear && onLiveTarget
 
+        lastDebug = CruisingReturnDebug(
+            active = true,
+            targetGear = targetGear,
+            chaseRpm = chaseRpm,
+            liveTargetRpm = liveTargetRpm,
+            computedTargetGear = computedTargetGear,
+            glideRpmPerSecond = glideRpmPerSecond,
+            nextGearCoupledRpm = nextGearCoupledRpm,
+            requestUpshift = requestUpshift,
+            finished = finished,
+        )
+
         if (finished) {
             clear()
         }
@@ -115,6 +142,18 @@ internal data class CruisingReturnStep(
     val rpm: Double,
     val requestUpshift: Boolean,
     val finished: Boolean,
+)
+
+internal data class CruisingReturnDebug(
+    val active: Boolean = false,
+    val targetGear: Int = 0,
+    val chaseRpm: Double = 0.0,
+    val liveTargetRpm: Double = 0.0,
+    val computedTargetGear: Int = 0,
+    val glideRpmPerSecond: Double = 0.0,
+    val nextGearCoupledRpm: Double? = null,
+    val requestUpshift: Boolean = false,
+    val finished: Boolean = false,
 )
 
 internal object CruisingReturn {

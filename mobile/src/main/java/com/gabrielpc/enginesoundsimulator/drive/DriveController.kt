@@ -23,6 +23,7 @@ import com.gabrielpc.enginesoundsimulator.audio.MediaShiftButtonCoordinator
 import com.gabrielpc.enginesoundsimulator.audio.AudioMixGains
 import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGainRepository
 import com.gabrielpc.enginesoundsimulator.audio.MixerCarSpecificGainRepository
+import com.gabrielpc.enginesoundsimulator.diagnostics.DriveSessionCapture
 import com.gabrielpc.enginesoundsimulator.audio.MixerCarSpecificGains
 import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains
 import com.gabrielpc.enginesoundsimulator.audio.effectiveCategoryGains
@@ -158,6 +159,7 @@ class DriveController(context: Context) {
     }
     private val activePhysics = AtomicReference<AssettoPhysics?>(null)
     private val simulation = EngineSimulation()
+    private val sessionCapture = DriveSessionCapture(appContext)
     private val vehicleReader = BydSpeedReader(appContext)
     private val audioEngine = EngineAudioEngine(appContext)
     private val lifecycleLock = Any()
@@ -409,6 +411,18 @@ class DriveController(context: Context) {
                 cruisingShiftOffsetsByTachMaxRpm = CruisingShiftOffsetByTachMaxRpm.normalizeMap(updatedOffsets),
             )
         }
+    }
+
+    fun startDriveCapture(): String {
+        return sessionCapture.start().absolutePath
+    }
+
+    fun stopDriveCapture(): String? {
+        return sessionCapture.stop()?.absolutePath
+    }
+
+    fun isDriveCapturing(): Boolean {
+        return sessionCapture.isCapturing
     }
 
     fun setRacingReturnThrottlePercent(percent: Int) {
@@ -1232,6 +1246,11 @@ class DriveController(context: Context) {
                 simulatedRegen = simulatedRegen.get(),
             ),
             dt,
+        )
+        sessionCapture.record(
+            throttle = input.throttle,
+            brake = input.brake,
+            drivetrain = drivetrain,
         )
         if (drivetrain.requestAutomaticShiftMode) {
             setManualShiftMode(enabled = false)

@@ -146,7 +146,6 @@ internal class AssettoDrivetrain(
     private var cruisingReturnPendingUpshiftTargetGear: Int? = null
     private var cruisingReturnTransitionSecondsRemaining = 0.0
     private var cruisingReturnTransitionStartRpm = 0.0
-    private var cruisingReturnTransitionTargetRpm = 0.0
     /** Progress threshold for the next scheduled upshift during the return window. */
     private var cruisingReturnNextUpshiftProgress = 1.0
     private var cruisingReturnUpshiftProgressStep = 1.0
@@ -1096,7 +1095,6 @@ internal class AssettoDrivetrain(
         cruisingReturnPendingUpshiftTargetGear = null
         cruisingReturnTransitionSecondsRemaining = 0.0
         cruisingReturnTransitionStartRpm = 0.0
-        cruisingReturnTransitionTargetRpm = 0.0
         cruisingReturnNextUpshiftProgress = 1.0
         cruisingReturnUpshiftProgressStep = 1.0
     }
@@ -1106,7 +1104,6 @@ internal class AssettoDrivetrain(
 
         cruisingReturnTransitionActive = true
         cruisingReturnTransitionStartRpm = rpm
-        cruisingReturnTransitionTargetRpm = coupledRpmForGear(targetGear)
         cruisingReturnTransitionSecondsRemaining = CRUISING_RETURN_TRANSITION_SECONDS
 
         if (targetGear > gear) {
@@ -1168,7 +1165,7 @@ internal class AssettoDrivetrain(
         }
     }
 
-    /** Linear RPM glide over the full return window, independent of per-gear mapped speed. */
+    /** Linear RPM glide over the return window, tracking live mapped speed instead of a snapshot. */
     private fun applyCruisingReturnTransitionRpm(dt: Double) {
         if (!cruisingReturnTransitionActive) {
             return
@@ -1178,19 +1175,22 @@ internal class AssettoDrivetrain(
         val progress = 1.0 - (
             cruisingReturnTransitionSecondsRemaining / CRUISING_RETURN_TRANSITION_SECONDS
             ).coerceIn(0.0, 1.0)
+
+        val targetGear = cruisingReturnPendingUpshiftTargetGear ?: gear
+        val liveTargetRpm = coupledRpmForGear(targetGear)
         rpm = cruisingReturnTransitionStartRpm +
-            (cruisingReturnTransitionTargetRpm - cruisingReturnTransitionStartRpm) * progress
+            (liveTargetRpm - cruisingReturnTransitionStartRpm) * progress
 
         if (physics.engine.limiterRpm > 0.0) {
             rpm = rpm.coerceAtMost(physics.engine.limiterRpm)
         }
 
-        val targetGear = cruisingReturnPendingUpshiftTargetGear ?: gear
         if (
             cruisingReturnTransitionSecondsRemaining <= 0.0 &&
             !shifting &&
             gear >= targetGear
         ) {
+            rpm = coupledRpmForGear(gear)
             clearCruisingReturnTransition()
         }
     }

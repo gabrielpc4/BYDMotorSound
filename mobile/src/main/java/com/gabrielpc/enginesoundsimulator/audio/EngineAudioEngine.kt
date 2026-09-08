@@ -8,7 +8,7 @@ import android.util.Log
 import com.gabrielpc.enginesoundsimulator.diagnostics.DebugTelemetry
 import com.gabrielpc.enginesoundsimulator.drive.MinimumAudioThrottle
 import com.gabrielpc.enginesoundsimulator.drive.PedalAudioThrottleRampMilliseconds
-import com.gabrielpc.enginesoundsimulator.drive.SpeedAudioGainResolver
+import com.gabrielpc.enginesoundsimulator.drive.ResolvedSpeedAudioSettings
 import com.gabrielpc.enginesoundsimulator.drive.SpeedAudioSettings
 import com.gabrielpc.enginesoundsimulator.simulation.nativeFmodSpatialCoordinates
 import java.io.File
@@ -79,7 +79,8 @@ class EngineAudioEngine(context: Context) {
     private val minimumAudioThrottle = AtomicReference(MinimumAudioThrottle.DEFAULT)
     private val pedalAudioThrottleRampUpMilliseconds = AtomicReference(PedalAudioThrottleRampMilliseconds.DEFAULT)
     private val pedalAudioThrottleRampDownMilliseconds = AtomicReference(PedalAudioThrottleRampMilliseconds.DEFAULT)
-    private val speedAudioSettings = AtomicReference(SpeedAudioSettings())
+    private val resolvedSpeedAudioSettings = AtomicReference(ResolvedSpeedAudioSettings.from(SpeedAudioSettings()))
+    private val forceSpeedAudioHostGainRefresh = AtomicBoolean(false)
     private val engineSampleDataReady = AtomicBoolean(false)
     private val hasEmbeddedSupercharger = AtomicBoolean(false)
     private var sentExteriorPureAudio: Boolean? = null
@@ -209,8 +210,66 @@ class EngineAudioEngine(context: Context) {
     }
 
     fun setSpeedAudioSettings(settings: SpeedAudioSettings) {
-        speedAudioSettings.set(settings.normalized())
+        resolvedSpeedAudioSettings.set(ResolvedSpeedAudioSettings.from(settings))
+        forceSpeedAudioHostGainRefresh.set(true)
     }
+
+    private fun speedAudioAdjustedHostGains(frame: EngineAudioFrame): Pair<Float, Float> {
+        val multiplier = resolvedSpeedAudioSettings.get().combinedMultiplier(
+            rpm = frame.rpm,
+            speedKmh = frame.presentationSpeedKmh,
+        )
+
+        return Pair(
+            effectiveHostEngineInteriorGain() * multiplier,
+            effectiveHostEngineExteriorGain() * multiplier,
+        )
+    }
+
+    private fun applyHostGainsIfNeeded(
+        bridge: NativeFmodBankBridge,
+        frame: EngineAudioFrame,
+        requestedHostEffectsGain: Float,
+        sentHostEngineInteriorGain: Float?,
+        sentHostEngineExteriorGain: Float?,
+        sentHostEffectsGain: Float?,
+    ): HostGainApplyResult {
+        val (effectiveHostEngineInteriorGain, effectiveHostEngineExteriorGain) = speedAudioAdjustedHostGains(frame)
+
+        if (
+            forceSpeedAudioHostGainRefresh.getAndSet(false) ||
+            effectiveHostEngineInteriorGain != sentHostEngineInteriorGain ||
+            effectiveHostEngineExteriorGain != sentHostEngineExteriorGain ||
+            requestedHostEffectsGain != sentHostEffectsGain
+        ) {
+            bridge.setHostGains(
+                effectiveHostEngineInteriorGain,
+                effectiveHostEngineExteriorGain,
+                requestedHostEffectsGain,
+            )
+
+            return HostGainApplyResult(
+                sentHostEngineInteriorGain = effectiveHostEngineInteriorGain,
+                sentHostEngineExteriorGain = effectiveHostEngineExteriorGain,
+                sentHostEffectsGain = requestedHostEffectsGain,
+                hostGainCalls = 1,
+            )
+        }
+
+        return HostGainApplyResult(
+            sentHostEngineInteriorGain = sentHostEngineInteriorGain,
+            sentHostEngineExteriorGain = sentHostEngineExteriorGain,
+            sentHostEffectsGain = sentHostEffectsGain,
+            hostGainCalls = 0,
+        )
+    }
+
+    private data class HostGainApplyResult(
+        val sentHostEngineInteriorGain: Float?,
+        val sentHostEngineExteriorGain: Float?,
+        val sentHostEffectsGain: Float?,
+        val hostGainCalls: Int,
+    )
 
     fun setBackfireAllowedSamples(samples: Set<Int>) {
         val mask = samples.fold(0) { result, sample ->
@@ -458,6 +517,17 @@ class EngineAudioEngine(context: Context) {
             )
             sentPedalAudioThrottleRampUpMilliseconds = requestedRampUpMilliseconds
             sentPedalAudioThrottleRampDownMilliseconds = requestedRampDownMilliseconds
+            val initialHostGains = applyHostGainsIfNeeded(
+                bridge = bridge,
+                frame = parameters.get(),
+                requestedHostEffectsGain = hostEffectsGain.get(),
+                sentHostEngineInteriorGain = sentHostEngineInteriorGain,
+                sentHostEngineExteriorGain = sentHostEngineExteriorGain,
+                sentHostEffectsGain = sentHostEffectsGain,
+            )
+            sentHostEngineInteriorGain = initialHostGains.sentHostEngineInteriorGain
+            sentHostEngineExteriorGain = initialHostGains.sentHostEngineExteriorGain
+            sentHostEffectsGain = initialHostGains.sentHostEffectsGain
 
             while (isCurrent(runId)) {
                 val now = System.nanoTime()
@@ -499,28 +569,18 @@ class EngineAudioEngine(context: Context) {
                 var categoryGainCalls = 0
                 var overrideBatchCalls = 0
                 val requestedHostEffectsGain = hostEffectsGain.get()
-                val speedAudioMultiplier = SpeedAudioGainResolver.combinedMultiplier(
-                    rpm = frame.rpm,
-                    speedKmh = frame.presentationSpeedKmh,
-                    settings = speedAudioSettings.get(),
+                val hostGainApplyResult = applyHostGainsIfNeeded(
+                    bridge = bridge,
+                    frame = frame,
+                    requestedHostEffectsGain = requestedHostEffectsGain,
+                    sentHostEngineInteriorGain = sentHostEngineInteriorGain,
+                    sentHostEngineExteriorGain = sentHostEngineExteriorGain,
+                    sentHostEffectsGain = sentHostEffectsGain,
                 )
-                val effectiveHostEngineInteriorGain = effectiveHostEngineInteriorGain() * speedAudioMultiplier
-                val effectiveHostEngineExteriorGain = effectiveHostEngineExteriorGain() * speedAudioMultiplier
-                if (
-                    effectiveHostEngineInteriorGain != sentHostEngineInteriorGain ||
-                    effectiveHostEngineExteriorGain != sentHostEngineExteriorGain ||
-                    requestedHostEffectsGain != sentHostEffectsGain
-                ) {
-                    bridge.setHostGains(
-                        effectiveHostEngineInteriorGain,
-                        effectiveHostEngineExteriorGain,
-                        requestedHostEffectsGain,
-                    )
-                    sentHostEngineInteriorGain = effectiveHostEngineInteriorGain
-                    sentHostEngineExteriorGain = effectiveHostEngineExteriorGain
-                    sentHostEffectsGain = requestedHostEffectsGain
-                    hostGainCalls = 1
-                }
+                sentHostEngineInteriorGain = hostGainApplyResult.sentHostEngineInteriorGain
+                sentHostEngineExteriorGain = hostGainApplyResult.sentHostEngineExteriorGain
+                sentHostEffectsGain = hostGainApplyResult.sentHostEffectsGain
+                hostGainCalls = hostGainApplyResult.hostGainCalls
                 val requestedOverrideEffectsHostGain = overrideEffectsHostGain.get()
                 if (requestedOverrideEffectsHostGain != sentOverrideEffectsHostGain) {
                     bridge.setOverrideEffectsHostGain(requestedOverrideEffectsHostGain)

@@ -93,6 +93,96 @@ internal object AutomaticTransmissionPolicy {
         )
     }
 
+    data class RacingReturnStepResult(
+        val armed: Boolean,
+        val lightBrakeHoldSeconds: Double,
+        val returnToCruising: Boolean,
+    )
+
+    /**
+     * Racing-mode return logic: lift-off prepares cruising; light brake held long enough or a
+     * gentle re-acceleration completes it. A stomp or heavy pedal cancels the prepare and stays racing.
+     */
+    fun stepRacingReturn(
+        armed: Boolean,
+        lightBrakeHoldSeconds: Double,
+        rawGas: Double,
+        brake: Double,
+        previousThrottle: Double,
+        deltaSeconds: Double,
+        racingReturnMaxThrottle: Double,
+        racingReturnHoldSeconds: Double,
+        kickdownMinDelta: Double,
+        kickdownMinCurrentThrottle: Double,
+    ): RacingReturnStepResult {
+        var nextArmed = armed
+        var nextLightBrakeHoldSeconds = lightBrakeHoldSeconds
+        var returnToCruising = false
+
+        val fullLift = rawGas <= RACING_RETURN_FULL_LIFT_MAX_THROTTLE
+        val lightBrakeActive = brake > 0.0 && brake < RACING_RETURN_LIGHT_BRAKE_MAX
+
+        if (fullLift) {
+            nextArmed = true
+        }
+
+        if (lightBrakeActive) {
+            nextArmed = true
+            nextLightBrakeHoldSeconds += deltaSeconds
+
+            if (nextLightBrakeHoldSeconds >= racingReturnHoldSeconds) {
+                returnToCruising = true
+            }
+        } else {
+            nextLightBrakeHoldSeconds = 0.0
+        }
+
+        if (!returnToCruising && nextArmed && rawGas > 0.0) {
+            val stomp = kickdownStompDetected(
+                previousThrottle = previousThrottle,
+                currentThrottle = rawGas,
+                minDelta = kickdownMinDelta,
+                minCurrentThrottle = kickdownMinCurrentThrottle,
+            )
+
+            if (stomp || rawGas > racingReturnMaxThrottle) {
+                nextArmed = false
+            } else {
+                returnToCruising = true
+            }
+        }
+
+        if (returnToCruising) {
+            nextArmed = false
+            nextLightBrakeHoldSeconds = 0.0
+        }
+
+        return RacingReturnStepResult(
+            armed = nextArmed,
+            lightBrakeHoldSeconds = nextLightBrakeHoldSeconds,
+            returnToCruising = returnToCruising,
+        )
+    }
+
+    fun shouldEnterRacingFromCruisingKickdown(
+        mode: AutomaticTransmissionMode,
+        previousThrottle: Double,
+        currentThrottle: Double,
+        kickdownMinDelta: Double,
+        kickdownMinCurrentThrottle: Double,
+    ): Boolean {
+        if (mode != AutomaticTransmissionMode.CRUISING) {
+            return false
+        }
+
+        return kickdownStompDetected(
+            previousThrottle = previousThrottle,
+            currentThrottle = currentThrottle,
+            minDelta = kickdownMinDelta,
+            minCurrentThrottle = kickdownMinCurrentThrottle,
+        )
+    }
+
     fun applyCruisingOffset(
         baseRpm: Double,
         offsetRpm: Int,

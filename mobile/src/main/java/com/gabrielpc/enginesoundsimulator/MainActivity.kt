@@ -285,6 +285,7 @@ class MainActivity : ComponentActivity() {
                         onTachometerCruisingShiftRangeOverlayEnabledChange =
                             controller::setTachometerCruisingShiftRangeOverlayEnabled,
                         onCruisingShiftOffsetForTachMaxRpmChange = controller::setCruisingShiftOffsetForTachMaxRpm,
+                        onRacingReturnThrottlePercentChange = controller::setRacingReturnThrottlePercent,
                         onKickdownStompDeltaPercentChange = controller::setKickdownStompDeltaPercent,
                         onKickdownStompMinThrottlePercentChange = controller::setKickdownStompMinThrottlePercent,
                         onRacingEnterDelayMillisecondsChange = controller::setRacingEnterDelayMilliseconds,
@@ -420,6 +421,7 @@ private fun MotorSoundDashboard(
     onManualTransmissionKickdownEnabledChange: (Boolean) -> Unit,
     onTachometerCruisingShiftRangeOverlayEnabledChange: (Boolean) -> Unit,
     onCruisingShiftOffsetForTachMaxRpmChange: (Int, Int) -> Unit,
+    onRacingReturnThrottlePercentChange: (Int) -> Unit,
     onKickdownStompDeltaPercentChange: (Int) -> Unit,
     onKickdownStompMinThrottlePercentChange: (Int) -> Unit,
     onRacingEnterDelayMillisecondsChange: (Int) -> Unit,
@@ -676,6 +678,8 @@ private fun MotorSoundDashboard(
                             onMinimumAudioThrottleChange = onMinimumAudioThrottleChange,
                             racingReturnHoldSeconds = state.racingReturnHoldSeconds,
                             onRacingReturnHoldSecondsChange = onRacingReturnHoldSecondsChange,
+                            racingReturnThrottlePercent = state.racingReturnThrottlePercent,
+                            onRacingReturnThrottlePercentChange = onRacingReturnThrottlePercentChange,
                             kickdownStompDeltaPercent = state.kickdownStompDeltaPercent,
                             onKickdownStompDeltaPercentChange = onKickdownStompDeltaPercentChange,
                             kickdownStompMinThrottlePercent = state.kickdownStompMinThrottlePercent,
@@ -702,6 +706,8 @@ private fun MotorSoundDashboard(
                             onPreviewBackfireSample = onPreviewBackfireSample,
                             speedAudioSettings = state.speedAudioSettings,
                             onSpeedAudioSettingsChange = onSpeedAudioSettingsChange,
+                            liveRpm = { state.drivetrain.rpm },
+                            liveSpeedKmh = { state.drivetrain.presentationSpeedKmh },
                         )
                     }
                 }

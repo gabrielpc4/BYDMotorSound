@@ -139,6 +139,7 @@ internal class AssettoDrivetrain(
     private var cruisingShiftOffsetRpm = 0
     private var kickdownStompMinDelta = 0.15
     private var kickdownStompMinCurrentThrottle = 0.30
+    private var racingReturnMaxThrottle = 0.30
     private var racingReturnLightBrakeHoldSeconds = 0.0
     private var racingReturnHoldSeconds = RacingReturnHoldSeconds.DEFAULT.toDouble()
     private var manualRedlineHoldSeconds: Double? = 1.0
@@ -428,6 +429,7 @@ internal class AssettoDrivetrain(
             tachometerMaximumRpm = physics.engine.tachometerMaximumRpm,
         )
         racingReturnLightBrakeHoldSeconds = 0.0
+        racingReturnMaxThrottle = automaticTransmissionConfig.racingReturnMaxThrottle.coerceIn(0.0, 1.0)
         kickdownStompMinDelta = automaticTransmissionConfig.kickdownStompMinDelta.coerceIn(0.0, 1.0)
         kickdownStompMinCurrentThrottle = automaticTransmissionConfig.kickdownStompMinCurrentThrottle.coerceIn(0.0, 1.0)
         racingReturnHoldSeconds = automaticTransmissionConfig.racingReturnHoldSeconds.coerceAtLeast(0.0)
@@ -1508,13 +1510,15 @@ internal class AssettoDrivetrain(
             clearRacingStompPending()
         }
 
-        val cruisingKickdownStomp = kickdownStompDetected(
+        val cruisingKickdownStomp = AutomaticTransmissionPolicy.shouldEnterRacingFromCruisingKickdown(
+            mode = automaticTransmissionMode,
             previousThrottle = previousRawGasForManualStomp,
             currentThrottle = rawGas,
+            kickdownMinDelta = kickdownStompMinDelta,
+            kickdownMinCurrentThrottle = kickdownStompMinCurrentThrottle,
         )
 
         if (
-            automaticTransmissionMode == AutomaticTransmissionMode.CRUISING &&
             cruisingKickdownStomp &&
             launchControlPhase == LaunchControlPhase.INACTIVE
         ) {
@@ -1531,27 +1535,24 @@ internal class AssettoDrivetrain(
         }
 
         if (automaticTransmissionMode == AutomaticTransmissionMode.RACING) {
-            val fullLift = rawGas <= AutomaticTransmissionPolicy.RACING_RETURN_FULL_LIFT_MAX_THROTTLE
-            val lightBrakeActive = brake > 0.0 &&
-                brake < AutomaticTransmissionPolicy.RACING_RETURN_LIGHT_BRAKE_MAX
+            val racingReturnStep = AutomaticTransmissionPolicy.stepRacingReturn(
+                armed = racingReturnArmed,
+                lightBrakeHoldSeconds = racingReturnLightBrakeHoldSeconds,
+                rawGas = rawGas,
+                brake = brake,
+                previousThrottle = previousRawGasForManualStomp,
+                deltaSeconds = dt,
+                racingReturnMaxThrottle = racingReturnMaxThrottle,
+                racingReturnHoldSeconds = racingReturnHoldSeconds,
+                kickdownMinDelta = kickdownStompMinDelta,
+                kickdownMinCurrentThrottle = kickdownStompMinCurrentThrottle,
+            )
 
-            if (fullLift) {
-                racingReturnArmed = true
-            }
+            racingReturnArmed = racingReturnStep.armed
+            racingReturnLightBrakeHoldSeconds = racingReturnStep.lightBrakeHoldSeconds
 
-            if (lightBrakeActive) {
-                racingReturnArmed = true
-                racingReturnLightBrakeHoldSeconds += dt
-
-                if (racingReturnLightBrakeHoldSeconds >= racingReturnHoldSeconds) {
-                    returnToCruisingFromRacing()
-                }
-            } else {
-                racingReturnLightBrakeHoldSeconds = 0.0
-
-                if (!fullLift) {
-                    racingReturnArmed = false
-                }
+            if (racingReturnStep.returnToCruising) {
+                returnToCruisingFromRacing()
             }
         }
     }

@@ -136,6 +136,7 @@ import com.gabrielpc.enginesoundsimulator.drive.RacingEnterDelayMilliseconds
 import com.gabrielpc.enginesoundsimulator.drive.KickdownStompDeltaPercent
 import com.gabrielpc.enginesoundsimulator.drive.KickdownStompMinThrottlePercent
 import com.gabrielpc.enginesoundsimulator.drive.RacingReturnHoldSeconds
+import com.gabrielpc.enginesoundsimulator.drive.RacingReturnThrottlePercent
 import com.gabrielpc.enginesoundsimulator.drive.PedalAudioThrottleRampMilliseconds
 import com.gabrielpc.enginesoundsimulator.simulation.VirtualGearProfile
 import com.gabrielpc.enginesoundsimulator.drive.AlfaBackfireSources
@@ -983,6 +984,8 @@ internal fun SettingsScreen(
     onMinimumAudioThrottleChange: (Float) -> Unit,
     racingReturnHoldSeconds: Int,
     onRacingReturnHoldSecondsChange: (Int) -> Unit,
+    racingReturnThrottlePercent: Int,
+    onRacingReturnThrottlePercentChange: (Int) -> Unit,
     kickdownStompDeltaPercent: Int,
     onKickdownStompDeltaPercentChange: (Int) -> Unit,
     kickdownStompMinThrottlePercent: Int,
@@ -1008,8 +1011,10 @@ internal fun SettingsScreen(
     onPreviewBackfireSample: (Int) -> Unit,
     speedAudioSettings: SpeedAudioSettings,
     onSpeedAudioSettingsChange: (SpeedAudioSettings) -> Unit,
+    liveRpm: () -> Double,
+    liveSpeedKmh: () -> Double,
 ) {
-    var selectedTab by remember { mutableStateOf(SettingsSection.GENERAL) }
+    var selectedTab by remember { mutableStateOf(SettingsSection.SPEED_AUDIO) }
     var showResetConfirmation by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier.fillMaxSize().padding(32.dp),
@@ -1022,20 +1027,32 @@ internal fun SettingsScreen(
             modifier = Modifier.fillMaxWidth().border(1.dp, Outline, skinShape(8.dp)),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            SettingsTab("SPEED AUDIO", selectedTab == SettingsSection.SPEED_AUDIO) {
+                selectedTab = SettingsSection.SPEED_AUDIO
+            }
             SettingsTab("GENERAL", selectedTab == SettingsSection.GENERAL) {
                 selectedTab = SettingsSection.GENERAL
             }
             SettingsTab("BACKFIRE", selectedTab == SettingsSection.BACKFIRE) {
                 selectedTab = SettingsSection.BACKFIRE
             }
-            SettingsTab("SPEED AUDIO", selectedTab == SettingsSection.SPEED_AUDIO) {
-                selectedTab = SettingsSection.SPEED_AUDIO
-            }
             SettingsTab("BANK IMPORT", selectedTab == SettingsSection.BANK_IMPORT) {
                 selectedTab = SettingsSection.BANK_IMPORT
             }
         }
         when (selectedTab) {
+            SettingsSection.SPEED_AUDIO -> Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                SpeedAudioSettingsPanel(
+                    settings = speedAudioSettings,
+                    liveRpm = liveRpm(),
+                    liveSpeedKmh = liveSpeedKmh(),
+                    onChange = onSpeedAudioSettingsChange,
+                )
+            }
             SettingsSection.GENERAL -> Column(
                 modifier = Modifier
                     .weight(1f)
@@ -1078,6 +1095,8 @@ internal fun SettingsScreen(
                 onMinimumAudioThrottleChange = onMinimumAudioThrottleChange,
                 racingReturnHoldSeconds = racingReturnHoldSeconds,
                 onRacingReturnHoldSecondsChange = onRacingReturnHoldSecondsChange,
+                racingReturnThrottlePercent = racingReturnThrottlePercent,
+                onRacingReturnThrottlePercentChange = onRacingReturnThrottlePercentChange,
                 kickdownStompDeltaPercent = kickdownStompDeltaPercent,
                 onKickdownStompDeltaPercentChange = onKickdownStompDeltaPercentChange,
                 kickdownStompMinThrottlePercent = kickdownStompMinThrottlePercent,
@@ -1130,16 +1149,6 @@ internal fun SettingsScreen(
                     onPreview = onPreviewBackfireSample,
                 )
             }
-            SettingsSection.SPEED_AUDIO -> Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                SpeedAudioSettingsPanel(
-                    settings = speedAudioSettings,
-                    onChange = onSpeedAudioSettingsChange,
-                )
-            }
             SettingsSection.BANK_IMPORT -> BankImportDiagnosticsPanel(
                 onRescanBanks = onRescanBanks,
                 modifier = Modifier.weight(1f),
@@ -1180,25 +1189,22 @@ internal fun SettingsScreen(
 }
 
 private enum class SettingsSection {
+    SPEED_AUDIO,
     GENERAL,
     BACKFIRE,
-    SPEED_AUDIO,
     BANK_IMPORT,
 }
 
 @Composable
 private fun SpeedAudioSettingsPanel(
     settings: SpeedAudioSettings,
+    liveRpm: Double,
+    liveSpeedKmh: Double,
     onChange: (SpeedAudioSettings) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val normalized = settings.normalized()
-    val gainSteps = SpeedAudioGain.gainSliderSteps()
     val speedCoefficientSteps = SpeedAudioGain.speedCoefficientSliderSteps()
-    val lowBoundaryMin = 1_000
-    val lowBoundaryMax = 8_000
-    val midBoundaryMin = normalized.lowRangeMaxRpm + 100
-    val midBoundaryMax = 12_000
 
     Column(
         modifier = modifier
@@ -1214,75 +1220,22 @@ private fun SpeedAudioSettingsPanel(
             fontWeight = FontWeight.Black,
             letterSpacing = 1.2.sp,
         )
-        Text(
-            text = "Adjust engine host gain by RPM band and add a speed-only bonus on top. Final multiplier is 1 + RPM offset + speed bonus.",
-            color = Muted,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-        )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            SpeedAudioBoundaryCard(
-                title = "LOW / MID BOUNDARY",
-                description = "Upper limit of the low RPM band. Low range covers 0 to below this RPM.",
-                valueRpm = normalized.lowRangeMaxRpm,
-                valueRange = lowBoundaryMin.toFloat()..lowBoundaryMax.toFloat(),
-                steps = ((lowBoundaryMax - lowBoundaryMin) / 100) - 1,
-                onValueChange = { value ->
-                    val selectedRpm = value.roundToInt()
-                    onChange(
-                        normalized.copy(
-                            lowRangeMaxRpm = selectedRpm,
-                            midRangeMaxRpm = normalized.midRangeMaxRpm.coerceAtLeast(selectedRpm + 100),
-                        ),
-                    )
-                },
-                modifier = Modifier.weight(1f),
-            )
-
-            SpeedAudioBoundaryCard(
-                title = "MID / HIGH BOUNDARY",
-                description = "Upper limit of the mid RPM band. High range starts above this RPM.",
-                valueRpm = normalized.midRangeMaxRpm,
-                valueRange = midBoundaryMin.toFloat()..midBoundaryMax.toFloat(),
-                steps = ((midBoundaryMax - midBoundaryMin) / 100).coerceAtLeast(1) - 1,
-                onValueChange = { value ->
-                    onChange(normalized.copy(midRangeMaxRpm = value.roundToInt()))
-                },
-                modifier = Modifier.weight(1f),
-            )
-        }
-
-        SpeedAudioGainCard(
-            title = "0 to < ${String.format(Locale.US, "%,d", normalized.lowRangeMaxRpm)} RPM",
-            description = "Gain offset applied while the engine stays below the low/mid boundary.",
-            gain = normalized.lowRangeGain,
-            gainSteps = gainSteps,
-            onGainChange = { gain ->
-                onChange(normalized.copy(lowRangeGain = gain))
+        RpmGainCurveChart(
+            curvePoints = normalized.curvePoints,
+            speedGainCoefficient = normalized.speedGainCoefficient,
+            liveRpm = liveRpm,
+            liveSpeedKmh = liveSpeedKmh,
+            onPointsChange = { points ->
+                onChange(normalized.copy(curvePoints = points))
             },
-        )
-
-        SpeedAudioGainCard(
-            title = "${String.format(Locale.US, "%,d", normalized.lowRangeMaxRpm)} to ${String.format(Locale.US, "%,d", normalized.midRangeMaxRpm)} RPM",
-            description = "Gain offset applied between the two RPM boundaries.",
-            gain = normalized.midRangeGain,
-            gainSteps = gainSteps,
-            onGainChange = { gain ->
-                onChange(normalized.copy(midRangeGain = gain))
-            },
-        )
-
-        SpeedAudioGainCard(
-            title = "> ${String.format(Locale.US, "%,d", normalized.midRangeMaxRpm)} RPM",
-            description = "Gain offset applied above the mid/high boundary.",
-            gain = normalized.highRangeGain,
-            gainSteps = gainSteps,
-            onGainChange = { gain ->
-                onChange(normalized.copy(highRangeGain = gain))
+            onRestoreDefaults = {
+                onChange(
+                    SpeedAudioSettings(
+                        curvePoints = SpeedAudioGain.DEFAULT_CURVE_POINTS,
+                        speedGainCoefficient = normalized.speedGainCoefficient,
+                    ),
+                )
             },
         )
 
@@ -1314,6 +1267,10 @@ private fun SpeedAudioSettingsPanel(
                 fontSize = 12.sp,
                 lineHeight = 16.sp,
             )
+            SpeedGainCurveChart(
+                speedGainCoefficient = normalized.speedGainCoefficient,
+                liveSpeedKmh = liveSpeedKmh,
+            )
             Slider(
                 value = normalized.speedGainCoefficient,
                 onValueChange = { value ->
@@ -1323,90 +1280,6 @@ private fun SpeedAudioSettingsPanel(
                 steps = speedCoefficientSteps.coerceAtLeast(0),
             )
         }
-    }
-}
-
-@Composable
-private fun SpeedAudioBoundaryCard(
-    title: String,
-    description: String,
-    valueRpm: Int,
-    valueRange: ClosedFloatingPointRange<Float>,
-    steps: Int,
-    onValueChange: (Float) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(title, color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
-            Text(
-                text = String.format(Locale.US, "%,d RPM", valueRpm),
-                color = OnSurface,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Black,
-            )
-        }
-        Text(
-            text = description,
-            color = Muted,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
-        )
-        Slider(
-            value = valueRpm.toFloat(),
-            onValueChange = onValueChange,
-            valueRange = valueRange,
-            steps = steps.coerceAtLeast(0),
-        )
-    }
-}
-
-@Composable
-private fun SpeedAudioGainCard(
-    title: String,
-    description: String,
-    gain: Float,
-    gainSteps: Int,
-    onGainChange: (Float) -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(title, color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
-            Text(
-                text = SpeedAudioGain.formatGainOffset(gain),
-                color = OnSurface,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Black,
-            )
-        }
-        Text(
-            text = description,
-            color = Muted,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
-        )
-        Slider(
-            value = gain,
-            onValueChange = { value ->
-                onGainChange(SpeedAudioGain.normalizeGain(value))
-            },
-            valueRange = SpeedAudioGain.MIN..SpeedAudioGain.MAX,
-            steps = gainSteps.coerceAtLeast(0),
-        )
     }
 }
 
@@ -1717,6 +1590,8 @@ private fun AutomaticTransmissionSettingsControl(
     onMinimumAudioThrottleChange: (Float) -> Unit,
     racingReturnHoldSeconds: Int,
     onRacingReturnHoldSecondsChange: (Int) -> Unit,
+    racingReturnThrottlePercent: Int,
+    onRacingReturnThrottlePercentChange: (Int) -> Unit,
     kickdownStompDeltaPercent: Int,
     onKickdownStompDeltaPercentChange: (Int) -> Unit,
     kickdownStompMinThrottlePercent: Int,
@@ -1797,7 +1672,7 @@ private fun AutomaticTransmissionSettingsControl(
                     )
                 }
                 Text(
-                    text = "In racing mode, holding the brake lightly (below 10%) for this long returns to cruising. A full throttle lift-off only prepares the return (P-CRUISING on the tach).",
+                    text = "In racing mode, holding the brake lightly (below 10%) for this long returns to cruising. A full throttle lift-off prepares the return (P-CRUISING).",
                     color = Muted,
                     fontSize = 12.sp,
                     lineHeight = 16.sp,
@@ -1815,6 +1690,47 @@ private fun AutomaticTransmissionSettingsControl(
                 )
             }
 
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("RACING RETURN THROTTLE", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    Text(
+                        text = "$racingReturnThrottlePercent%",
+                        color = OnSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Black,
+                    )
+                }
+                Text(
+                    text = "After preparing a return (lift-off or light brake), re-acceleration at or below this level completes cruising. Above it, or a kickdown stomp, stays in racing.",
+                    color = Muted,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                )
+                Slider(
+                    value = racingReturnThrottlePercent.toFloat(),
+                    onValueChange = { value ->
+                        val selectedPercent = RacingReturnThrottlePercent.normalize(value.roundToInt())
+                        if (selectedPercent != racingReturnThrottlePercent) {
+                            onRacingReturnThrottlePercentChange(selectedPercent)
+                        }
+                    },
+                    valueRange = RacingReturnThrottlePercent.MIN.toFloat()..RacingReturnThrottlePercent.MAX.toFloat(),
+                    steps = (RacingReturnThrottlePercent.MAX - RacingReturnThrottlePercent.MIN) / RacingReturnThrottlePercent.STEP - 1,
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
             TachometerShiftOverlayToggle(
                 title = "CRUISING RPM RANGE OVERLAY",
                 description = "Semi-transparent wedge on the tachometer showing min/max automatic shift RPM while cruising.",

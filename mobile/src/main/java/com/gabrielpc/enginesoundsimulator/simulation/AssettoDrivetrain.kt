@@ -5,6 +5,7 @@ import com.gabrielpc.enginesoundsimulator.drive.CruisingShiftOffsetByTachMaxRpm
 import com.gabrielpc.enginesoundsimulator.drive.AutomaticDownshiftMilliseconds
 import com.gabrielpc.enginesoundsimulator.drive.AutomaticUpshiftMilliseconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingEnterDelayMilliseconds
+import com.gabrielpc.enginesoundsimulator.drive.RacingReturnHoldSeconds
 import android.util.Log
 import kotlin.math.PI
 import kotlin.math.abs
@@ -136,9 +137,10 @@ internal class AssettoDrivetrain(
     private var launchControlTachCycleStartRpm = physics.engine.idleRpm
     private var previousLaunchControlPhase = LaunchControlPhase.INACTIVE
     private var cruisingShiftOffsetRpm = 0
-    private var racingReturnMaxThrottle = 0.30
     private var kickdownStompMinDelta = 0.15
     private var kickdownStompMinCurrentThrottle = 0.30
+    private var racingReturnLightBrakeHoldSeconds = 0.0
+    private var racingReturnHoldSeconds = RacingReturnHoldSeconds.DEFAULT.toDouble()
     private var manualRedlineHoldSeconds: Double? = 1.0
     private var manualAutodownshiftRpm = 2_000.0
     private var cruisingLogicEnabled = true
@@ -425,9 +427,10 @@ internal class AssettoDrivetrain(
             offsets = automaticTransmissionConfig.cruisingShiftOffsetsByTachMaxRpm,
             tachometerMaximumRpm = physics.engine.tachometerMaximumRpm,
         )
-        racingReturnMaxThrottle = automaticTransmissionConfig.racingReturnMaxThrottle.coerceIn(0.0, 1.0)
+        racingReturnLightBrakeHoldSeconds = 0.0
         kickdownStompMinDelta = automaticTransmissionConfig.kickdownStompMinDelta.coerceIn(0.0, 1.0)
         kickdownStompMinCurrentThrottle = automaticTransmissionConfig.kickdownStompMinCurrentThrottle.coerceIn(0.0, 1.0)
+        racingReturnHoldSeconds = automaticTransmissionConfig.racingReturnHoldSeconds.coerceAtLeast(0.0)
         racingKickdownDownshiftSeconds = RacingEnterDelayMilliseconds.asKickdownDownshiftSeconds(
             automaticTransmissionConfig.racingEnterDelayMilliseconds,
         )
@@ -1194,14 +1197,24 @@ internal class AssettoDrivetrain(
         }
 
         racingReturnArmed = false
+        racingReturnLightBrakeHoldSeconds = 0.0
         clearCruisingReturnTransition()
     }
 
     private fun resetAutomaticTransmissionMode() {
         automaticTransmissionMode = AutomaticTransmissionMode.CRUISING
         racingReturnArmed = false
+        racingReturnLightBrakeHoldSeconds = 0.0
         clearRacingStompPending()
         clearCruisingReturnTransition()
+    }
+
+    private fun returnToCruisingFromRacing() {
+        automaticTransmissionMode = AutomaticTransmissionMode.CRUISING
+        racingReturnArmed = false
+        racingReturnLightBrakeHoldSeconds = 0.0
+        clearRacingStompPending()
+        beginCruisingReturnTransition()
     }
 
     private fun clearCruisingReturnTransition() {
@@ -1507,6 +1520,7 @@ internal class AssettoDrivetrain(
         ) {
             automaticTransmissionMode = AutomaticTransmissionMode.RACING
             racingReturnArmed = false
+            racingReturnLightBrakeHoldSeconds = 0.0
             clearCruisingReturnTransition()
             if (gear > 1 && !shifting) {
                 val targetGear = computeRacingStompTargetGear(dt)
@@ -1517,22 +1531,26 @@ internal class AssettoDrivetrain(
         }
 
         if (automaticTransmissionMode == AutomaticTransmissionMode.RACING) {
-            if (brake >= AutomaticTransmissionPolicy.RACING_RETURN_ARM_MIN_BRAKE) {
+            val fullLift = rawGas <= AutomaticTransmissionPolicy.RACING_RETURN_FULL_LIFT_MAX_THROTTLE
+            val lightBrakeActive = brake > 0.0 &&
+                brake < AutomaticTransmissionPolicy.RACING_RETURN_LIGHT_BRAKE_MAX
+
+            if (fullLift) {
                 racingReturnArmed = true
             }
 
-            if (rawGas <= AutomaticTransmissionPolicy.RACING_RETURN_ARM_MAX_THROTTLE) {
+            if (lightBrakeActive) {
                 racingReturnArmed = true
-            }
+                racingReturnLightBrakeHoldSeconds += dt
 
-            if (racingReturnArmed && rawGas > 0.0) {
-                if (rawGas > racingReturnMaxThrottle) {
+                if (racingReturnLightBrakeHoldSeconds >= racingReturnHoldSeconds) {
+                    returnToCruisingFromRacing()
+                }
+            } else {
+                racingReturnLightBrakeHoldSeconds = 0.0
+
+                if (!fullLift) {
                     racingReturnArmed = false
-                } else {
-                    automaticTransmissionMode = AutomaticTransmissionMode.CRUISING
-                    racingReturnArmed = false
-                    clearRacingStompPending()
-                    beginCruisingReturnTransition()
                 }
             }
         }
@@ -1636,7 +1654,7 @@ internal class AssettoDrivetrain(
             return
         }
 
-        if (brake >= AutomaticTransmissionPolicy.RACING_RETURN_ARM_MIN_BRAKE) {
+        if (brake > 0.0) {
             clearManualKickdownFollowUp()
             return
         }

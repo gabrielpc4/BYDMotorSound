@@ -16,10 +16,10 @@ internal object AutomaticTransmissionPolicy {
     const val MANUAL_KICKDOWN_CANCEL_MAX_THROTTLE = 0.12
     /** Emergency upshift once after holding the limiter this long, unless already in top gear. */
     const val EMERGENCY_UPSHIFT_HOLD_SECONDS = 1.5
-    /** Brake input that arms return-to-cruising on the next acceleration while racing. */
-    const val RACING_RETURN_ARM_MIN_BRAKE = 0.05
-    /** Complete throttle release arms the same pre-cruising state as braking while racing. */
-    const val RACING_RETURN_ARM_MAX_THROTTLE = 0.0
+    /** Light brake below this level can accumulate a racing → cruising return timer. */
+    const val RACING_RETURN_LIGHT_BRAKE_MAX = 0.10
+    /** Complete throttle release prepares a racing → cruising return without switching immediately. */
+    const val RACING_RETURN_FULL_LIFT_MAX_THROTTLE = 0.0
     /** Automatic transmission returns to cruising below this road speed in D. */
     const val CRUISING_RETURN_MAX_SPEED_MPS = 1.0
     /** Racing upshift sits this many RPM below the authored limiter. */

@@ -127,16 +127,21 @@ internal object AutomaticDownshiftMilliseconds {
     }
 }
 
-/** Time below [RacingReturnThrottlePercent] required to leave racing mode. */
+/** Seconds of light brake required to leave racing mode for cruising without a new accelerator input. */
 internal object RacingReturnHoldSeconds {
-    const val MIN = 0
-    const val MAX = 20
-    const val DEFAULT = 10
-    const val STEP = 5
+    const val MIN = 1
+    const val MAX = 10
+    const val DEFAULT = 2
+    const val STEP = 1
 
     fun normalize(value: Int): Int {
         val stepped = ((value.toFloat() / STEP).roundToInt() * STEP)
         return stepped.coerceIn(MIN, MAX)
+    }
+
+    fun format(value: Int): String {
+        val seconds = normalize(value)
+        return "${seconds}s"
     }
 }
 

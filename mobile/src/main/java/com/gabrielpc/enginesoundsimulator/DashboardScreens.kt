@@ -136,7 +136,6 @@ import com.gabrielpc.enginesoundsimulator.drive.RacingEnterDelayMilliseconds
 import com.gabrielpc.enginesoundsimulator.drive.KickdownStompDeltaPercent
 import com.gabrielpc.enginesoundsimulator.drive.KickdownStompMinThrottlePercent
 import com.gabrielpc.enginesoundsimulator.drive.RacingReturnHoldSeconds
-import com.gabrielpc.enginesoundsimulator.drive.RacingReturnThrottlePercent
 import com.gabrielpc.enginesoundsimulator.drive.PedalAudioThrottleRampMilliseconds
 import com.gabrielpc.enginesoundsimulator.simulation.VirtualGearProfile
 import com.gabrielpc.enginesoundsimulator.drive.AlfaBackfireSources
@@ -982,8 +981,8 @@ internal fun SettingsScreen(
     onManualTransmissionKickdownEnabledChange: (Boolean) -> Unit,
     minimumAudioThrottle: Float,
     onMinimumAudioThrottleChange: (Float) -> Unit,
-    racingReturnThrottlePercent: Int,
-    onRacingReturnThrottlePercentChange: (Int) -> Unit,
+    racingReturnHoldSeconds: Int,
+    onRacingReturnHoldSecondsChange: (Int) -> Unit,
     kickdownStompDeltaPercent: Int,
     onKickdownStompDeltaPercentChange: (Int) -> Unit,
     kickdownStompMinThrottlePercent: Int,
@@ -994,8 +993,6 @@ internal fun SettingsScreen(
     onAutomaticUpshiftMillisecondsChange: (Int) -> Unit,
     automaticDownshiftMilliseconds: Int,
     onAutomaticDownshiftMillisecondsChange: (Int) -> Unit,
-    racingReturnHoldSeconds: Int,
-    onRacingReturnHoldSecondsChange: (Int) -> Unit,
     manualRedlineHoldSeconds: Int,
     onManualRedlineHoldSecondsChange: (Int) -> Unit,
     manualAutodownshiftRpm: Int,
@@ -1079,8 +1076,8 @@ internal fun SettingsScreen(
             AutomaticTransmissionSettingsControl(
                 minimumAudioThrottle = minimumAudioThrottle,
                 onMinimumAudioThrottleChange = onMinimumAudioThrottleChange,
-                racingReturnThrottlePercent = racingReturnThrottlePercent,
-                onRacingReturnThrottlePercentChange = onRacingReturnThrottlePercentChange,
+                racingReturnHoldSeconds = racingReturnHoldSeconds,
+                onRacingReturnHoldSecondsChange = onRacingReturnHoldSecondsChange,
                 kickdownStompDeltaPercent = kickdownStompDeltaPercent,
                 onKickdownStompDeltaPercentChange = onKickdownStompDeltaPercentChange,
                 kickdownStompMinThrottlePercent = kickdownStompMinThrottlePercent,
@@ -1718,8 +1715,8 @@ private fun CruisingShiftOffsetsByTachMaxRpmControl(
 private fun AutomaticTransmissionSettingsControl(
     minimumAudioThrottle: Float,
     onMinimumAudioThrottleChange: (Float) -> Unit,
-    racingReturnThrottlePercent: Int,
-    onRacingReturnThrottlePercentChange: (Int) -> Unit,
+    racingReturnHoldSeconds: Int,
+    onRacingReturnHoldSecondsChange: (Int) -> Unit,
     kickdownStompDeltaPercent: Int,
     onKickdownStompDeltaPercentChange: (Int) -> Unit,
     kickdownStompMinThrottlePercent: Int,
@@ -1791,30 +1788,30 @@ private fun AutomaticTransmissionSettingsControl(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("RACING RETURN THROTTLE", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    Text("LIGHT BRAKE RETURN HOLD", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
                     Text(
-                        text = "$racingReturnThrottlePercent%",
+                        text = RacingReturnHoldSeconds.format(racingReturnHoldSeconds),
                         color = OnSurface,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Black,
                     )
                 }
                 Text(
-                    text = "After braking or a full throttle lift-off in racing mode, the next acceleration decides the mode: at or below this pedal level returns to cruising; above it stays in racing.",
+                    text = "In racing mode, holding the brake lightly (below 10%) for this long returns to cruising. A full throttle lift-off only prepares the return (P-CRUISING on the tach).",
                     color = Muted,
                     fontSize = 12.sp,
                     lineHeight = 16.sp,
                 )
                 Slider(
-                    value = racingReturnThrottlePercent.toFloat(),
+                    value = racingReturnHoldSeconds.toFloat(),
                     onValueChange = { value ->
-                        val selectedPercent = RacingReturnThrottlePercent.normalize(value.roundToInt())
-                        if (selectedPercent != racingReturnThrottlePercent) {
-                            onRacingReturnThrottlePercentChange(selectedPercent)
+                        val selectedSeconds = RacingReturnHoldSeconds.normalize(value.roundToInt())
+                        if (selectedSeconds != racingReturnHoldSeconds) {
+                            onRacingReturnHoldSecondsChange(selectedSeconds)
                         }
                     },
-                    valueRange = RacingReturnThrottlePercent.MIN.toFloat()..RacingReturnThrottlePercent.MAX.toFloat(),
-                    steps = (RacingReturnThrottlePercent.MAX - RacingReturnThrottlePercent.MIN) / RacingReturnThrottlePercent.STEP - 1,
+                    valueRange = RacingReturnHoldSeconds.MIN.toFloat()..RacingReturnHoldSeconds.MAX.toFloat(),
+                    steps = (RacingReturnHoldSeconds.MAX - RacingReturnHoldSeconds.MIN) / RacingReturnHoldSeconds.STEP - 1,
                 )
             }
 
@@ -2007,7 +2004,7 @@ private fun AutomaticTransmissionSettingsControl(
             )
         }
         Text(
-            text = "Manual mode returns to automatic racing after staying at or above redline for this long. Braking or a full throttle lift-off in racing mode then uses the return throttle above to decide cruising on the next acceleration.",
+            text = "Manual mode returns to automatic racing after staying at or above redline for this long.",
             color = Muted,
             fontSize = 12.sp,
             lineHeight = 16.sp,

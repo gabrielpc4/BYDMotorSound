@@ -56,9 +56,10 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Surface
+import androidx.compose.material3.Surface as MaterialSurface
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -81,6 +82,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -122,29 +124,44 @@ import com.gabrielpc.enginesoundsimulator.audio.BackfirePreviewPlayer
 import com.gabrielpc.enginesoundsimulator.simulation.AutomaticTransmissionMode
 import com.gabrielpc.enginesoundsimulator.simulation.DrivetrainState
 import com.gabrielpc.enginesoundsimulator.simulation.TransmissionPosition
+import com.gabrielpc.enginesoundsimulator.ui.tach.AudioLabTachometer
+import com.gabrielpc.enginesoundsimulator.ui.theme.Accent
+import com.gabrielpc.enginesoundsimulator.ui.theme.AccentSoft
+import com.gabrielpc.enginesoundsimulator.ui.theme.AutomaticTransmissionModeCaption
+import com.gabrielpc.enginesoundsimulator.ui.theme.CONDENSED_FONT_FAMILY_NAME
+import com.gabrielpc.enginesoundsimulator.ui.theme.Background
+import com.gabrielpc.enginesoundsimulator.ui.theme.ControlShape
+import com.gabrielpc.enginesoundsimulator.ui.theme.Danger
+import com.gabrielpc.enginesoundsimulator.ui.theme.DashboardTheme
+import com.gabrielpc.enginesoundsimulator.ui.theme.DisplayFamily
 import com.gabrielpc.enginesoundsimulator.ui.theme.EngineSoundsSimulatorTheme
+import com.gabrielpc.enginesoundsimulator.ui.theme.ErrorBannerBody
+import com.gabrielpc.enginesoundsimulator.ui.theme.HardwareBackdrop
+import com.gabrielpc.enginesoundsimulator.ui.theme.HardwareBorder
+import com.gabrielpc.enginesoundsimulator.ui.theme.HardwareGradient
+import com.gabrielpc.enginesoundsimulator.ui.theme.HardwareSlotBorder
+import com.gabrielpc.enginesoundsimulator.ui.theme.InfoBannerBody
+import com.gabrielpc.enginesoundsimulator.ui.theme.LocalDashboardSkin
+import com.gabrielpc.enginesoundsimulator.ui.theme.Muted
+import com.gabrielpc.enginesoundsimulator.ui.theme.OnSurface
+import com.gabrielpc.enginesoundsimulator.ui.theme.Outline
+import com.gabrielpc.enginesoundsimulator.ui.theme.PanelShape
+import com.gabrielpc.enginesoundsimulator.ui.theme.RealPedalsAccent
+import com.gabrielpc.enginesoundsimulator.ui.theme.Success
+import com.gabrielpc.enginesoundsimulator.ui.theme.StadiumShape
+import com.gabrielpc.enginesoundsimulator.ui.theme.hardwareShape
+import com.gabrielpc.enginesoundsimulator.ui.theme.skinPillShape
+import com.gabrielpc.enginesoundsimulator.ui.theme.skinShape
+import com.gabrielpc.enginesoundsimulator.ui.theme.Surface
+import com.gabrielpc.enginesoundsimulator.ui.theme.SurfaceRaised
+import com.gabrielpc.enginesoundsimulator.ui.theme.Warning
+import com.gabrielpc.enginesoundsimulator.ui.theme.rememberDashboardThemeController
 import kotlin.math.PI
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import java.util.Locale
-
-private val Night = Color(0xFF060606)
-private val Navy = Color(0xFF071321)
-private val Panel = Color(0xFF0B1925)
-private val PanelBright = Color(0xFF112837)
-private val Line = Color(0xFF1A3C4A)
-private val Cyan = Color(0xFF35E8F2)
-private val CyanSoft = Color(0xFF5FBAC7)
-private val Green = Color(0xFF38E58C)
-private val RealPedalsAccent = Color(0xFF43BD84)
-private val Red = Color(0xFFFF394F)
-private val Amber = Color(0xFFFFC456)
-private val White = Color(0xFFF5FAFD)
-private val Muted = Color(0xFF88A2B2)
-private val ErrorBannerBody = Color(0xFF6E1018)
-private val InfoBannerBody = Color(0xFF0B4545)
 
 /** Fixed dashboard layout values previously exposed through the calibration settings. */
 private object DashboardLayoutDefaults {
@@ -199,7 +216,9 @@ class MainActivity : ComponentActivity() {
         volumeControlStream = android.media.AudioManager.STREAM_MUSIC
 
         setContent {
-            EngineSoundsSimulatorTheme(darkTheme = true, dynamicColor = false) {
+            val themeController = rememberDashboardThemeController(this)
+
+            EngineSoundsSimulatorTheme(skin = themeController.skin) {
                 driveState?.let { state ->
                     val baseDensity = LocalDensity.current
                     CompositionLocalProvider(
@@ -208,10 +227,17 @@ class MainActivity : ComponentActivity() {
                             density = baseDensity.density * DashboardLayoutDefaults.UI_SCALE,
                             fontScale = baseDensity.fontScale * DashboardLayoutDefaults.UI_SCALE,
                         ),
+                        LocalDashboardSkin provides themeController.skin,
+                        // Text call sites never set fontFamily, so providing it here restyles every
+                        // label at once. Readouts that ask for Monospace explicitly keep it.
+                        LocalTextStyle provides LocalTextStyle.current.copy(
+                            fontFamily = themeController.skin.displayFamily,
+                        ),
                     ) {
                         MotorSoundDashboard(
                             state = state,
                             uiMonitoringActive = uiMonitoringActive,
+                            onToggleDashboardTheme = themeController::toggle,
                         onThrottle = controller::setSimulatedPedalThrottle,
                         onBrake = controller::setSimulatedPedalBrake,
                         onSimulatedRegen = controller::setSimulatedRegen,
@@ -225,7 +251,10 @@ class MainActivity : ComponentActivity() {
                         onEngineExternalChange = { enabled -> controller.setSoundPerspective(if (enabled) com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective.EXTERIOR else com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective.CABIN) },
                         onEnginePureChange = controller::setExteriorPureAudio,
                         onCruisingLogicChange = controller::setCruisingLogicEnabled,
-                        onResetAllPreferences = controller::resetAllPreferences,
+                        onResetAllPreferences = {
+                            controller.resetAllPreferences()
+                            themeController.resetToDefault()
+                        },
                         onExportSettings = controller::exportAllPreferences,
                         onToggleManualShiftMode = controller::toggleManualShiftMode,
                         onMediaShiftButton = controller::handleMediaShiftButton,
@@ -317,6 +346,7 @@ class MainActivity : ComponentActivity() {
 private fun MotorSoundDashboard(
     state: DriveSnapshot,
     uiMonitoringActive: Boolean,
+    onToggleDashboardTheme: () -> Unit,
     onThrottle: (Double) -> Unit,
     onBrake: (Double) -> Unit,
     onSimulatedRegen: (Double) -> Unit,
@@ -379,7 +409,7 @@ private fun MotorSoundDashboard(
     LaunchedEffect(mainScreen) {
         onMixerDiagnosticsActive(mainScreen == DashboardMainScreen.MIXER)
     }
-    Surface(
+    MaterialSurface(
         modifier = Modifier
             .fillMaxSize()
             .focusRequester(focusRequester)
@@ -417,7 +447,7 @@ private fun MotorSoundDashboard(
                     else -> false
                 }
             },
-        color = Night,
+        color = Background,
     ) {
         BoxWithConstraints(
             modifier = Modifier
@@ -448,6 +478,7 @@ private fun MotorSoundDashboard(
                         onToggleInputSource = onToggleInputSource,
                         onToggleAudioMute = onToggleAudioMute,
                         onToggleManualShiftMode = onToggleManualShiftMode,
+                        onToggleDashboardTheme = onToggleDashboardTheme,
                         onOpenSettings = { mainScreen = DashboardMainScreen.SETTINGS },
                     )
 
@@ -613,6 +644,7 @@ private fun DashboardHeader(
     onToggleInputSource: () -> Unit,
     onToggleAudioMute: () -> Boolean,
     onToggleManualShiftMode: () -> Unit,
+    onToggleDashboardTheme: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     var memoryLabels by remember {
@@ -668,7 +700,7 @@ private fun DashboardHeader(
             .fillMaxWidth()
             .height(76.dp)
             .background(Color.Black.copy(alpha = 0.38f))
-            .border(width = 1.dp, color = Line.copy(alpha = 0.55f))
+            .border(width = 1.dp, color = Outline.copy(alpha = 0.55f))
             .padding(horizontal = 34.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -684,7 +716,7 @@ private fun DashboardHeader(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back to dashboard",
-                        tint = Cyan,
+                        tint = Accent,
                         modifier = Modifier
                             .size(28.dp)
                             .clip(CircleShape)
@@ -698,25 +730,25 @@ private fun DashboardHeader(
                         modifier = Modifier
                             .size(11.dp)
                             .clip(CircleShape)
-                            .background(if (state.engineSoundEnabled) Green else Red),
+                            .background(if (state.engineSoundEnabled) Success else Danger),
                     )
                 }
             }
             Text(
                 text = "ENGINE",
-                color = White,
+                color = OnSurface,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 2.0.sp,
             )
             Text(
                 text = "// SIMULATOR",
-                color = Cyan,
+                color = Accent,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Light,
                 letterSpacing = 2.0.sp,
             )
-            StatusTag("BUILD ${AppBuildInfo.buildNumber}", CyanSoft)
+            StatusTag("BUILD ${AppBuildInfo.buildNumber}", AccentSoft)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -739,7 +771,7 @@ private fun DashboardHeader(
                 )
             }
             if (state.manualShiftModeEnabled) {
-                StatusTag("MANUAL", CyanSoft)
+                StatusTag("MANUAL", AccentSoft)
             }
         }
 
@@ -757,14 +789,46 @@ private fun DashboardHeader(
             muted = state.audioMuted,
             onToggle = onToggleAudioMute,
         )
+        ThemeToggleHeaderControl(onToggle = onToggleDashboardTheme)
         Icon(
             imageVector = Icons.Default.Settings,
             contentDescription = "Settings",
-            tint = Cyan,
+            tint = Accent,
             modifier = Modifier
                 .size(28.dp)
                 .clip(CircleShape)
                 .clickable(onClick = onOpenSettings),
+        )
+    }
+}
+
+/** Cycles the dashboard skin. Lit in the accent color while the Audio Lab theme is active. */
+@Composable
+private fun ThemeToggleHeaderControl(onToggle: () -> Unit) {
+    val skin = LocalDashboardSkin.current
+    val audioLabActive = skin.theme == DashboardTheme.AudioLab
+    val tint = if (audioLabActive) {
+        skin.accent
+    } else {
+        skin.muted
+    }
+
+    Box(
+        modifier = Modifier
+            .size(52.dp)
+            .clip(ControlShape)
+            .background(if (audioLabActive) skin.accent.copy(alpha = 0.16f) else Surface)
+            .border(1.dp, if (audioLabActive) skin.accent.copy(alpha = 0.65f) else Outline, ControlShape)
+            .clickable(onClick = onToggle),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "T",
+            color = tint,
+            fontFamily = DisplayFamily,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 1.0.sp,
         )
     }
 }
@@ -777,9 +841,9 @@ private fun MasterMuteHeaderControl(
     Row(
         modifier = Modifier
             .height(52.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (muted) Red.copy(alpha = 0.18f) else Panel)
-            .border(1.dp, if (muted) Red.copy(alpha = 0.65f) else Line, RoundedCornerShape(12.dp))
+            .clip(skinShape(12.dp))
+            .background(if (muted) Danger.copy(alpha = 0.18f) else Surface)
+            .border(1.dp, if (muted) Danger.copy(alpha = 0.65f) else Outline, skinShape(12.dp))
             .clickable { onToggle() }
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -788,12 +852,12 @@ private fun MasterMuteHeaderControl(
         Icon(
             imageVector = if (muted) Icons.AutoMirrored.Filled.VolumeDown else Icons.AutoMirrored.Filled.VolumeUp,
             contentDescription = if (muted) "Unmute and reset audio engine" else "Mute audio",
-            tint = if (muted) Red else Cyan,
+            tint = if (muted) Danger else Accent,
             modifier = Modifier.size(22.dp),
         )
         Text(
             text = if (muted) "UNMUTE" else "MUTE",
-            color = if (muted) Red else White,
+            color = if (muted) Danger else OnSurface,
             fontSize = 12.sp,
             fontWeight = FontWeight.Black,
             letterSpacing = 0.7.sp,
@@ -813,8 +877,8 @@ private fun ManualShiftHeaderControl(
     Row(
         modifier = Modifier
             .height(52.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Panel)
+            .clip(skinShape(12.dp))
+            .background(Surface)
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -835,7 +899,7 @@ private fun ManualShiftHeaderControl(
         Text(
             text = "MANUAL",
             color = if (manualEnabled) {
-                CyanSoft
+                AccentSoft
             } else {
                 Muted
             },
@@ -861,8 +925,8 @@ private fun PedalsInputHeaderControl(
     Row(
         modifier = Modifier
             .height(52.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Panel)
+            .clip(skinShape(12.dp))
+            .background(Surface)
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -876,7 +940,7 @@ private fun PedalsInputHeaderControl(
         )
         Text(
             text = InputMode.SimulatedPedals.primaryLabel,
-            color = Cyan,
+            color = Accent,
             fontSize = 14.sp,
             fontWeight = FontWeight.Black,
             letterSpacing = 0.8.sp,
@@ -931,7 +995,7 @@ private fun PedalsInputToggle(
     val trackColor = if (realPedalsActive) {
         RealPedalsAccent
     } else {
-        Line
+        Outline
     }
 
     BoxWithConstraints(
@@ -943,7 +1007,7 @@ private fun PedalsInputToggle(
             } else {
                 0.42f
             })
-            .clip(RoundedCornerShape(50))
+            .clip(StadiumShape)
             .background(trackColor)
             .clickable(
                 enabled = enabled,
@@ -958,7 +1022,7 @@ private fun PedalsInputToggle(
                 .offset(x = travel * thumbProgress)
                 .size(thumbSize)
                 .clip(CircleShape)
-                .background(White),
+                .background(OnSurface),
         )
     }
 }
@@ -967,13 +1031,13 @@ private fun PedalsInputToggle(
 private fun HeaderIconButton(
     icon: ImageVector,
     contentDescription: String,
-    accent: Color = Cyan,
+    accent: Color = Accent,
     onClick: () -> Unit,
 ) {
     Button(
         onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = Panel, contentColor = accent),
+        shape = skinShape(12.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Surface, contentColor = accent),
         contentPadding = PaddingValues(0.dp),
         modifier = Modifier.size(52.dp),
     ) {
@@ -1004,7 +1068,7 @@ private fun SimulatedPedalLatchToggle(
     ) {
         Text(
             text = "HOLD PEDALS",
-            color = if (enabled) Cyan else Muted,
+            color = if (enabled) Accent else Muted,
             fontSize = (11f * scale).sp,
             fontWeight = FontWeight.Black,
             letterSpacing = (0.8f * scale).sp,
@@ -1013,8 +1077,8 @@ private fun SimulatedPedalLatchToggle(
             modifier = Modifier
                 .width(scale.scaledDp(62))
                 .height(scale.scaledDp(28))
-                .clip(RoundedCornerShape(50))
-                .background(if (enabled) Cyan else Line)
+                .clip(StadiumShape)
+                .background(if (enabled) Accent else Outline)
                 .clickable(onClick = onToggle),
             contentAlignment = Alignment.CenterStart,
         ) {
@@ -1024,7 +1088,7 @@ private fun SimulatedPedalLatchToggle(
                     .offset(x = if (enabled) scale.scaledDp(30) else 0.dp)
                     .size(scale.scaledDp(20))
                     .clip(CircleShape)
-                    .background(White),
+                    .background(OnSurface),
             )
         }
     }
@@ -1042,7 +1106,7 @@ private fun SimulatedRegenControl(
     ) {
         Text(
             text = "REGEN ${"%.0f".format(Locale.US, value * 100.0)}%",
-            color = CyanSoft,
+            color = AccentSoft,
             fontSize = (10f * scale).sp,
             fontWeight = FontWeight.Black,
         )
@@ -1064,9 +1128,9 @@ private fun StatusTag(text: String, color: Color) {
         fontWeight = FontWeight.Bold,
         letterSpacing = 0.8.sp,
         modifier = Modifier
-            .clip(RoundedCornerShape(50))
+            .clip(skinPillShape())
             .background(color.copy(alpha = 0.12f))
-            .border(1.dp, color.copy(alpha = 0.42f), RoundedCornerShape(50))
+            .border(1.dp, color.copy(alpha = 0.42f), skinPillShape())
             .padding(horizontal = 12.dp, vertical = 6.dp),
     )
 }
@@ -1149,7 +1213,7 @@ private fun DashboardEngineControls(
                 .padding(bottom = 12.dp),
             contentAlignment = Alignment.BottomStart,
         ) {
-            Text("ENGINE", color = Cyan, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text("ENGINE", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
         Column(
             horizontalAlignment = Alignment.End,
@@ -1165,7 +1229,7 @@ private fun DashboardEngineControls(
                 .wrapContentWidth()
                 .padding(layout.columnPadding),
         ) {
-            DashboardSwitchCell(rowHeight, external, Line) {
+            DashboardSwitchCell(rowHeight, external, Outline) {
                 onEngineExternalChange(!external)
             }
         }
@@ -1183,7 +1247,7 @@ private fun DashboardEngineControls(
                 .wrapContentWidth()
                 .padding(layout.columnPadding),
         ) {
-            DashboardSwitchCell(rowHeight, state.exteriorPureAudio, Line) {
+            DashboardSwitchCell(rowHeight, state.exteriorPureAudio, Outline) {
                 onEnginePureChange(!state.exteriorPureAudio)
             }
         }
@@ -1201,7 +1265,7 @@ private fun DashboardEngineControls(
                 .wrapContentWidth()
                 .padding(layout.columnPadding),
         ) {
-            DashboardSwitchCell(rowHeight, state.cruisingLogicEnabled, Line) {
+            DashboardSwitchCell(rowHeight, state.cruisingLogicEnabled, Outline) {
                 onCruisingLogicChange(!state.cruisingLogicEnabled)
             }
         }
@@ -1235,16 +1299,16 @@ private fun DashboardCruisingRpmOffsetSlider(
         .toFloat()
         .coerceIn(0f, lastStopIndex)
     val sliderColors = SliderDefaults.colors(
-        thumbColor = Cyan,
-        activeTrackColor = Cyan,
-        inactiveTrackColor = Line,
-        activeTickColor = Night,
-        inactiveTickColor = Cyan,
-        disabledThumbColor = Cyan,
-        disabledActiveTrackColor = Cyan,
-        disabledInactiveTrackColor = Line,
-        disabledActiveTickColor = Night,
-        disabledInactiveTickColor = Cyan,
+        thumbColor = Accent,
+        activeTrackColor = Accent,
+        inactiveTrackColor = Outline,
+        activeTickColor = Background,
+        inactiveTickColor = Accent,
+        disabledThumbColor = Accent,
+        disabledActiveTrackColor = Accent,
+        disabledInactiveTrackColor = Outline,
+        disabledActiveTickColor = Background,
+        disabledInactiveTickColor = Accent,
     )
 
     Column(
@@ -1258,13 +1322,13 @@ private fun DashboardCruisingRpmOffsetSlider(
         ) {
             Text(
                 text = "CRUISING RPM OFFSET",
-                color = Cyan,
+                color = Accent,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Black,
             )
             Text(
                 text = CruisingShiftOffsetByTachMaxRpm.formatOffsetLabel(normalizedOffset),
-                color = White,
+                color = OnSurface,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -1330,7 +1394,7 @@ private fun DashboardEffectControls(
                 Box(Modifier.height(rowHeight), contentAlignment = Alignment.CenterStart) {
                     Text(
                         text = label,
-                        color = Cyan,
+                        color = Accent,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                     )
@@ -1346,7 +1410,7 @@ private fun DashboardEffectControls(
         ) {
             rows.forEach { (_, kind) ->
                 val override = overrideEnabled(kind)
-                DashboardSwitchCell(rowHeight, override, Line) {
+                DashboardSwitchCell(rowHeight, override, Outline) {
                     onOverrideChange(kind, !override)
                 }
             }
@@ -1363,7 +1427,7 @@ private fun DashboardEffectControls(
                     if (overrideEnabled(kind)) {
                         val rowGain = overrideGain(kind)
                         val selected = kotlin.math.abs(rowGain - preset.gain) < 0.001f
-                        DashboardGainButton(preset, selected, if (selected) Night else Cyan, Line) {
+                        DashboardGainButton(preset, selected, if (selected) Background else Accent, Outline) {
                             onOverrideGainChange(kind, preset.gain)
                         }
                     } else {
@@ -1383,7 +1447,7 @@ private fun DashboardEmptyControlCell(height: Dp) {
 @Composable
 private fun DashboardColumnTextCell(label: String, active: Boolean, height: Dp) {
     Box(Modifier.height(height), contentAlignment = Alignment.CenterEnd) {
-        Text(label, color = if (active) Cyan else Muted, fontSize = 10.sp, fontWeight = FontWeight.Black)
+        Text(label, color = if (active) Accent else Muted, fontSize = 10.sp, fontWeight = FontWeight.Black)
     }
 }
 
@@ -1412,9 +1476,9 @@ private fun DashboardGainButton(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(38.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(if (selected) Cyan else PanelBright)
-                .border(1.dp, if (selected) Cyan else borderColor, RoundedCornerShape(6.dp))
+                .clip(skinShape(6.dp))
+                .background(if (selected) Accent else SurfaceRaised)
+                .border(1.dp, if (selected) Accent else borderColor, skinShape(6.dp))
                 .clickable(onClick = onClick)
                 .padding(top = 10.dp),
         )
@@ -1422,14 +1486,14 @@ private fun DashboardGainButton(
 }
 
 @Composable
-private fun DashboardEffectSwitch(enabled: Boolean, onToggle: () -> Unit, borderColor: Color = Line) {
+private fun DashboardEffectSwitch(enabled: Boolean, onToggle: () -> Unit, borderColor: Color = Outline) {
     Box(
-        modifier = Modifier.width(64.dp).height(32.dp).clip(RoundedCornerShape(50))
-            .background(if (enabled) Cyan else Line)
+        modifier = Modifier.width(64.dp).height(32.dp).clip(StadiumShape)
+            .background(if (enabled) Accent else Outline)
             .clickable(onClick = onToggle),
         contentAlignment = if (enabled) Alignment.CenterEnd else Alignment.CenterStart,
     ) {
-        Box(Modifier.padding(4.dp).size(24.dp).clip(CircleShape).background(White))
+        Box(Modifier.padding(4.dp).size(24.dp).clip(CircleShape).background(OnSurface))
     }
 }
 
@@ -1478,7 +1542,7 @@ private fun ClassicDriveControls(
         PedalControl(
             label = "BRAKE",
             value = state.brake,
-            accent = Red,
+            accent = Danger,
             width = CLASSIC_DRIVE_CONTROL_SCALE.scaledDp(92),
             height = CLASSIC_DRIVE_CONTROL_SCALE.scaledDp(154),
             contentScale = CLASSIC_DRIVE_CONTROL_SCALE,
@@ -1487,7 +1551,7 @@ private fun ClassicDriveControls(
         PedalControl(
             label = "THROTTLE",
             value = state.throttle,
-            accent = Green,
+            accent = Success,
             width = CLASSIC_DRIVE_CONTROL_SCALE.scaledDp(84),
             height = CLASSIC_DRIVE_CONTROL_SCALE.scaledDp(202),
             contentScale = CLASSIC_DRIVE_CONTROL_SCALE,
@@ -1515,7 +1579,7 @@ private fun ManualShiftButtons(
         ManualShiftButton(
             icon = Icons.Filled.KeyboardArrowUp,
             contentDescription = "Upshift",
-            accent = Green,
+            accent = Success,
             size = scale.scaledDp(56),
             contentScale = scale,
             onClick = onUpshift,
@@ -1523,7 +1587,7 @@ private fun ManualShiftButtons(
         ManualShiftButton(
             icon = Icons.Filled.KeyboardArrowDown,
             contentDescription = "Downshift",
-            accent = Red,
+            accent = Danger,
             size = scale.scaledDp(56),
             contentScale = scale,
             onClick = onDownshift,
@@ -1547,20 +1611,18 @@ private fun ManualShiftButton(
     Box(
         modifier = Modifier
             .size(size)
-            .clip(RoundedCornerShape((16f * contentScale).dp))
+            .clip(hardwareShape((16f * contentScale).dp))
             .background(
-                Brush.verticalGradient(
-                    listOf(Color(0xFF5B6670), Color(0xFF232D35), Color(0xFF11181E)),
-                ),
+                Brush.verticalGradient(HardwareGradient),
             )
             .border(
                 (2f * contentScale).dp,
                 if (active) {
                     accent
                 } else {
-                    Color(0xFF60717D)
+                    HardwareBorder
                 },
-                RoundedCornerShape((16f * contentScale).dp),
+                hardwareShape((16f * contentScale).dp),
             )
             .clickable(
                 interactionSource = interactionSource,
@@ -1639,13 +1701,13 @@ private fun CarPreviewLoadingOverlay(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             CircularProgressIndicator(
-                color = Cyan,
+                color = Accent,
                 strokeWidth = 3.dp,
                 modifier = Modifier.size(36.dp),
             )
             Text(
                 text = "LOADING ENGINE",
-                color = CyanSoft,
+                color = AccentSoft,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 1.1.sp,
@@ -1743,7 +1805,7 @@ private fun CarStage(
             ) {
                 Text(
                     text = CarDisplayNameFormatter.format(state.selectedCarName).uppercase(),
-                    color = White,
+                    color = OnSurface,
                     fontSize = nameFontSizeSp.sp,
                     lineHeight = nameLineHeightSp.sp,
                     fontWeight = FontWeight.Black,
@@ -1765,7 +1827,7 @@ private fun CarStage(
                         if (selectedCarSubtitle.details.isNotBlank()) {
                             Text(
                                 text = " · ",
-                                color = CyanSoft,
+                                color = AccentSoft,
                                 fontSize = subtitleFontSizeSp.sp,
                             )
                         }
@@ -1774,7 +1836,7 @@ private fun CarStage(
                     if (selectedCarSubtitle.details.isNotBlank()) {
                         Text(
                             text = selectedCarSubtitle.details,
-                            color = CyanSoft,
+                            color = AccentSoft,
                             fontSize = subtitleFontSizeSp.sp,
                             letterSpacing = 1.1.sp,
                         )
@@ -1841,13 +1903,11 @@ internal fun TransmissionShifter(
         modifier = modifier
             .width((58f * scale).dp)
             .height((202f * scale).dp)
-            .clip(RoundedCornerShape((16f * scale).dp))
+            .clip(hardwareShape((16f * scale).dp))
             .background(
-                Brush.verticalGradient(
-                    listOf(Color(0xFF5B6670), Color(0xFF232D35), Color(0xFF11181E)),
-                ),
+                Brush.verticalGradient(HardwareGradient),
             )
-            .border((2f * scale).dp, if (lockedToVehicle) Green.copy(alpha = 0.75f) else Color(0xFF60717D), RoundedCornerShape((16f * scale).dp))
+            .border((2f * scale).dp, if (lockedToVehicle) Success.copy(alpha = 0.75f) else HardwareBorder, hardwareShape((16f * scale).dp))
             .padding((8f * scale).dp)
             .alpha(if (lockedToVehicle) 0.88f else 1f),
         verticalArrangement = Arrangement.spacedBy((6f * scale).dp),
@@ -1859,18 +1919,18 @@ internal fun TransmissionShifter(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height((52f * scale).dp)
-                    .clip(RoundedCornerShape((10f * scale).dp))
+                    .clip(hardwareShape((10f * scale).dp))
                     .background(
                         if (selected) {
-                            Cyan.copy(alpha = 0.22f)
+                            Accent.copy(alpha = 0.22f)
                         } else {
                             Color.Transparent
                         },
                     )
                     .border(
                         width = if (selected) (2f * scale).dp else (1f * scale).dp,
-                        color = if (selected) Cyan else Color(0xFF4A5A66),
-                        shape = RoundedCornerShape((10f * scale).dp),
+                        color = if (selected) Accent else HardwareSlotBorder,
+                        shape = hardwareShape((10f * scale).dp),
                     )
                     .clickable(
                         enabled = onPositionSelected != null,
@@ -1881,7 +1941,7 @@ internal fun TransmissionShifter(
             ) {
                 Text(
                     text = option.displayName,
-                    color = if (selected) Cyan else Muted,
+                    color = if (selected) Accent else Muted,
                     fontSize = (22f * scale).sp,
                     fontWeight = FontWeight.Black,
                     letterSpacing = 1.0.sp,
@@ -1902,7 +1962,7 @@ private fun CarSelectorSideIconZone(
         modifier = modifier
             .size(CarStageTapDefaults.sideStripWidth)
             .clip(CircleShape)
-            .background(Color(0xFF111111).copy(alpha = 0.92f))
+            .background(HardwareBackdrop.copy(alpha = 0.92f))
             .clickable(
                 onClick = onClick,
                 indication = null,
@@ -1914,7 +1974,7 @@ private fun CarSelectorSideIconZone(
         Icon(
             imageVector = imageVector,
             contentDescription = null,
-            tint = White,
+            tint = OnSurface,
             modifier = Modifier.size(24.dp),
         )
     }
@@ -1960,12 +2020,12 @@ private fun CarSelectorArrowGlyph(
         modifier = modifier
             .size(CarStageTapDefaults.sideStripWidth)
             .clip(CircleShape)
-            .background(Color(0xFF111111).copy(alpha = 0.92f)),
+            .background(HardwareBackdrop.copy(alpha = 0.92f)),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            color = White,
+            color = OnSurface,
             fontSize = 42.sp,
             fontWeight = FontWeight.Light,
             textAlign = TextAlign.Center,
@@ -1987,13 +2047,11 @@ internal fun PedalControl(
         modifier = Modifier
             .width(width)
             .height(height)
-            .clip(RoundedCornerShape((16f * contentScale).dp))
+            .clip(hardwareShape((16f * contentScale).dp))
             .background(
-                Brush.verticalGradient(
-                    listOf(Color(0xFF5B6670), Color(0xFF232D35), Color(0xFF11181E)),
-                ),
+                Brush.verticalGradient(HardwareGradient),
             )
-            .border((2f * contentScale).dp, if (value > 0.01) accent else Color(0xFF60717D), RoundedCornerShape((16f * contentScale).dp))
+            .border((2f * contentScale).dp, if (value > 0.01) accent else HardwareBorder, hardwareShape((16f * contentScale).dp))
             .pointerInput(onValue) {
                 awaitEachGesture {
                     try {
@@ -2034,13 +2092,13 @@ internal fun PedalControl(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height((6f * contentScale).dp)
-                        .clip(RoundedCornerShape(50))
+                        .clip(StadiumShape)
                         .background(Color.Black.copy(alpha = 0.55f)),
                 )
             }
             Text(
                 text = "${(value * 100).roundToInt()}%",
-                color = if (value > 0.01) accent else White,
+                color = if (value > 0.01) accent else OnSurface,
                 fontSize = (15f * contentScale).sp,
                 fontWeight = FontWeight.Black,
             )
@@ -2056,14 +2114,14 @@ private fun DismissableUserMessageBanner(
     modifier: Modifier = Modifier,
 ) {
     val (bodyColor, borderColor) = when (message.severity) {
-        UserVisibleMessageSeverity.INFO -> InfoBannerBody to Green
-        UserVisibleMessageSeverity.ERROR -> ErrorBannerBody to Red
+        UserVisibleMessageSeverity.INFO -> InfoBannerBody to Success
+        UserVisibleMessageSeverity.ERROR -> ErrorBannerBody to Danger
     }
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(skinShape(14.dp))
             .background(bodyColor.copy(alpha = 0.94f))
-            .border(1.dp, borderColor.copy(alpha = 0.55f), RoundedCornerShape(14.dp))
+            .border(1.dp, borderColor.copy(alpha = 0.55f), skinShape(14.dp))
             .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -2073,7 +2131,7 @@ private fun DismissableUserMessageBanner(
         ) {
             Text(
                 text = message.title,
-                color = White,
+                color = OnSurface,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -2088,7 +2146,7 @@ private fun DismissableUserMessageBanner(
             Icon(
                 imageVector = Icons.Filled.Close,
                 contentDescription = "Dismiss message",
-                tint = White,
+                tint = OnSurface,
             )
         }
     }
@@ -2105,16 +2163,28 @@ private fun Tachometer(
     redlineRpm: Double,
     modifier: Modifier = Modifier,
 ) {
-    TachometerGauge(
-        drivetrain = drivetrain,
-        transmissionPosition = transmissionPosition,
-        manualShiftModeEnabled = manualShiftModeEnabled,
-        cruisingLogicEnabled = cruisingLogicEnabled,
-        cruisingShiftRangeOverlayEnabled = cruisingShiftRangeOverlayEnabled,
-        maxRpm = maxRpm,
-        redlineRpm = redlineRpm,
-        modifier = modifier,
-    )
+    when (LocalDashboardSkin.current.theme) {
+        DashboardTheme.Classic -> TachometerGauge(
+            drivetrain = drivetrain,
+            transmissionPosition = transmissionPosition,
+            manualShiftModeEnabled = manualShiftModeEnabled,
+            cruisingLogicEnabled = cruisingLogicEnabled,
+            cruisingShiftRangeOverlayEnabled = cruisingShiftRangeOverlayEnabled,
+            maxRpm = maxRpm,
+            redlineRpm = redlineRpm,
+            modifier = modifier,
+        )
+        DashboardTheme.AudioLab -> AudioLabTachometer(
+            drivetrain = drivetrain,
+            transmissionPosition = transmissionPosition,
+            manualShiftModeEnabled = manualShiftModeEnabled,
+            cruisingLogicEnabled = cruisingLogicEnabled,
+            cruisingShiftRangeOverlayEnabled = cruisingShiftRangeOverlayEnabled,
+            maxRpm = maxRpm,
+            redlineRpm = redlineRpm,
+            modifier = modifier,
+        )
+    }
 }
 
 @Composable
@@ -2123,20 +2193,9 @@ private fun AutomaticTransmissionModeLabel(
     preparingCruising: Boolean,
     fontSize: androidx.compose.ui.unit.TextUnit = 12.sp,
 ) {
-    val label = when {
-        preparingCruising -> "P-CRUISING"
-        mode == AutomaticTransmissionMode.RACING -> "RACING"
-        else -> "CRUISING"
-    }
-    val color = when {
-        preparingCruising -> CyanSoft
-        mode == AutomaticTransmissionMode.RACING -> Amber
-        else -> CyanSoft
-    }
-
     Text(
-        text = label,
-        color = color,
+        text = AutomaticTransmissionModeCaption.label(mode, preparingCruising),
+        color = AutomaticTransmissionModeCaption.color(mode, preparingCruising, LocalDashboardSkin.current),
         fontSize = fontSize,
         fontWeight = FontWeight.Black,
         letterSpacing = 1.5.sp,
@@ -2168,6 +2227,18 @@ private fun TachometerGauge(
         val gaugeSize = if (maxWidth < maxHeight) maxWidth else maxHeight
         val gaugeMaxRpm = ceil(maxRpm.coerceAtLeast(1_000.0) / 1_000.0) * 1_000.0
         val majorIntervals = (gaugeMaxRpm / 1_000.0).roundToInt().coerceAtLeast(1)
+        // Canvas draw lambdas are not composable, so every skin color is resolved before the block.
+        val skin = LocalDashboardSkin.current
+        val accent = skin.accent
+        val accentSoft = skin.accentSoft
+        val danger = skin.danger
+        val success = skin.success
+        val warning = skin.warning
+        val faceGradient = listOf(skin.gaugeFaceOuter, skin.gaugeFaceInner, Color.Black)
+        val gaugeTrack = skin.gaugeTrack
+        val gaugeHub = skin.gaugeHub
+        val labelColor = skin.onSurface.toArgb()
+        val labelRedlineColor = skin.danger.toArgb()
         Box(modifier = Modifier.size(gaugeSize), contentAlignment = Alignment.Center) {
             Canvas(Modifier.fillMaxSize()) {
                 val center = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
@@ -2179,16 +2250,16 @@ private fun TachometerGauge(
 
                 drawCircle(
                     brush = Brush.radialGradient(
-                        listOf(Color(0xFF0B2535), Color(0xFF06111A), Color.Black),
+                        faceGradient,
                         center = center,
                         radius = radius,
                     ),
                     radius = radius,
                     center = center,
                 )
-                drawCircle(Cyan.copy(alpha = 0.16f), radius = radius * 1.015f, center = center, style = Stroke(radius * 0.035f))
+                drawCircle(accent.copy(alpha = 0.16f), radius = radius * 1.015f, center = center, style = Stroke(radius * 0.035f))
                 drawArc(
-                    color = Color(0xFF123F4E),
+                    color = gaugeTrack,
                     startAngle = startAngle,
                     sweepAngle = sweepAngle,
                     useCenter = false,
@@ -2197,7 +2268,7 @@ private fun TachometerGauge(
                     style = Stroke(stroke * 1.35f, cap = StrokeCap.Round),
                 )
                 drawArc(
-                    brush = Brush.sweepGradient(listOf(Cyan, Cyan, Green, Amber, Red, Red), center),
+                    brush = Brush.sweepGradient(listOf(accent, accent, success, warning, danger, danger), center),
                     startAngle = startAngle,
                     sweepAngle = sweepAngle * rpmFraction,
                     useCenter = false,
@@ -2216,7 +2287,7 @@ private fun TachometerGauge(
                 val zoneBandStyle = Stroke(zoneBandStroke, cap = StrokeCap.Butt)
 
                 drawArc(
-                    color = Red,
+                    color = danger,
                     startAngle = startAngle + sweepAngle * (redlineRpm / gaugeMaxRpm).toFloat().coerceIn(0f, 1f),
                     sweepAngle = sweepAngle * ((gaugeMaxRpm - redlineRpm) / gaugeMaxRpm).toFloat().coerceAtLeast(0f),
                     useCenter = false,
@@ -2240,6 +2311,7 @@ private fun TachometerGauge(
                         gaugeMaxRpm = gaugeMaxRpm,
                         downshiftRpm = drivetrain.effectiveAutomaticDownshiftRpm,
                         upshiftRpm = drivetrain.effectiveAutomaticUpshiftRpm,
+                        wedgeColor = accent,
                     )
                 }
 
@@ -2252,7 +2324,7 @@ private fun TachometerGauge(
                     val inner = polar(center, radius * if (major) 0.80f else 0.85f, angle)
                     val inRed = fraction * gaugeMaxRpm >= redlineRpm
                     drawLine(
-                        color = if (inRed) Red else if (major) Cyan else CyanSoft.copy(alpha = 0.60f),
+                        color = if (inRed) danger else if (major) accent else accentSoft.copy(alpha = 0.60f),
                         start = inner,
                         end = outer,
                         strokeWidth = if (major) radius * 0.012f else radius * 0.005f,
@@ -2262,14 +2334,14 @@ private fun TachometerGauge(
 
                 drawIntoCanvas { canvas ->
                     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = android.graphics.Color.WHITE
+                        color = labelColor
                         textAlign = Paint.Align.CENTER
-                        typeface = android.graphics.Typeface.create("sans-serif-condensed", android.graphics.Typeface.BOLD_ITALIC)
+                        typeface = android.graphics.Typeface.create(CONDENSED_FONT_FAMILY_NAME, android.graphics.Typeface.BOLD_ITALIC)
                         textSize = radius * 0.105f
                     }
                     for (number in 0..majorIntervals) {
                         val point = polar(center, radius * 0.69f, startAngle + sweepAngle * (number / majorIntervals.toFloat()))
-                        paint.color = if (number * 1_000.0 >= redlineRpm) android.graphics.Color.rgb(255, 57, 79) else android.graphics.Color.WHITE
+                        paint.color = if (number * 1_000.0 >= redlineRpm) labelRedlineColor else labelColor
                         canvas.nativeCanvas.drawText(number.toString(), point.x, point.y + paint.textSize * 0.34f, paint)
                     }
                 }
@@ -2295,12 +2367,12 @@ private fun TachometerGauge(
                         lineTo(baseB.x, baseB.y)
                         close()
                     },
-                    brush = Brush.linearGradient(listOf(Amber, Red), start = center, end = needleTip),
+                    brush = Brush.linearGradient(listOf(warning, danger), start = center, end = needleTip),
                 )
-                drawCircle(Color(0xFF07141F), radius * 0.14f, center)
-                drawCircle(Cyan, radius * 0.14f, center, style = Stroke(radius * 0.008f))
+                drawCircle(gaugeHub, radius * 0.14f, center)
+                drawCircle(accent, radius * 0.14f, center, style = Stroke(radius * 0.008f))
                 if (drivetrain.isShifting) {
-                    drawCircle(Green.copy(alpha = 0.55f), radius * 0.985f, center, style = Stroke(radius * 0.018f))
+                    drawCircle(success.copy(alpha = 0.55f), radius * 0.985f, center, style = Stroke(radius * 0.018f))
                 }
             }
 
@@ -2310,7 +2382,7 @@ private fun TachometerGauge(
             ) {
                 Text(
                     text = if (transmissionPosition == TransmissionPosition.DRIVE) drivetrain.gear.toString() else transmissionPosition.displayName,
-                    color = Cyan,
+                    color = Accent,
                     fontSize = 48.sp,
                     lineHeight = 48.sp,
                     fontWeight = FontWeight.Black,
@@ -2324,14 +2396,14 @@ private fun TachometerGauge(
             ) {
                 Text(
                     text = formatWhole(drivetrain.realOrDocumentedRawSpeedKmh),
-                    color = if (drivetrain.limiterActive) Red else Cyan,
+                    color = if (drivetrain.limiterActive) Danger else Accent,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 46.sp,
                     lineHeight = 48.sp,
                     fontWeight = FontWeight.Light,
                     letterSpacing = 2.sp,
                 )
-                Text("KM/H", color = Cyan, fontSize = 18.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                Text("KM/H", color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
                 if (showAutomaticTransmissionMode) {
                     Spacer(Modifier.height(4.dp))
                     AutomaticTransmissionModeLabel(
@@ -2353,6 +2425,7 @@ private fun DrawScope.drawCruisingShiftRangeOverlay(
     gaugeMaxRpm: Double,
     downshiftRpm: Double,
     upshiftRpm: Double,
+    wedgeColor: Color,
 ) {
     if (downshiftRpm <= 0.0 || upshiftRpm <= 0.0) {
         return
@@ -2389,7 +2462,7 @@ private fun DrawScope.drawCruisingShiftRangeOverlay(
 
     drawPath(
         path = wedgePath,
-        color = Cyan.copy(alpha = 0.22f),
+        color = wedgeColor.copy(alpha = 0.22f),
     )
 }
 

@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabrielpc.enginesoundsimulator.simulation.VirtualGearProfile
+import com.gabrielpc.enginesoundsimulator.ui.theme.LocalDashboardSkin
 import java.util.Locale
 
 @Composable
@@ -54,22 +55,31 @@ internal fun VirtualGearDistributionChart(
         ranges.mapIndexed { index, range -> "Gear ${index + 1}: $range km/h" }
             .joinToString(". ")
     }
+    // drawWithCache runs outside composition, so the skin values are captured before the block.
+    val skin = LocalDashboardSkin.current
+    val panelShape = skin.panelShape
+    val labelColor = skin.chartLabel
+    val axisColor = skin.chartAxis
+    val gearLabelColor = skin.onSurface
+    val baselineColor = skin.chartAxis
+    val barTrackColor = skin.onSurface.copy(alpha = 0.025f)
+    val hueStart = skin.chartHueStart
 
     Column(
         modifier = modifier
-            .background(Color(0xFF09151F), RoundedCornerShape(12.dp))
-            .border(1.dp, Color(0xFF243846), RoundedCornerShape(12.dp))
+            .background(skin.chartSurface, panelShape)
+            .border(1.dp, skin.chartOutline, panelShape)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
                 "SPEED BANDS BY GEAR",
-                color = Color(0xFF9FEAF1),
+                color = skin.chartTitle,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
             )
-            Text("0–190 km/h", color = Color.White, fontSize = 11.sp)
+            Text("0–190 km/h", color = skin.onSurface, fontSize = 11.sp)
         }
         Box(
             Modifier
@@ -80,14 +90,14 @@ internal fun VirtualGearDistributionChart(
                     val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         textSize = 10.sp.toPx()
                         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
-                        color = Color(0xFFB8CBD8).toArgb()
+                        color = labelColor.toArgb()
                     }
                     val axisPaint = Paint(labelPaint).apply {
                         textSize = 12.sp.toPx()
                     }
                     val gearPaint = Paint(labelPaint).apply {
                         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                        color = Color.White.toArgb()
+                        color = gearLabelColor.toArgb()
                     }
                     val rowHeight = 34.dp.toPx()
                     val barHeight = 18.dp.toPx()
@@ -96,7 +106,7 @@ internal fun VirtualGearDistributionChart(
                     val plotWidth = (size.width - left - rangeWidth).coerceAtLeast(1f)
                     val plotBottom = gearCount * rowHeight
                     val colors = List(gearCount) { index ->
-                        Color.hsv(180f + index * 10f, 0.62f, 0.95f)
+                        Color.hsv((hueStart + index * 10f) % 360f, 0.62f, 0.95f)
                     }
                     val fills = colors.map { color ->
                         Brush.horizontalGradient(
@@ -108,12 +118,12 @@ internal fun VirtualGearDistributionChart(
 
                     onDrawBehind {
                         drawLine(
-                            Color(0xFF526776), Offset(left, plotBottom),
+                            baselineColor, Offset(left, plotBottom),
                             Offset(left + plotWidth, plotBottom), strokeWidth = 1.dp.toPx(),
                         )
                         boundaries.forEachIndexed { index, speed ->
                             val x = left + plotWidth * (speed / boundaries.last()).toFloat()
-                            val color = if (index == 0) Color(0xFFB8CBD8) else colors[index - 1]
+                            val color = if (index == 0) axisColor else colors[index - 1]
                             drawLine(
                                 color.copy(alpha = 0.22f), Offset(x, 0f), Offset(x, plotBottom),
                                 strokeWidth = 1.dp.toPx(),
@@ -140,7 +150,7 @@ internal fun VirtualGearDistributionChart(
                             val startX = left + plotWidth * (boundaries[index] / boundaries.last()).toFloat()
                             val endX = left + plotWidth * (boundaries[index + 1] / boundaries.last()).toFloat()
                             drawRoundRect(
-                                Color.White.copy(alpha = 0.025f),
+                                barTrackColor,
                                 Offset(left, centerY - barHeight / 2), Size(plotWidth, barHeight),
                                 CornerRadius(4.dp.toPx()),
                             )
@@ -161,8 +171,8 @@ internal fun VirtualGearDistributionChart(
                 },
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("GEAR", color = Color(0xFF8DA5B6), fontSize = 9.sp)
-            Text("ROAD SPEED / km/h", color = Color(0xFF8DA5B6), fontSize = 9.sp)
+            Text("GEAR", color = skin.chartFooter, fontSize = 9.sp)
+            Text("ROAD SPEED / km/h", color = skin.chartFooter, fontSize = 9.sp)
         }
     }
 }

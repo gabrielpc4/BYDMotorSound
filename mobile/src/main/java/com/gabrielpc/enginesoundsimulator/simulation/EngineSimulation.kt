@@ -66,6 +66,8 @@ data class DrivetrainState(
     val tachometerMaximumRpm: Double = 0.0,
     val redlineRpm: Double = 0.0,
     val limiterRpm: Double = 0.0,
+    /** Ascending RPM thresholds that light the dashboard shift lights, lowest stop first. */
+    val shiftLightsRpm: List<Double> = emptyList(),
     val automaticUpshiftRpm: Double = 0.0,
     val automaticDownshiftRpm: Double = 0.0,
     val effectiveAutomaticUpshiftRpm: Double = 0.0,
@@ -440,6 +442,10 @@ class EngineSimulation {
             // Shift lights are indicators only. The red zone starts at the authored limiter.
             redlineRpm = activePhysics.engine.limiterRpm,
             limiterRpm = activePhysics.engine.limiterRpm,
+            shiftLightsRpm = ShiftLightThresholds.resolve(
+                authored = activePhysics.engine.shiftLightsRpm,
+                limiterRpm = activePhysics.engine.limiterRpm,
+            ),
             automaticUpshiftRpm = relocatedShiftThresholds.upshiftRpm,
             automaticDownshiftRpm = relocatedShiftThresholds.downshiftRpm,
             effectiveAutomaticUpshiftRpm = frame.effectiveAutomaticUpshiftRpm,

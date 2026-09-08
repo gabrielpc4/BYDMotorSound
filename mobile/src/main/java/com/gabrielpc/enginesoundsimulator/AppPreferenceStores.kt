@@ -26,4 +26,5 @@ internal object AppPreferenceStores {
     const val MINIMUM_AUDIO_THROTTLE = "minimum_audio_throttle_v2"
     const val CRUISING_SHIFT_OFFSET_RPM = "cruising_shift_offset_rpm_v1"
     const val AUTOMATIC_TRANSMISSION_SETTINGS = "automatic_transmission_settings_v1"
+    const val DASHBOARD_VISUAL_THEME = "dashboard_visual_theme_v1"
 }

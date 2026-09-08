@@ -1,58 +1,60 @@
 package com.gabrielpc.enginesoundsimulator.ui.theme
 
-import android.app.Activity
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
-
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
-)
-
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
-)
+import androidx.compose.runtime.remember
 
 @Composable
 fun EngineSoundsSimulatorTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
+    skin: DashboardSkin,
+    content: @Composable () -> Unit,
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
+    val colorScheme = remember(skin) { skin.materialColorScheme() }
 
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
-        content = content
+        content = content,
+    )
+}
+
+/**
+ * Material color scheme derived from the active skin.
+ *
+ * Stock Material components — sliders above all — read their colors from here instead of taking
+ * explicit arguments, so without this they render in Material's default purple and ignore the
+ * dashboard palette entirely.
+ */
+internal fun DashboardSkin.materialColorScheme(): ColorScheme {
+    return darkColorScheme(
+        primary = accent,
+        // Slider tick marks over the filled track use onPrimary, so it must stay dark.
+        onPrimary = background,
+        primaryContainer = surfaceRaised,
+        onPrimaryContainer = onSurface,
+        secondary = accentSoft,
+        onSecondary = background,
+        secondaryContainer = surfaceRaised,
+        onSecondaryContainer = onSurface,
+        tertiary = success,
+        onTertiary = background,
+        background = background,
+        onBackground = onSurface,
+        surface = surface,
+        onSurface = onSurface,
+        // Slider inactive tracks and unselected controls use the surface variant pair.
+        surfaceVariant = surfaceRaised,
+        onSurfaceVariant = muted,
+        surfaceContainer = surface,
+        surfaceContainerHigh = surfaceRaised,
+        outline = outline,
+        outlineVariant = outline,
+        error = danger,
+        onError = onSurface,
+        errorContainer = errorBannerBody,
+        onErrorContainer = onSurface,
+        scrim = background,
     )
 }

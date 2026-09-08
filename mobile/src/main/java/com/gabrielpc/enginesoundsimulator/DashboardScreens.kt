@@ -56,7 +56,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Surface
+import androidx.compose.material3.Surface as MaterialSurface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -126,6 +126,28 @@ import com.gabrielpc.enginesoundsimulator.drive.PedalAudioThrottleRampMillisecon
 import com.gabrielpc.enginesoundsimulator.simulation.VirtualGearProfile
 import com.gabrielpc.enginesoundsimulator.drive.AlfaBackfireSources
 import com.gabrielpc.enginesoundsimulator.simulation.DrivetrainState
+import com.gabrielpc.enginesoundsimulator.ui.theme.Accent
+import com.gabrielpc.enginesoundsimulator.ui.theme.AccentSoft
+import com.gabrielpc.enginesoundsimulator.ui.theme.Background
+import com.gabrielpc.enginesoundsimulator.ui.theme.ControlShape
+import com.gabrielpc.enginesoundsimulator.ui.theme.Danger
+import com.gabrielpc.enginesoundsimulator.ui.theme.DashboardSkin
+import com.gabrielpc.enginesoundsimulator.ui.theme.DisplayFamily
+import com.gabrielpc.enginesoundsimulator.ui.theme.Favorite
+import com.gabrielpc.enginesoundsimulator.ui.theme.LocalDashboardSkin
+import com.gabrielpc.enginesoundsimulator.ui.theme.Master
+import com.gabrielpc.enginesoundsimulator.ui.theme.MeterTrack
+import com.gabrielpc.enginesoundsimulator.ui.theme.Muted
+import com.gabrielpc.enginesoundsimulator.ui.theme.OnSurface
+import com.gabrielpc.enginesoundsimulator.ui.theme.Outline
+import com.gabrielpc.enginesoundsimulator.ui.theme.PanelShape
+import com.gabrielpc.enginesoundsimulator.ui.theme.Success
+import com.gabrielpc.enginesoundsimulator.ui.theme.StadiumShape
+import com.gabrielpc.enginesoundsimulator.ui.theme.skinPillShape
+import com.gabrielpc.enginesoundsimulator.ui.theme.skinShape
+import com.gabrielpc.enginesoundsimulator.ui.theme.Surface
+import com.gabrielpc.enginesoundsimulator.ui.theme.SurfaceRaised
+import com.gabrielpc.enginesoundsimulator.ui.theme.Warning
 import com.gabrielpc.enginesoundsimulator.simulation.TransmissionPosition
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -144,7 +166,7 @@ internal fun DashboardMixerLauncherButton(
     Icon(
         imageVector = Icons.Default.Tune,
         contentDescription = "Mixer",
-        tint = Cyan,
+        tint = Accent,
         modifier = modifier
             .size(28.dp)
             .clip(CircleShape)
@@ -298,7 +320,7 @@ internal fun MixerDashboardScreen(
                         item(key = "section-${section.name}") {
                             Text(
                                 text = section.displayName,
-                                color = CyanSoft,
+                                color = AccentSoft,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Black,
                                 letterSpacing = 1.sp,
@@ -403,9 +425,9 @@ private fun MixerListeningPerspectiveSelector(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(Panel.copy(alpha = 0.92f))
-            .border(1.dp, Line.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
+            .clip(skinShape(8.dp))
+            .background(Surface.copy(alpha = 0.92f))
+            .border(1.dp, Outline.copy(alpha = 0.65f), skinShape(8.dp))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -421,12 +443,12 @@ private fun MixerListeningPerspectiveSelector(
             val active = option == perspective
             Text(
                 text = option.displayName,
-                color = if (active) Cyan else Muted,
+                color = if (active) Accent else Muted,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Black,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(if (active) Cyan.copy(alpha = 0.14f) else Color.Transparent)
+                    .clip(skinShape(5.dp))
+                    .background(if (active) Accent.copy(alpha = 0.14f) else Color.Transparent)
                     .clickable { onPerspectiveSelected(option) }
                     .padding(horizontal = 12.dp, vertical = 4.dp),
             )
@@ -436,7 +458,7 @@ private fun MixerListeningPerspectiveSelector(
             Text(
                 text = "PURE",
                 color = if (exteriorPureAudio) {
-                    Cyan
+                    Accent
                 } else {
                     Muted
                 },
@@ -471,17 +493,17 @@ private fun MixerControlsPanel(
     modifier: Modifier = Modifier,
 ) {
     var gainScope by remember { mutableStateOf(MixerGainScope.SPECIFIC) }
-    val cardShape = RoundedCornerShape(8.dp)
+    val cardShape = skinShape(8.dp)
     val cardModifier = modifier
         .fillMaxHeight()
         .clip(cardShape)
         .then(
             if (gainScope == MixerGainScope.GLOBAL) {
-                Modifier.border(1.dp, Line, cardShape)
+                Modifier.border(1.dp, Outline, cardShape)
             } else {
                 Modifier
-                    .background(Panel)
-                    .border(1.dp, Line, cardShape)
+                    .background(Surface)
+                    .border(1.dp, Outline, cardShape)
             },
         )
         .padding(horizontal = 12.dp, vertical = 10.dp)
@@ -507,14 +529,14 @@ private fun MixerControlsPanel(
                     globalValue = mixerGains.engineInterior,
                     specificValue = mixerSpecificGains.engineInterior,
                     overall = mixerSpecificGains.overall,
-                    accentColor = Amber,
+                    accentColor = Master,
                     onValueChange = {
                         onMixerSpecificGainsChange(mixerSpecificGains.copy(overall = it))
                     },
                 )
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 4.dp),
-                    color = Amber.copy(alpha = 0.45f),
+                    color = Master.copy(alpha = 0.45f),
                 )
             }
             MixerLayerGainSlider(
@@ -571,7 +593,7 @@ private fun MixerControlsPanel(
             )
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 4.dp),
-                color = Line,
+                color = Outline,
             )
             MixerLayerGainSlider(
                 label = "TRANSMISSION",
@@ -694,7 +716,7 @@ private fun MixerControlsPanel(
             if (gainScope == MixerGainScope.GLOBAL) {
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 4.dp),
-                    color = Line,
+                    color = Outline,
                 )
                 MixerLayerGainSlider(
                     label = "POPS & BANGS OVERRIDE",
@@ -760,12 +782,12 @@ private fun MixerGainScopeSelector(
                 val active = option == scope
                 Text(
                     text = option.displayName,
-                    color = if (active) Cyan else Muted,
+                    color = if (active) Accent else Muted,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Black,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(5.dp))
-                        .background(if (active) Cyan.copy(alpha = 0.14f) else Color.Transparent)
+                        .clip(skinShape(5.dp))
+                        .background(if (active) Accent.copy(alpha = 0.14f) else Color.Transparent)
                         .clickable { onScopeSelected(option) }
                         .padding(horizontal = 12.dp, vertical = 4.dp),
                 )
@@ -775,7 +797,7 @@ private fun MixerGainScopeSelector(
         if (scope == MixerGainScope.SPECIFIC) {
             Text(
                 text = "Per-car profile for ${listeningPerspective.displayName}",
-                color = Amber,
+                color = Warning,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.8.sp,
@@ -791,7 +813,7 @@ private fun MixerLayerGainSlider(
     globalValue: Float,
     specificValue: Float,
     overall: Float,
-    accentColor: Color = CyanSoft,
+    accentColor: Color = AccentSoft,
     eventCategory: MixerEventCategory? = null,
     mutedEvents: Map<String, Boolean> = emptyMap(),
     soloedEvents: Map<String, Boolean> = emptyMap(),
@@ -806,9 +828,9 @@ private fun MixerLayerGainSlider(
     val sliderColors = SliderDefaults.colors(
         thumbColor = accentColor,
         activeTrackColor = accentColor,
-        inactiveTrackColor = Line,
+        inactiveTrackColor = Outline,
         activeTickColor = accentColor.copy(alpha = 0.55f),
-        inactiveTickColor = Line.copy(alpha = 0.85f),
+        inactiveTickColor = Outline.copy(alpha = 0.85f),
     )
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -833,7 +855,7 @@ private fun MixerLayerGainSlider(
                     val soloed = eventCategory.isSoloed(soloedEvents)
                     Text(
                         text = "M",
-                        color = if (muted) Cyan else Muted,
+                        color = if (muted) Accent else Muted,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Black,
                         modifier = Modifier.clickable {
@@ -842,7 +864,7 @@ private fun MixerLayerGainSlider(
                     )
                     Text(
                         text = "S",
-                        color = if (soloed) Cyan else Muted,
+                        color = if (soloed) Accent else Muted,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Black,
                         modifier = Modifier.clickable {
@@ -853,7 +875,7 @@ private fun MixerLayerGainSlider(
             }
             Text(
                 text = "${MixerGlobalGains.formatMultiplier(snappedLayerValue)} → ${MixerGlobalGains.formatMultiplier(effectiveValue)}",
-                color = if (accentColor == Amber) Amber else White,
+                color = if (accentColor == Warning) Warning else OnSurface,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -911,10 +933,10 @@ internal fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("SETTINGS", color = White, fontSize = 24.sp, fontWeight = FontWeight.Black)
+            Text("SETTINGS", color = OnSurface, fontSize = 24.sp, fontWeight = FontWeight.Black)
         }
         Row(
-            modifier = Modifier.fillMaxWidth().border(1.dp, Line, RoundedCornerShape(8.dp)),
+            modifier = Modifier.fillMaxWidth().border(1.dp, Outline, skinShape(8.dp)),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             SettingsTab("GENERAL", !backfireTab) { backfireTab = false }
@@ -971,16 +993,16 @@ internal fun SettingsScreen(
                 OutlinedButton(
                     onClick = onExportSettings,
                     modifier = Modifier.weight(1f),
-                    border = BorderStroke(1.dp, Line),
+                    border = BorderStroke(1.dp, Outline),
                 ) {
-                    Text("EXPORT SETTINGS", color = CyanSoft, fontWeight = FontWeight.Black)
+                    Text("EXPORT SETTINGS", color = AccentSoft, fontWeight = FontWeight.Black)
                 }
                 Button(
                     onClick = { showResetConfirmation = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = Red.copy(alpha = 0.85f)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Danger.copy(alpha = 0.85f)),
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text("RESET ALL", color = White, fontWeight = FontWeight.Black)
+                    Text("RESET ALL", color = OnSurface, fontWeight = FontWeight.Black)
                 }
             }
         } else {
@@ -996,7 +1018,7 @@ internal fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showResetConfirmation = false },
             title = {
-                Text("Reset all settings?", color = White, fontWeight = FontWeight.Black)
+                Text("Reset all settings?", color = OnSurface, fontWeight = FontWeight.Black)
             },
             text = {
                 Text(
@@ -1011,15 +1033,15 @@ internal fun SettingsScreen(
                         onResetAll()
                     },
                 ) {
-                    Text("RESET", color = Red, fontWeight = FontWeight.Black)
+                    Text("RESET", color = Danger, fontWeight = FontWeight.Black)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showResetConfirmation = false }) {
-                    Text("CANCEL", color = CyanSoft, fontWeight = FontWeight.Black)
+                    Text("CANCEL", color = AccentSoft, fontWeight = FontWeight.Black)
                 }
             },
-            containerColor = Panel,
+            containerColor = Surface,
         )
     }
 }
@@ -1048,7 +1070,7 @@ private fun VirtualForwardGearCountControl(
 ) {
     Column(
         modifier = modifier
-            .border(1.dp, Line, RoundedCornerShape(8.dp))
+            .border(1.dp, Outline, skinShape(8.dp))
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -1066,10 +1088,10 @@ private fun VirtualForwardGearCountControl(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("VIRTUAL FORWARD GEARS", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    Text("VIRTUAL FORWARD GEARS", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
                     Text(
                         text = "$gearCount gears",
-                        color = White,
+                        color = OnSurface,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Black,
                     )
@@ -1118,7 +1140,7 @@ private fun TachometerShiftOverlayToggle(
                 Modifier
             } else {
                 Modifier
-                    .border(1.dp, Line, RoundedCornerShape(8.dp))
+                    .border(1.dp, Outline, skinShape(8.dp))
                     .padding(14.dp)
             },
         ),
@@ -1129,7 +1151,7 @@ private fun TachometerShiftOverlayToggle(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(title, color = Cyan, fontSize = 13.sp, fontWeight = FontWeight.Black)
+            Text(title, color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Black)
             Switch(
                 checked = enabled,
                 onCheckedChange = onEnabledChange,
@@ -1160,7 +1182,7 @@ private fun SixGearOnLaunchSetting(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("6-GEAR ON LAUNCH", color = Cyan, fontSize = 13.sp, fontWeight = FontWeight.Black)
+            Text("6-GEAR ON LAUNCH", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Black)
             Switch(
                 checked = enabled,
                 onCheckedChange = onEnabledChange,
@@ -1186,11 +1208,11 @@ private fun CruisingShiftOffsetsByTachMaxRpmControl(
 
     Column(
         modifier = modifier
-            .border(1.dp, Line, RoundedCornerShape(8.dp))
+            .border(1.dp, Outline, skinShape(8.dp))
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("CRUISING OFFSET BY TACH MAX", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
+        Text("CRUISING OFFSET BY TACH MAX", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
         Text(
             text = "Cruising shift RPM offset stored per tachometer maximum. Cars that share the same max RPM use the same value.",
             color = Muted,
@@ -1216,13 +1238,13 @@ private fun CruisingShiftOffsetsByTachMaxRpmControl(
                         ) {
                             Text(
                                 text = "${tier / 1_000}K RPM",
-                                color = CyanSoft,
+                                color = AccentSoft,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Black,
                             )
                             Text(
                                 text = CruisingShiftOffsetByTachMaxRpm.formatOffsetLabel(offset),
-                                color = White,
+                                color = OnSurface,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                             )
@@ -1266,7 +1288,7 @@ private fun AutomaticTransmissionSettingsControl(
 ) {
     Column(
         modifier = modifier
-            .border(1.dp, Line, RoundedCornerShape(8.dp))
+            .border(1.dp, Outline, skinShape(8.dp))
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -1277,10 +1299,10 @@ private fun AutomaticTransmissionSettingsControl(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("MIN THROTTLE", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
+            Text("MIN THROTTLE", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
             Text(
                 text = String.format(Locale.US, "%.2f", minimumAudioThrottle),
-                color = White,
+                color = OnSurface,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Black,
             )
@@ -1313,10 +1335,10 @@ private fun AutomaticTransmissionSettingsControl(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("RACING RETURN THROTTLE", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    Text("RACING RETURN THROTTLE", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
                     Text(
                         text = "$racingReturnThrottlePercent%",
-                        color = White,
+                        color = OnSurface,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Black,
                     )
@@ -1356,10 +1378,10 @@ private fun AutomaticTransmissionSettingsControl(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("MANUAL REDLINE HOLD", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
+            Text("MANUAL REDLINE HOLD", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
             Text(
                 text = ManualRedlineHoldSeconds.format(manualRedlineHoldSeconds),
-                color = White,
+                color = OnSurface,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Black,
             )
@@ -1387,10 +1409,10 @@ private fun AutomaticTransmissionSettingsControl(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("MANUAL AUTODOWNSHIFT RPM", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
+            Text("MANUAL AUTODOWNSHIFT RPM", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
             Text(
                 text = "$manualAutodownshiftRpm RPM",
-                color = White,
+                color = OnSurface,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Black,
             )
@@ -1423,12 +1445,12 @@ private fun ExteriorPureAudioControl(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, Line, RoundedCornerShape(8.dp))
+            .border(1.dp, Outline, skinShape(8.dp))
             .padding(18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text("EXTERIOR PURE AUDIO", color = Cyan, fontSize = 15.sp, fontWeight = FontWeight.Black)
+            Text("EXTERIOR PURE AUDIO", color = Accent, fontSize = 15.sp, fontWeight = FontWeight.Black)
             Text(
                 "Neutralizes exterior 3D distance and pan. FMOD events, pitch, gain, fades and authored DSP remain active.",
                 color = Muted,
@@ -1445,11 +1467,11 @@ private fun ShiftSoundOverrideControl(
     onEnabledChange: (Boolean) -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().border(1.dp, Line, RoundedCornerShape(8.dp)).padding(18.dp),
+        modifier = Modifier.fillMaxWidth().border(1.dp, Outline, skinShape(8.dp)).padding(18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text("SHIFT SOUND OVERRIDE", color = Cyan, fontSize = 15.sp, fontWeight = FontWeight.Black)
+            Text("SHIFT SOUND OVERRIDE", color = Accent, fontSize = 15.sp, fontWeight = FontWeight.Black)
             Text(
                 "Uses the bundled upshift/downshift samples instead of the car's authored gear sounds.",
                 color = Muted,
@@ -1473,7 +1495,7 @@ private fun PedalAudioThrottleRampSettingCard(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .border(1.dp, Line, RoundedCornerShape(8.dp))
+            .border(1.dp, Outline, skinShape(8.dp))
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -1482,10 +1504,10 @@ private fun PedalAudioThrottleRampSettingCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(title, color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
+            Text(title, color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
             Text(
                 text = PedalAudioThrottleRampMilliseconds.format(valueMilliseconds),
-                color = White,
+                color = OnSurface,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Black,
             )
@@ -1517,7 +1539,7 @@ private fun FmodUpdateRateControl(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .border(1.dp, Line, RoundedCornerShape(8.dp))
+            .border(1.dp, Outline, skinShape(8.dp))
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -1526,7 +1548,7 @@ private fun FmodUpdateRateControl(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("FMOD CONTROL RATE", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                Text("FMOD CONTROL RATE", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
                 Text(
                     "Physics and FMOD share this cadence. 60 Hz is recommended; 30 Hz is economy mode.",
                     color = Muted,
@@ -1535,7 +1557,7 @@ private fun FmodUpdateRateControl(
             }
             Text(
                 "$rateHz Hz",
-                color = White,
+                color = OnSurface,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Black,
             )
@@ -1549,12 +1571,12 @@ private fun FmodUpdateRateControl(
                     onClick = { onRateChange(optionHz) },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (rateHz == optionHz) Cyan else PanelBright,
+                        containerColor = if (rateHz == optionHz) Accent else SurfaceRaised,
                     ),
                 ) {
                     Text(
                         text = "$optionHz Hz",
-                        color = if (rateHz == optionHz) Night else White,
+                        color = if (rateHz == optionHz) Background else OnSurface,
                         fontWeight = FontWeight.Black,
                     )
                 }
@@ -1567,13 +1589,13 @@ private fun FmodUpdateRateControl(
 private fun RowScope.SettingsTab(label: String, selected: Boolean, onClick: () -> Unit) {
     Text(
         text = label,
-        color = if (selected) Cyan else Muted,
+        color = if (selected) Accent else Muted,
         fontSize = 13.sp,
         fontWeight = FontWeight.Black,
         modifier = Modifier
             .weight(1f)
             .clickable(onClick = onClick)
-            .background(if (selected) Cyan.copy(alpha = 0.14f) else Color.Transparent)
+            .background(if (selected) Accent.copy(alpha = 0.14f) else Color.Transparent)
             .padding(vertical = 12.dp),
         textAlign = TextAlign.Center,
     )
@@ -1587,7 +1609,7 @@ private fun BackfireSettingsPanel(
 ) {
     val value = settings.normalized()
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("GLOBAL BACKFIRE POLICY", color = Cyan, fontSize = 18.sp, fontWeight = FontWeight.Black)
+        Text("GLOBAL BACKFIRE POLICY", color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Black)
         Text(
             "These rules apply to every car. A backfire arms after a clear throttle run, then fires only after the pedal is released for the selected delay.",
             color = Muted,
@@ -1614,17 +1636,17 @@ private fun BackfireSettingsPanel(
         BackfireSlider("MAXIMUM RPM", value.maximumRpm, 500.0f..12000.0f, integer = true, steps = 23) {
             onChange(value.copy(maximumRpm = it.toDouble()))
         }
-        Text("ALFA ROMEO BACKFIRE SAMPLES", color = Cyan, fontSize = 16.sp, fontWeight = FontWeight.Black)
+        Text("ALFA ROMEO BACKFIRE SAMPLES", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Black)
         AlfaBackfireSources.indices.forEach { sample ->
             val allowed = sample in value.allowedSamples
             Row(
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Panel)
-                    .border(1.dp, Line, RoundedCornerShape(6.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().clip(skinShape(6.dp)).background(Surface)
+                    .border(1.dp, Outline, skinShape(6.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(AlfaBackfireSources.names[sample - 1], color = White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Text("PLAY ▶", color = Cyan, fontSize = 13.sp, fontWeight = FontWeight.Black,
+                Text(AlfaBackfireSources.names[sample - 1], color = OnSurface, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("PLAY ▶", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Black,
                     modifier = Modifier.clickable { onPreview(sample) }.padding(8.dp))
                 SettingsToggle("ALLOW", allowed, compact = true) {
                     val next = if (allowed) value.allowedSamples - sample else value.allowedSamples + sample
@@ -1642,13 +1664,13 @@ private fun SettingsToggle(label: String, enabled: Boolean, compact: Boolean = f
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(label, color = if (enabled) Cyan else Muted, fontSize = 13.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
+        Text(label, color = if (enabled) Accent else Muted, fontSize = 13.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
         Box(
-            modifier = Modifier.width(58.dp).height(28.dp).clip(RoundedCornerShape(50))
-                .background(if (enabled) Cyan else Line).padding(4.dp),
+            modifier = Modifier.width(58.dp).height(28.dp).clip(StadiumShape)
+                .background(if (enabled) Accent else Outline).padding(4.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
-            Box(Modifier.size(20.dp).offset(x = if (enabled) 30.dp else 0.dp).clip(CircleShape).background(White))
+            Box(Modifier.size(20.dp).offset(x = if (enabled) 30.dp else 0.dp).clip(CircleShape).background(OnSurface))
         }
     }
 }
@@ -1666,8 +1688,8 @@ private fun BackfireSlider(
     val shown = if (integer) String.format(Locale.US, "%.0f", value) else String.format(Locale.US, "%.2f", value)
     Column {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, color = CyanSoft, fontSize = 12.sp, fontWeight = FontWeight.Black)
-            Text("$shown$suffix", color = White, fontSize = 12.sp)
+            Text(label, color = AccentSoft, fontSize = 12.sp, fontWeight = FontWeight.Black)
+            Text("$shown$suffix", color = OnSurface, fontSize = 12.sp)
         }
         Slider(value = value.toFloat().coerceIn(range.start, range.endInclusive), onValueChange = onChange, valueRange = range, steps = steps)
     }
@@ -1690,9 +1712,9 @@ private fun MixerHeaderRow(
         modifier = Modifier
             .fillMaxWidth()
             .height(118.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(Panel.copy(alpha = 0.92f))
-            .border(1.dp, Line.copy(alpha = 0.65f), RoundedCornerShape(14.dp))
+            .clip(skinShape(14.dp))
+            .background(Surface.copy(alpha = 0.92f))
+            .border(1.dp, Outline.copy(alpha = 0.65f), skinShape(14.dp))
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1729,20 +1751,27 @@ private fun BarTachometerHud(
     Column(modifier = modifier, verticalArrangement = Arrangement.SpaceBetween) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
             Row(verticalAlignment = Alignment.Bottom) {
-                Text(drivetrain.rpm.toInt().toString(), color = White, fontSize = 42.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace)
+                Text(drivetrain.rpm.toInt().toString(), color = OnSurface, fontSize = 42.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace)
                 Text(" RPM", color = Muted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.width(18.dp))
                 MixerTelemetryReadout("SPEED", drivetrain.realOrDocumentedRawSpeedKmh.toInt().toString(), "km/h")
                 Spacer(Modifier.width(12.dp))
                 MixerTelemetryReadout("PRED SPEED", String.format(Locale.US, "%.2f", drivetrain.presentationSpeedKmh), "km/h")
             }
-            Text(gear, color = Cyan, fontSize = 22.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace)
+            Text(gear, color = Accent, fontSize = 22.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace)
         }
-        Box(modifier = Modifier.fillMaxWidth().height(22.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xFF061018)).border(1.dp, Line, RoundedCornerShape(4.dp))) {
+        // Canvas draw lambdas are not composable, so the skin colors are read up here first.
+        val barGradient = listOf(Accent.copy(alpha = 0.35f), Warning, Danger)
+        val redlineColor = Danger
+        val barTrack = LocalDashboardSkin.current.meterTrack
+
+        val barShape = skinShape(4.dp)
+
+        Box(modifier = Modifier.fillMaxWidth().height(22.dp).clip(barShape).background(barTrack).border(1.dp, Outline, barShape)) {
             Canvas(modifier = Modifier.fillMaxSize()) {
-                drawRect(brush = Brush.horizontalGradient(listOf(Cyan.copy(alpha = 0.35f), Amber, Red)), size = androidx.compose.ui.geometry.Size(size.width * rpmFraction, size.height))
-                drawRect(color = Red.copy(alpha = 0.18f), topLeft = Offset(size.width * redlineFraction, 0f), size = androidx.compose.ui.geometry.Size(size.width * (1f - redlineFraction), size.height))
-                drawLine(Red, Offset(size.width * redlineFraction, 0f), Offset(size.width * redlineFraction, size.height), 2f)
+                drawRect(brush = Brush.horizontalGradient(barGradient), size = androidx.compose.ui.geometry.Size(size.width * rpmFraction, size.height))
+                drawRect(color = redlineColor.copy(alpha = 0.18f), topLeft = Offset(size.width * redlineFraction, 0f), size = androidx.compose.ui.geometry.Size(size.width * (1f - redlineFraction), size.height))
+                drawLine(redlineColor, Offset(size.width * redlineFraction, 0f), Offset(size.width * redlineFraction, size.height), 2f)
             }
         }
     }
@@ -1766,7 +1795,7 @@ private fun MixerTelemetryReadout(
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = value,
-                color = Cyan,
+                color = Accent,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Black,
                 fontFamily = FontFamily.Monospace,
@@ -1774,7 +1803,7 @@ private fun MixerTelemetryReadout(
             unit?.let {
                 Text(
                     text = it,
-                    color = CyanSoft,
+                    color = AccentSoft,
                     fontSize = 8.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(start = 3.dp, bottom = 2.dp),
@@ -1807,9 +1836,9 @@ private fun CarDropdownSelector(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                .clip(RoundedCornerShape(10.dp))
-                .background(PanelBright)
-                .border(1.dp, Line, RoundedCornerShape(10.dp)),
+                .clip(skinShape(10.dp))
+                .background(SurfaceRaised)
+                .border(1.dp, Outline, skinShape(10.dp)),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             CarPreviewThumbnail(
@@ -1835,7 +1864,7 @@ private fun CarDropdownSelector(
                     Text("SIMULATED CAR", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                     Text(
                         text = CarDisplayNameFormatter.format(selectedCarName),
-                        color = White,
+                        color = OnSurface,
                         fontSize = 16.sp,
                         lineHeight = 20.sp,
                         fontWeight = FontWeight.Black,
@@ -1894,7 +1923,7 @@ internal fun CarFavoriteStarButton(
                 "Add favorite"
             },
             tint = if (isFavorite) {
-                Color(0xFFFFD54F)
+                Favorite
             } else {
                 Color.White.copy(alpha = 0.82f)
             },
@@ -2014,7 +2043,7 @@ internal fun CarGridSelectionDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(PanelBright),
+                .background(SurfaceRaised),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(
@@ -2026,7 +2055,7 @@ internal fun CarGridSelectionDialog(
                 ) {
                     Text(
                         text = "SELECT CAR",
-                        color = CyanSoft,
+                        color = AccentSoft,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Black,
                         letterSpacing = 1.2.sp,
@@ -2040,7 +2069,7 @@ internal fun CarGridSelectionDialog(
                         Icon(
                             imageVector = Icons.Filled.Close,
                             contentDescription = "Close car picker",
-                            tint = White,
+                            tint = OnSurface,
                         )
                     }
                 }
@@ -2057,10 +2086,10 @@ internal fun CarGridSelectionDialog(
                             FmodBankProfiles.moddedCarsPackId to "MODDED CARS",
                             FmodBankProfiles.originalCarsPackId to "ORIGINAL CARS",
                         ).forEach { (group, label) ->
-                            Surface(
-                                color = if (selectedGroup == group) Cyan.copy(alpha = 0.24f) else Panel,
-                                shape = RoundedCornerShape(6.dp),
-                                border = BorderStroke(1.dp, if (selectedGroup == group) Cyan else Line),
+                            MaterialSurface(
+                                color = if (selectedGroup == group) Accent.copy(alpha = 0.24f) else Surface,
+                                shape = skinShape(6.dp),
+                                border = BorderStroke(1.dp, if (selectedGroup == group) Accent else Outline),
                                 modifier = Modifier.clickable {
                                     selectedGroup = group
                                     pickerPreferences.edit().putString("selected", group).apply()
@@ -2068,7 +2097,7 @@ internal fun CarGridSelectionDialog(
                             ) {
                                 Text(
                                     label,
-                                    color = if (selectedGroup == group) Cyan else Muted,
+                                    color = if (selectedGroup == group) Accent else Muted,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -2098,9 +2127,9 @@ internal fun CarGridSelectionDialog(
                         items(visibleProfiles, key = { it.id }) { profile ->
                             Column(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (profile.id == selectedCarId) Cyan.copy(alpha = 0.18f) else Panel)
-                                    .border(1.dp, if (profile.id == selectedCarId) Cyan else Line, RoundedCornerShape(10.dp))
+                                    .clip(skinShape(10.dp))
+                                    .background(if (profile.id == selectedCarId) Accent.copy(alpha = 0.18f) else Surface)
+                                    .border(1.dp, if (profile.id == selectedCarId) Accent else Outline, skinShape(10.dp))
                                     .clickable {
                                         onDismiss()
                                         onSelectCar(profile.id)
@@ -2118,11 +2147,11 @@ internal fun CarGridSelectionDialog(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .heightIn(max = 128.dp)
-                                        .clip(RoundedCornerShape(6.dp)),
+                                        .clip(skinShape(6.dp)),
                                 )
                                 Text(
                                     text = CarDisplayNameFormatter.format(profile.displayName),
-                                    color = White,
+                                    color = OnSurface,
                                     fontSize = 15.sp,
                                     lineHeight = 18.sp,
                                     fontWeight = if (profile.id == selectedCarId) FontWeight.Black else FontWeight.Bold,
@@ -2145,7 +2174,7 @@ internal fun CarGridSelectionDialog(
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
-                            CircularProgressIndicator(color = Cyan)
+                            CircularProgressIndicator(color = Accent)
                         }
                     }
                 }
@@ -2174,9 +2203,9 @@ private fun CarPickerSearchField(
     Box(
         modifier = modifier
             .height(36.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(Panel)
-            .border(1.dp, Line, RoundedCornerShape(6.dp))
+            .clip(skinShape(6.dp))
+            .background(Surface)
+            .border(1.dp, Outline, skinShape(6.dp))
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
@@ -2186,11 +2215,11 @@ private fun CarPickerSearchField(
             singleLine = true,
             enabled = editingEnabled,
             textStyle = TextStyle(
-                color = White,
+                color = OnSurface,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
             ),
-            cursorBrush = SolidColor(Cyan),
+            cursorBrush = SolidColor(Accent),
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(focusRequester),
@@ -2315,7 +2344,7 @@ private fun FmodSourceMeter(
     modifier: Modifier = Modifier,
 ) {
     val level = source.audibility.toFloat().coerceIn(0f, 1f)
-    val fillColor = outputMeterFillColor(level)
+    val fillColor = outputMeterFillColor(level, LocalDashboardSkin.current)
     val meterLabelPaint = remember {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.WHITE
@@ -2326,9 +2355,9 @@ private fun FmodSourceMeter(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(Panel.copy(alpha = 0.88f))
-            .border(2.dp, if (highlight) Cyan else Line.copy(alpha = 0.55f), RoundedCornerShape(10.dp))
+            .clip(skinShape(10.dp))
+            .background(Surface.copy(alpha = 0.88f))
+            .border(2.dp, if (highlight) Accent else Outline.copy(alpha = 0.55f), skinShape(10.dp))
             .padding(horizontal = 10.dp, vertical = 8.dp),
     ) {
         Row(
@@ -2338,7 +2367,7 @@ private fun FmodSourceMeter(
         ) {
             Text(
                 text = source.soundName,
-                color = White,
+                color = OnSurface,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 2,
@@ -2359,7 +2388,7 @@ private fun FmodSourceMeter(
                             "${source.voiceCount} VOICE${if (source.voiceCount == 1) "" else "S"}"
                         else -> "SILENT"
                     },
-                    color = if (source.isActive) Cyan else Muted,
+                    color = if (source.isActive) Accent else Muted,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                 )
@@ -2373,7 +2402,7 @@ private fun FmodSourceMeter(
         }
         Text(
             text = source.eventName.uppercase().replace('_', ' '),
-            color = CyanSoft,
+            color = AccentSoft,
             fontSize = 12.sp,
             fontFamily = FontFamily.Monospace,
             maxLines = 1,
@@ -2389,9 +2418,9 @@ private fun FmodSourceMeter(
                 modifier = Modifier
                     .weight(1f)
                     .height(22.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color(0xFF061018))
-                    .border(1.dp, Line.copy(alpha = 0.5f), RoundedCornerShape(4.dp)),
+                    .clip(skinShape(4.dp))
+                    .background(MeterTrack)
+                    .border(1.dp, Outline.copy(alpha = 0.5f), skinShape(4.dp)),
             ) {
                 if (level > 0.002f) {
                     drawRect(
@@ -2418,14 +2447,14 @@ private fun FmodSourceMeter(
     }
 }
 
-/** Green → cyan → amber → red as the live output meter fills. */
-private fun outputMeterFillColor(level: Float): Color {
+/** Green → accent → warning → danger as the live output meter fills. */
+private fun outputMeterFillColor(level: Float, skin: DashboardSkin): Color {
     return when {
-        level <= 0.01f -> Muted.copy(alpha = 0.35f)
-        level < 0.30f -> blendColors(Green.copy(alpha = 0.65f), Cyan, level / 0.30f)
-        level < 0.60f -> blendColors(Cyan, Amber, (level - 0.30f) / 0.30f)
-        level < 0.85f -> blendColors(Amber, Color(0xFFFF7040), (level - 0.60f) / 0.25f)
-        else -> blendColors(Color(0xFFFF7040), Red, (level - 0.85f) / 0.15f)
+        level <= 0.01f -> skin.muted.copy(alpha = 0.35f)
+        level < 0.30f -> blendColors(skin.success.copy(alpha = 0.65f), skin.accent, level / 0.30f)
+        level < 0.60f -> blendColors(skin.accent, skin.warning, (level - 0.30f) / 0.30f)
+        level < 0.85f -> blendColors(skin.warning, skin.accentHot, (level - 0.60f) / 0.25f)
+        else -> blendColors(skin.accentHot, skin.danger, (level - 0.85f) / 0.15f)
     }
 }
 
@@ -2438,15 +2467,3 @@ private fun blendColors(start: Color, end: Color, fraction: Float): Color {
         alpha = start.alpha + (end.alpha - start.alpha) * t,
     )
 }
-
-private val Night = Color(0xFF060606)
-private val Panel = Color(0xFF0B1925)
-private val PanelBright = Color(0xFF112837)
-private val Line = Color(0xFF1A3C4A)
-private val Cyan = Color(0xFF35E8F2)
-private val CyanSoft = Color(0xFF5FBAC7)
-private val Green = Color(0xFF38E58C)
-private val Red = Color(0xFFFF394F)
-private val Amber = Color(0xFFFFC456)
-private val White = Color(0xFFF5FAFD)
-private val Muted = Color(0xFF88A2B2)

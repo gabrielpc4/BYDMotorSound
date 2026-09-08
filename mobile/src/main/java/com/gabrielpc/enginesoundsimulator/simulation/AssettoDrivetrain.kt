@@ -8,6 +8,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.sign
 
 internal class AssettoDrivetrainFrame(
     var rpm: Double,
@@ -144,8 +145,9 @@ internal class AssettoDrivetrain(
     private var cruisingReturnTransitionActive = false
     /** Upshifts queued to reach the cruising gear at the current road speed. */
     private var cruisingReturnPendingUpshiftTargetGear: Int? = null
-    private var cruisingReturnTransitionSecondsRemaining = 0.0
     private var cruisingReturnTransitionStartRpm = 0.0
+    /** Landing RPM captured at return start; upshift milestones are spaced along this drop. */
+    private var cruisingReturnTransitionInitialTargetRpm = 0.0
     /** Progress threshold for the next scheduled upshift during the return window. */
     private var cruisingReturnNextUpshiftProgress = 1.0
     private var cruisingReturnUpshiftProgressStep = 1.0
@@ -1093,18 +1095,19 @@ internal class AssettoDrivetrain(
     private fun clearCruisingReturnTransition() {
         cruisingReturnTransitionActive = false
         cruisingReturnPendingUpshiftTargetGear = null
-        cruisingReturnTransitionSecondsRemaining = 0.0
         cruisingReturnTransitionStartRpm = 0.0
+        cruisingReturnTransitionInitialTargetRpm = 0.0
         cruisingReturnNextUpshiftProgress = 1.0
         cruisingReturnUpshiftProgressStep = 1.0
     }
 
     private fun beginCruisingReturnTransition() {
         val targetGear = computeCruisingReturnTargetGear()
+        val initialTargetRpm = coupledRpmForGear(targetGear)
 
         cruisingReturnTransitionActive = true
         cruisingReturnTransitionStartRpm = rpm
-        cruisingReturnTransitionSecondsRemaining = CRUISING_RETURN_TRANSITION_SECONDS
+        cruisingReturnTransitionInitialTargetRpm = initialTargetRpm
 
         if (targetGear > gear) {
             cruisingReturnPendingUpshiftTargetGear = targetGear
@@ -1116,6 +1119,24 @@ internal class AssettoDrivetrain(
             cruisingReturnNextUpshiftProgress = 1.0
             cruisingReturnUpshiftProgressStep = 1.0
         }
+    }
+
+    private fun cruisingReturnTransitionProgress(): Double {
+        val span = cruisingReturnTransitionStartRpm - cruisingReturnTransitionInitialTargetRpm
+        if (span <= CRUISING_RETURN_MIN_RPM_SPAN) {
+            return 1.0
+        }
+
+        return ((cruisingReturnTransitionStartRpm - rpm) / span).coerceIn(0.0, 1.0)
+    }
+
+    private fun cruisingReturnLiveTargetRpm(): Double {
+        val targetGear = cruisingReturnPendingUpshiftTargetGear ?: gear
+        return coupledRpmForGear(targetGear)
+    }
+
+    private fun cruisingReturnRpmSettled(targetRpm: Double): Boolean {
+        return abs(rpm - targetRpm) <= CRUISING_RETURN_RPM_TOLERANCE
     }
 
     /** Highest gear whose coupled RPM fits the cruising upshift band at the current road speed. */
@@ -1151,46 +1172,52 @@ internal class AssettoDrivetrain(
             return
         }
 
-        if (cruisingReturnTransitionSecondsRemaining <= 0.0) {
-            manualShiftRequest = 1
-            return
-        }
-
-        val progress = 1.0 - (
-            cruisingReturnTransitionSecondsRemaining / CRUISING_RETURN_TRANSITION_SECONDS
-            ).coerceIn(0.0, 1.0)
+        val progress = cruisingReturnTransitionProgress()
         if (progress + 1e-6 >= cruisingReturnNextUpshiftProgress) {
             manualShiftRequest = 1
             cruisingReturnNextUpshiftProgress += cruisingReturnUpshiftProgressStep
         }
     }
 
-    /** Linear RPM glide over the return window, tracking live mapped speed instead of a snapshot. */
+    /** Chase the live mapped target until gear and RPM both settle, however long that takes. */
     private fun applyCruisingReturnTransitionRpm(dt: Double) {
         if (!cruisingReturnTransitionActive) {
             return
         }
 
-        cruisingReturnTransitionSecondsRemaining = max(0.0, cruisingReturnTransitionSecondsRemaining - dt)
-        val progress = 1.0 - (
-            cruisingReturnTransitionSecondsRemaining / CRUISING_RETURN_TRANSITION_SECONDS
-            ).coerceIn(0.0, 1.0)
-
         val targetGear = cruisingReturnPendingUpshiftTargetGear ?: gear
-        val liveTargetRpm = coupledRpmForGear(targetGear)
-        rpm = cruisingReturnTransitionStartRpm +
-            (liveTargetRpm - cruisingReturnTransitionStartRpm) * progress
+        val liveTargetRpm = cruisingReturnLiveTargetRpm()
+        val delta = liveTargetRpm - rpm
+
+        if (cruisingReturnRpmSettled(liveTargetRpm)) {
+            rpm = liveTargetRpm
+        } else {
+            val initialSpan = abs(
+                cruisingReturnTransitionStartRpm - cruisingReturnTransitionInitialTargetRpm,
+            ).coerceAtLeast(CRUISING_RETURN_MIN_RPM_SPAN)
+            val maxStep = initialSpan / CRUISING_RETURN_TRANSITION_SECONDS * dt
+            rpm += sign(delta) * min(abs(delta), maxStep)
+        }
 
         if (physics.engine.limiterRpm > 0.0) {
             rpm = rpm.coerceAtMost(physics.engine.limiterRpm)
         }
 
-        if (
-            cruisingReturnTransitionSecondsRemaining <= 0.0 &&
-            !shifting &&
-            gear >= targetGear
-        ) {
-            rpm = coupledRpmForGear(gear)
+        if (shifting) {
+            return
+        }
+
+        if (gear < targetGear) {
+            if (cruisingReturnRpmSettled(liveTargetRpm)) {
+                manualShiftRequest = 1
+            }
+
+            return
+        }
+
+        val settledRpm = coupledRpmForGear(gear)
+        if (cruisingReturnRpmSettled(settledRpm)) {
+            rpm = settledRpm
             clearCruisingReturnTransition()
         }
     }
@@ -2008,10 +2035,14 @@ internal class AssettoDrivetrain(
         const val AUTOMATIC_DOWNSHIFT_CHAIN_COOLDOWN_SECONDS = 0.12
         const val FIXED_UPSHIFT_SECONDS = 0.10
         const val FIXED_DOWNSHIFT_SECONDS = 0.15
-        /** Total time budget while returning from racing to cruising after an armed brake. */
+        /** Reference drop that should take about one second to close; larger gaps run longer. */
         const val CRUISING_RETURN_TRANSITION_SECONDS = 1.0
         /** Downshift duration used only during the racing-to-cruising return window. */
         const val CRUISING_RETURN_DOWNSHIFT_SECONDS = 1.0
+        /** Return completes once the needle is within this many RPM of the mapped target. */
+        const val CRUISING_RETURN_RPM_TOLERANCE = 30.0
+        /** Minimum RPM span used when scheduling upshift milestones during a return. */
+        const val CRUISING_RETURN_MIN_RPM_SPAN = 100.0
         const val RPM_PER_RADIAN_SECOND = 60.0 / (2.0 * PI)
         const val RADIAN_SECONDS_PER_RPM = 1.0 / RPM_PER_RADIAN_SECOND
         const val SIMPLIFIED_DISENGAGED_CLUTCH = true

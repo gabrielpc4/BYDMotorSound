@@ -40,6 +40,7 @@ internal class NativeFmodBankBridge {
         limiterPulseCount: Int,
         shiftStartedCount: Int,
         shiftDirection: Int,
+        suppressShiftSoundOverride: Boolean,
         shiftRejectedCount: Int,
         backfirePulseCount: Int,
         backfireSampleIndex: Int,

@@ -173,6 +173,7 @@ internal object SettingsExporter {
             put("cruisingLogicEnabled", settings.cruisingLogicEnabled)
             put("sixGearOnLaunchEnabled", settings.sixGearOnLaunchEnabled)
             put("allowManualOnLaunchEnabled", settings.allowManualOnLaunchEnabled)
+            put("manualTransmissionKickdownEnabled", settings.manualTransmissionKickdownEnabled)
             put(
                 "cruisingShiftOffsetsByTachMaxRpm",
                 JSONObject().apply {

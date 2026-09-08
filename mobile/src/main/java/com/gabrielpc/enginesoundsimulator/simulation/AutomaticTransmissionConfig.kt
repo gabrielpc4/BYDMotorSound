@@ -13,6 +13,7 @@ internal data class AutomaticTransmissionConfig(
     val cruisingLogicEnabled: Boolean = true,
     val sixGearOnLaunchEnabled: Boolean = false,
     val allowManualOnLaunchEnabled: Boolean = false,
+    val manualTransmissionKickdownEnabled: Boolean = true,
     val cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int> = emptyMap(),
     val racingReturnMaxThrottle: Double = RacingReturnThrottlePercent.asFraction(
         RacingReturnThrottlePercent.DEFAULT,
@@ -30,6 +31,7 @@ internal data class AutomaticTransmissionConfig(
                 cruisingLogicEnabled = settings.cruisingLogicEnabled,
                 sixGearOnLaunchEnabled = settings.sixGearOnLaunchEnabled,
                 allowManualOnLaunchEnabled = settings.allowManualOnLaunchEnabled,
+                manualTransmissionKickdownEnabled = settings.manualTransmissionKickdownEnabled,
                 cruisingShiftOffsetsByTachMaxRpm = settings.cruisingShiftOffsetsByTachMaxRpm,
                 racingReturnMaxThrottle = RacingReturnThrottlePercent.asFraction(
                     settings.racingReturnThrottlePercent,

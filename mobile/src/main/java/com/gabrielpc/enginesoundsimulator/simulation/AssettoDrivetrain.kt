@@ -30,6 +30,8 @@ internal class AssettoDrivetrainFrame(
     var backfireSampleIndex: Int = -1,
     var shiftStarted: Boolean,
     var shiftRejected: Boolean,
+    /** Manual kickdown downshift: skip bundled shift override one-shot for this gear start. */
+    var suppressShiftSoundOverride: Boolean = false,
     var shifting: Boolean,
     var shiftDirection: Int,
     var shiftProgress: Double,
@@ -148,6 +150,7 @@ internal class AssettoDrivetrain(
     private var requestAutomaticShiftMode = false
     private var pendingAutomaticShiftModeFromLaunch = false
     private var allowManualOnLaunchEnabled = false
+    private var manualTransmissionKickdownEnabled = true
     private var currentAutomaticShifting = true
     private var emergencyUpshiftElapsedSeconds = 0.0
     /** Remaining target after a cruising stomp switches to racing. */
@@ -166,6 +169,10 @@ internal class AssettoDrivetrain(
     private var launchReturnPendingTargetGear: Int? = null
     /** Previous throttle sample used to detect manual kickdown stomps. */
     private var previousRawGasForManualStomp = 0.0
+    /** True while a manual kickdown is stepping down toward [racingStompPendingTargetGear]. */
+    private var manualKickdownSequenceActive = false
+    /** After kickdown finishes, the next upshift alone uses automatic timing and RPM rules. */
+    private var manualKickdownAutomaticUpshiftPending = false
     /** Eases racing RPM into the cruising band after an armed return. */
     private val cruisingReturn = CruisingReturnTransition()
     private var driven = drivenAxle(physics.drivetrain.vehicle)
@@ -280,6 +287,7 @@ internal class AssettoDrivetrain(
         resetLaunchControl()
         resetAutomaticTransmissionMode()
         previousRawGasForManualStomp = 0.0
+        clearManualKickdownFollowUp()
         clearCruisingReturnTransition()
         manualRedlineElapsedSeconds = 0.0
         emergencyUpshiftElapsedSeconds = 0.0
@@ -420,6 +428,7 @@ internal class AssettoDrivetrain(
 
     fun requestShift(direction: Int): Boolean {
         if (direction !in -1..1 || direction == 0 || shifting) return false
+        clearManualKickdownFollowUp()
         manualShiftRequest = direction
         return true
     }
@@ -455,7 +464,11 @@ internal class AssettoDrivetrain(
         cruisingLogicEnabled = automaticTransmissionConfig.cruisingLogicEnabled
         sixGearOnLaunchEnabled = automaticTransmissionConfig.sixGearOnLaunchEnabled
         allowManualOnLaunchEnabled = automaticTransmissionConfig.allowManualOnLaunchEnabled
+        manualTransmissionKickdownEnabled = automaticTransmissionConfig.manualTransmissionKickdownEnabled
         currentAutomaticShifting = automaticShifting
+        if (!manualTransmissionKickdownEnabled && !automaticShifting) {
+            abortManualKickdownSequence()
+        }
         if (!automaticShifting) {
             ensureManualModeExcludesCruisingPolicy()
         }
@@ -463,6 +476,12 @@ internal class AssettoDrivetrain(
             immediatelySyncGearToConfiguredProfile()
         }
         currentTransmissionPosition = transmissionPosition
+        if (transmissionPosition != TransmissionPosition.DRIVE) {
+            clearManualKickdownFollowUp()
+        }
+        if (automaticShifting && (manualKickdownAutomaticUpshiftPending || manualKickdownSequenceActive)) {
+            clearManualKickdownFollowUp()
+        }
         sessionElapsedMilliseconds += dt * 1_000.0
         externalVehicleSpeedMetersPerSecond?.let(::anchorVehicleSpeed)
         // In P/N the engine must remain a free-revving authored event. D is the only position
@@ -510,6 +529,12 @@ internal class AssettoDrivetrain(
             automaticShifting = automaticShifting,
             dt = dt,
         )
+        updateManualKickdownFollowUpClearance(
+            rawGas = rawGas,
+            brake = cleanBrake,
+            automaticShifting = automaticShifting,
+            transmissionPosition = transmissionPosition,
+        )
         applyRacingStompDownshift(dt)
         applyLaunchReturnGearSync(dt)
         updateEmergencyUpshift(dt)
@@ -522,12 +547,19 @@ internal class AssettoDrivetrain(
         // the drivetrain integrator must never be mistaken for a request to
         // select first gear when the engine reaches its authored shift RPM.
         val automaticRequest = if (transmissionPosition == TransmissionPosition.DRIVE) {
-            automaticShiftDecision(
-                controlsGas,
-                clutch,
-                automaticShifting,
-                dt,
-            )
+            if (automaticShifting) {
+                automaticShiftDecision(
+                    controlsGas,
+                    clutch,
+                    automaticShifting,
+                    dt,
+                )
+            } else {
+                manualKickdownAutomaticUpshiftRequest(
+                    gas = controlsGas,
+                    clutch = clutch,
+                )
+            }
         } else {
             0
         }
@@ -549,6 +581,9 @@ internal class AssettoDrivetrain(
             shiftStarted = true
             eventDirection = requestedDirection
             shiftWasAutomatic = !requestedManualShift
+            if (requestedDirection > 0 && manualKickdownAutomaticUpshiftPending) {
+                manualKickdownAutomaticUpshiftPending = false
+            }
         } else if (requestedDirection != 0) {
             shiftRejected = true
         }
@@ -690,6 +725,11 @@ internal class AssettoDrivetrain(
         }
         lastFrame.shiftStarted = shiftStarted
         lastFrame.shiftRejected = shiftRejected
+        lastFrame.suppressShiftSoundOverride = shiftStarted &&
+            eventDirection < 0 &&
+            manualKickdownSequenceActive &&
+            !currentAutomaticShifting &&
+            manualTransmissionKickdownEnabled
         lastFrame.shifting = shifting
         lastFrame.shiftDirection = if (shiftStarted || shiftCompleted || shifting) eventDirection else 0
         // Preserve a final 1.0 sample so presentation code can finish a gear-ratio crossfade
@@ -1095,6 +1135,13 @@ internal class AssettoDrivetrain(
         }
     }
 
+    internal fun applyManualTransmissionKickdownEnabled(enabled: Boolean) {
+        manualTransmissionKickdownEnabled = enabled
+        if (!enabled) {
+            abortManualKickdownSequence()
+        }
+    }
+
     private fun effectiveUpshiftTriggerRpm(): Double {
         val base = upshiftTriggerRpmForGear()
         if (!cruisingPolicyApplies() || cruisingShiftOffsetRpm <= 0) {
@@ -1360,6 +1407,20 @@ internal class AssettoDrivetrain(
 
     private fun clearRacingStompPending() {
         racingStompPendingTargetGear = null
+        manualKickdownSequenceActive = false
+    }
+
+    private fun clearManualKickdownFollowUp() {
+        manualKickdownAutomaticUpshiftPending = false
+        manualKickdownSequenceActive = false
+    }
+
+    private fun abortManualKickdownSequence() {
+        if (manualKickdownSequenceActive) {
+            racingStompPendingTargetGear = null
+        }
+
+        clearManualKickdownFollowUp()
     }
 
     private fun applyRacingStompDownshift(dt: Double) {
@@ -1370,6 +1431,9 @@ internal class AssettoDrivetrain(
         }
 
         if (gear <= targetGear) {
+            if (manualKickdownSequenceActive) {
+                manualKickdownAutomaticUpshiftPending = true
+            }
             clearRacingStompPending()
             return
         }
@@ -1378,6 +1442,7 @@ internal class AssettoDrivetrain(
             manualShiftRequest = -1
         } else {
             clearRacingStompPending()
+            clearManualKickdownFollowUp()
         }
     }
 
@@ -1410,6 +1475,7 @@ internal class AssettoDrivetrain(
         emergencyUpshiftElapsedSeconds += dt
         if (emergencyUpshiftElapsedSeconds >= AutomaticTransmissionPolicy.EMERGENCY_UPSHIFT_HOLD_SECONDS) {
             emergencyUpshiftElapsedSeconds = 0.0
+            clearManualKickdownFollowUp()
             manualShiftRequest = 1
         }
     }
@@ -1516,13 +1582,14 @@ internal class AssettoDrivetrain(
             automaticDownshiftCooldownSeconds <= 0.0 &&
             downshiftAllowed(gear - 1, dt)
         ) {
+            clearManualKickdownFollowUp()
             manualShiftRequest = -1
         }
     }
 
     /**
-     * Manual kickdown: crossing the same racing stomp throttle threshold arms a downshift to the
-     * highest gear whose coupled RPM lands in the high-RPM window at the current road speed.
+     * Manual kickdown: a sharp throttle increase arms downshifts toward the highest gear whose
+     * coupled RPM lands in the high-RPM window at the current road speed.
      */
     private fun updateManualStompDownshift(
         rawGas: Double,
@@ -1530,6 +1597,11 @@ internal class AssettoDrivetrain(
         dt: Double,
     ) {
         if (automaticShifting || currentTransmissionPosition != TransmissionPosition.DRIVE) {
+            previousRawGasForManualStomp = rawGas
+            return
+        }
+
+        if (!manualTransmissionKickdownEnabled) {
             previousRawGasForManualStomp = rawGas
             return
         }
@@ -1543,9 +1615,10 @@ internal class AssettoDrivetrain(
             return
         }
 
-        val stompThreshold = AutomaticTransmissionPolicy.RACING_ENTER_MIN_THROTTLE
-        val stompDetected = previousRawGasForManualStomp <= stompThreshold &&
-            rawGas > stompThreshold
+        val stompDetected = AutomaticTransmissionPolicy.manualKickdownStompDetected(
+            previousThrottle = previousRawGasForManualStomp,
+            currentThrottle = rawGas,
+        )
         previousRawGasForManualStomp = rawGas
 
         if (!stompDetected || gear <= 1 || shifting || racingStompPendingTargetGear != null) {
@@ -1554,8 +1627,74 @@ internal class AssettoDrivetrain(
 
         val targetGear = computeRacingStompTargetGear(dt)
         if (targetGear < gear) {
+            clearManualKickdownFollowUp()
+            manualKickdownSequenceActive = true
             racingStompPendingTargetGear = targetGear
         }
+    }
+
+    private fun updateManualKickdownFollowUpClearance(
+        rawGas: Double,
+        brake: Double,
+        automaticShifting: Boolean,
+        transmissionPosition: TransmissionPosition,
+    ) {
+        if (automaticShifting || !manualKickdownAutomaticUpshiftPending) {
+            return
+        }
+
+        if (transmissionPosition != TransmissionPosition.DRIVE) {
+            clearManualKickdownFollowUp()
+            return
+        }
+
+        if (launchControlPhase != LaunchControlPhase.INACTIVE) {
+            clearManualKickdownFollowUp()
+            return
+        }
+
+        if (brake >= AutomaticTransmissionPolicy.RACING_RETURN_ARM_MIN_BRAKE) {
+            clearManualKickdownFollowUp()
+            return
+        }
+
+        if (rawGas <= AutomaticTransmissionPolicy.MANUAL_KICKDOWN_CANCEL_MAX_THROTTLE) {
+            clearManualKickdownFollowUp()
+        }
+    }
+
+    /** One automatic-style upshift after manual kickdown without leaving manual shift mode. */
+    private fun manualKickdownAutomaticUpshiftRequest(
+        gas: Double,
+        clutch: Double,
+    ): Int {
+        if (!manualTransmissionKickdownEnabled || !manualKickdownAutomaticUpshiftPending || shifting || gear < 1) {
+            return 0
+        }
+
+        if (launchControlPhase == LaunchControlPhase.ARMED ||
+            launchControlPhase == LaunchControlPhase.DISARMING
+        ) {
+            clearManualKickdownFollowUp()
+            return 0
+        }
+
+        if (!(simplifiedDisengagedClutch || clutch > 0.99 || gear == 0)) {
+            return 0
+        }
+
+        val shiftRpm = automaticShiftRpmForDecision()
+        val upshiftRpm = effectiveUpshiftTriggerRpm()
+        if (
+            automaticUpshiftAllowed(shiftRpm, upshiftRpm, gas) &&
+            gear < effectiveVirtualGearProfile().virtualForwardGearCount &&
+            automaticGasCutoff <= 0.0
+        ) {
+            automaticGasCutoff = f32(physics.drivetrain.automaticGasCutoffSeconds)
+            return 1
+        }
+
+        return 0
     }
 
     private fun updateManualRedlineAutomaticMode(

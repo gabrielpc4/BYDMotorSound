@@ -249,7 +249,13 @@ class EngineAudioEngine(context: Context) {
             val previousSerial = observedShiftSerial.get()
             if (frame.shiftSerial <= previousSerial) return
             if (observedShiftSerial.compareAndSet(previousSerial, frame.shiftSerial)) {
-                pendingShiftPulses.offer(ShiftPulse(frame.shiftSerial, frame.shiftDirection))
+                pendingShiftPulses.offer(
+                    ShiftPulse(
+                        serial = frame.shiftSerial,
+                        direction = frame.shiftDirection,
+                        suppressShiftSoundOverride = frame.suppressShiftSoundOverride,
+                    ),
+                )
                 return
             }
         }
@@ -621,11 +627,15 @@ class EngineAudioEngine(context: Context) {
                 val shiftPulse = pendingShiftPulses.poll()
                 val shiftDirection = shiftPulse?.direction ?: 0
                 var shiftStartedCount = if (shiftPulse == null) 0 else 1
+                var suppressShiftSoundOverride = shiftPulse?.suppressShiftSoundOverride == true
                 // Preserve separately queued opposite-direction shifts for the next FMOD tick.
                 // Consecutive pulses in the same direction can be represented by one native call.
                 while (pendingShiftPulses.peek()?.direction == shiftDirection && shiftDirection != 0) {
-                    pendingShiftPulses.poll()
+                    val mergedPulse = pendingShiftPulses.poll()
                     shiftStartedCount += 1
+                    if (mergedPulse?.suppressShiftSoundOverride == true) {
+                        suppressShiftSoundOverride = true
+                    }
                 }
                 val maximumBoost = frame.maximumBoost.coerceAtLeast(0.001)
                 val audioWallStartedNanos = if (measurePerformance) System.nanoTime() else 0L
@@ -647,6 +657,7 @@ class EngineAudioEngine(context: Context) {
                     limiterPulseCount = limiterPulseCount,
                     shiftStartedCount = shiftStartedCount,
                     shiftDirection = shiftDirection,
+                    suppressShiftSoundOverride = suppressShiftSoundOverride,
                     shiftRejectedCount = rejectedShiftCount,
                     backfirePulseCount = backfirePulseCount,
                     backfireSampleIndex = frame.backfireSampleIndex,
@@ -856,6 +867,7 @@ class EngineAudioEngine(context: Context) {
     private data class ShiftPulse(
         val serial: Long,
         val direction: Int,
+        val suppressShiftSoundOverride: Boolean = false,
     )
 }
 

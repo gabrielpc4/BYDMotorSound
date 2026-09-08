@@ -277,6 +277,8 @@ class MainActivity : ComponentActivity() {
                         onVirtualForwardGearCountChange = controller::setVirtualForwardGearCount,
                         onSixGearOnLaunchEnabledChange = controller::setSixGearOnLaunchEnabled,
                         onAllowManualOnLaunchEnabledChange = controller::setAllowManualOnLaunchEnabled,
+                        onManualTransmissionKickdownEnabledChange =
+                            controller::setManualTransmissionKickdownEnabled,
                         onTachometerCruisingShiftRangeOverlayEnabledChange =
                             controller::setTachometerCruisingShiftRangeOverlayEnabled,
                         onCruisingShiftOffsetForTachMaxRpmChange = controller::setCruisingShiftOffsetForTachMaxRpm,
@@ -409,6 +411,7 @@ private fun MotorSoundDashboard(
     onVirtualForwardGearCountChange: (Int) -> Unit,
     onSixGearOnLaunchEnabledChange: (Boolean) -> Unit,
     onAllowManualOnLaunchEnabledChange: (Boolean) -> Unit,
+    onManualTransmissionKickdownEnabledChange: (Boolean) -> Unit,
     onTachometerCruisingShiftRangeOverlayEnabledChange: (Boolean) -> Unit,
     onCruisingShiftOffsetForTachMaxRpmChange: (Int, Int) -> Unit,
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
@@ -656,6 +659,9 @@ private fun MotorSoundDashboard(
                             onSixGearOnLaunchEnabledChange = onSixGearOnLaunchEnabledChange,
                             allowManualOnLaunchEnabled = state.allowManualOnLaunchEnabled,
                             onAllowManualOnLaunchEnabledChange = onAllowManualOnLaunchEnabledChange,
+                            manualTransmissionKickdownEnabled = state.manualTransmissionKickdownEnabled,
+                            onManualTransmissionKickdownEnabledChange =
+                                onManualTransmissionKickdownEnabledChange,
                             minimumAudioThrottle = state.minimumAudioThrottle,
                             onMinimumAudioThrottleChange = onMinimumAudioThrottleChange,
                             racingReturnThrottlePercent = state.racingReturnThrottlePercent,

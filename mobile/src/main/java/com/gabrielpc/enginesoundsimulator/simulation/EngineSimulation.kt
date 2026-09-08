@@ -61,6 +61,7 @@ data class DrivetrainState(
     val backfireSampleIndex: Int = -1,
     val shiftStarted: Boolean = false,
     val shiftRejected: Boolean = false,
+    val suppressShiftSoundOverride: Boolean = false,
     val tractionLimitActive: Boolean = false,
     val tractionLimitPulse: Boolean = false,
     val tachometerMaximumRpm: Double = 0.0,
@@ -127,6 +128,12 @@ class EngineSimulation {
         }
         if (previous.sixGearOnLaunchEnabled != settings.sixGearOnLaunchEnabled && !settings.sixGearOnLaunchEnabled) {
             drivetrain?.clearLaunchSixGearOverride()
+        }
+        if (
+            previous.manualTransmissionKickdownEnabled != settings.manualTransmissionKickdownEnabled &&
+            !settings.manualTransmissionKickdownEnabled
+        ) {
+            drivetrain?.applyManualTransmissionKickdownEnabled(false)
         }
     }
 
@@ -451,6 +458,7 @@ class EngineSimulation {
             backfireSampleIndex = frame.backfireSampleIndex,
             shiftStarted = frame.shiftStarted,
             shiftRejected = frame.shiftRejected,
+            suppressShiftSoundOverride = frame.suppressShiftSoundOverride,
             tractionLimitActive = frame.tractionLimitActive,
             tractionLimitPulse = frame.tractionLimitPulse,
             tachometerMaximumRpm = activePhysics.engine.tachometerMaximumRpm,

@@ -971,6 +971,8 @@ internal fun SettingsScreen(
     onSixGearOnLaunchEnabledChange: (Boolean) -> Unit,
     allowManualOnLaunchEnabled: Boolean,
     onAllowManualOnLaunchEnabledChange: (Boolean) -> Unit,
+    manualTransmissionKickdownEnabled: Boolean,
+    onManualTransmissionKickdownEnabledChange: (Boolean) -> Unit,
     minimumAudioThrottle: Float,
     onMinimumAudioThrottleChange: (Float) -> Unit,
     racingReturnThrottlePercent: Int,
@@ -1075,6 +1077,8 @@ internal fun SettingsScreen(
                 onManualRedlineHoldSecondsChange = onManualRedlineHoldSecondsChange,
                 manualAutodownshiftRpm = manualAutodownshiftRpm,
                 onManualAutodownshiftRpmChange = onManualAutodownshiftRpmChange,
+                manualTransmissionKickdownEnabled = manualTransmissionKickdownEnabled,
+                onManualTransmissionKickdownEnabledChange = onManualTransmissionKickdownEnabledChange,
                 tachometerCruisingShiftRangeOverlayEnabled = tachometerCruisingShiftRangeOverlayEnabled,
                 onTachometerCruisingShiftRangeOverlayEnabledChange = onTachometerCruisingShiftRangeOverlayEnabledChange,
             )
@@ -1558,6 +1562,8 @@ private fun AutomaticTransmissionSettingsControl(
     onManualRedlineHoldSecondsChange: (Int) -> Unit,
     manualAutodownshiftRpm: Int,
     onManualAutodownshiftRpmChange: (Int) -> Unit,
+    manualTransmissionKickdownEnabled: Boolean,
+    onManualTransmissionKickdownEnabledChange: (Boolean) -> Unit,
     tachometerCruisingShiftRangeOverlayEnabled: Boolean,
     onTachometerCruisingShiftRangeOverlayEnabledChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
@@ -1715,6 +1721,13 @@ private fun AutomaticTransmissionSettingsControl(
         }
         val manualRedlineStopIndex = ManualRedlineHoldSeconds.stopIndex(manualRedlineHoldSeconds).toFloat()
         val manualRedlineLastStopIndex = (ManualRedlineHoldSeconds.STOPS.size - 1).toFloat()
+        TachometerShiftOverlayToggle(
+            title = "MANUAL TRANSMISSION KICKDOWN",
+            description = "Manual mode: a sharp throttle stomp downshifts toward the best gear for acceleration, then the next upshift alone uses automatic timing.",
+            enabled = manualTransmissionKickdownEnabled,
+            onEnabledChange = onManualTransmissionKickdownEnabledChange,
+            embedded = true,
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1760,7 +1773,7 @@ private fun AutomaticTransmissionSettingsControl(
             )
         }
         Text(
-            text = "Manual mode: falling below this RPM downshifts one gear automatically. Racing kickdown uses the same value as an offset below redline when choosing a target gear.",
+            text = "Manual mode: falling below this RPM downshifts one gear automatically. Kickdown stomps use a sharp pedal increase and this value as an offset below redline when choosing a target gear.",
             color = Muted,
             fontSize = 12.sp,
             lineHeight = 16.sp,

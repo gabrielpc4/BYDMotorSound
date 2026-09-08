@@ -770,6 +770,7 @@ public:
         int limiterPulseCount,
         int shiftStartedCount,
         int shiftDirection,
+        bool suppressShiftSoundOverride,
         int shiftRejectedCount,
         int backfirePulseCount,
         int backfireSampleIndex,
@@ -929,7 +930,9 @@ public:
             for (int pulse = 0; pulse < shiftStartedCount; ++pulse) {
                 if (!shiftSoundEnabled_) continue;
                 if (shiftSoundOverride_) {
-                    playShiftSampleLocked(shiftDirection > 0);
+                    if (!suppressShiftSoundOverride) {
+                        playShiftSampleLocked(shiftDirection > 0);
+                    }
                     continue;
                 }
                 if (slot(selected) != nullptr && !isPlayingLocked(slotInstance(selected))) {
@@ -3109,6 +3112,7 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_update(
     jint limiterPulseCount,
     jint shiftStartedCount,
     jint shiftDirection,
+    jboolean suppressShiftSoundOverride,
     jint shiftRejectedCount,
     jint backfirePulseCount,
     jint backfireSampleIndex,
@@ -3137,6 +3141,7 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_update(
             limiterPulseCount,
             shiftStartedCount,
             shiftDirection,
+            suppressShiftSoundOverride == JNI_TRUE,
             shiftRejectedCount,
             backfirePulseCount,
             backfireSampleIndex,

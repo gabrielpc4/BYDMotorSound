@@ -13,6 +13,10 @@ enum class AutomaticTransmissionMode {
  */
 internal object AutomaticTransmissionPolicy {
     const val RACING_ENTER_MIN_THROTTLE = 0.40
+    /** Minimum pedal increase between consecutive samples to count as a manual kickdown stomp. */
+    const val MANUAL_KICKDOWN_MIN_THROTTLE_DELTA = 0.15
+    /** Throttle below this after kickdown cancels the one-shot automatic upshift follow-up. */
+    const val MANUAL_KICKDOWN_CANCEL_MAX_THROTTLE = 0.12
     /** Emergency upshift once after holding the limiter this long, unless already in top gear. */
     const val EMERGENCY_UPSHIFT_HOLD_SECONDS = 1.5
     /** Brake input that arms return-to-cruising on the next acceleration while racing. */
@@ -58,6 +62,10 @@ internal object AutomaticTransmissionPolicy {
             upshiftRpm = upshiftRpm,
             downshiftRpm = downshiftRpm,
         )
+    }
+
+    fun manualKickdownStompDetected(previousThrottle: Double, currentThrottle: Double): Boolean {
+        return (currentThrottle - previousThrottle) >= MANUAL_KICKDOWN_MIN_THROTTLE_DELTA
     }
 
     fun applyCruisingOffset(

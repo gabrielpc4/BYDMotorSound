@@ -161,6 +161,7 @@ internal data class AutomaticTransmissionSettings(
     val cruisingLogicEnabled: Boolean = true,
     val sixGearOnLaunchEnabled: Boolean = false,
     val allowManualOnLaunchEnabled: Boolean = false,
+    val manualTransmissionKickdownEnabled: Boolean = true,
     val cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int> = CruisingShiftOffsetByTachMaxRpm.defaultOffsets(),
     val racingReturnThrottlePercent: Int = RacingReturnThrottlePercent.DEFAULT,
     val racingEnterDelayMilliseconds: Int = RacingEnterDelayMilliseconds.DEFAULT,
@@ -185,6 +186,10 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
             cruisingLogicEnabled = preferences.getBoolean(KEY_CRUISING_LOGIC_ENABLED, true),
             sixGearOnLaunchEnabled = preferences.getBoolean(KEY_SIX_GEAR_ON_LAUNCH_ENABLED, false),
             allowManualOnLaunchEnabled = preferences.getBoolean(KEY_ALLOW_MANUAL_ON_LAUNCH_ENABLED, false),
+            manualTransmissionKickdownEnabled = preferences.getBoolean(
+                KEY_MANUAL_TRANSMISSION_KICKDOWN_ENABLED,
+                true,
+            ),
             cruisingShiftOffsetsByTachMaxRpm = loadCruisingShiftOffsetsByTachMaxRpm(),
             racingReturnThrottlePercent = RacingReturnThrottlePercent.normalize(
                 preferences.getInt(
@@ -232,6 +237,10 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
             .putBoolean(KEY_CRUISING_LOGIC_ENABLED, settings.cruisingLogicEnabled)
             .putBoolean(KEY_SIX_GEAR_ON_LAUNCH_ENABLED, settings.sixGearOnLaunchEnabled)
             .putBoolean(KEY_ALLOW_MANUAL_ON_LAUNCH_ENABLED, settings.allowManualOnLaunchEnabled)
+            .putBoolean(
+                KEY_MANUAL_TRANSMISSION_KICKDOWN_ENABLED,
+                settings.manualTransmissionKickdownEnabled,
+            )
         CruisingShiftOffsetByTachMaxRpm.TIERS.forEach { tier ->
             editor.putInt(
                 CruisingShiftOffsetByTachMaxRpm.preferenceKey(tier),
@@ -331,6 +340,7 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
         const val KEY_CRUISING_LOGIC_ENABLED = "cruising_logic_enabled"
         const val KEY_SIX_GEAR_ON_LAUNCH_ENABLED = "six_gear_on_launch_enabled"
         const val KEY_ALLOW_MANUAL_ON_LAUNCH_ENABLED = "allow_manual_on_launch_enabled"
+        const val KEY_MANUAL_TRANSMISSION_KICKDOWN_ENABLED = "manual_transmission_kickdown_enabled"
         const val KEY_CRUISING_SHIFT_OFFSET_RPM = "cruising_shift_offset_rpm"
         const val KEY_RACING_RETURN_THROTTLE_PERCENT = "racing_return_throttle_percent"
         const val KEY_RACING_ENTER_DELAY_MILLISECONDS = "racing_enter_delay_milliseconds"

@@ -111,6 +111,7 @@ data class DriveSnapshot(
     val cruisingLogicEnabled: Boolean = true,
     val sixGearOnLaunchEnabled: Boolean = false,
     val allowManualOnLaunchEnabled: Boolean = false,
+    val manualTransmissionKickdownEnabled: Boolean = true,
     val pedalAudioThrottleRampUpMilliseconds: Int = PedalAudioThrottleRampMilliseconds.DEFAULT,
     val pedalAudioThrottleRampDownMilliseconds: Int = PedalAudioThrottleRampMilliseconds.DEFAULT,
     val cruisingShiftOffsetTachMaxRpm: Int = CruisingShiftOffsetByTachMaxRpm.TIERS.first(),
@@ -495,6 +496,12 @@ class DriveController(context: Context) {
     fun setAllowManualOnLaunchEnabled(enabled: Boolean) {
         updateAutomaticTransmissionSettings {
             it.copy(allowManualOnLaunchEnabled = enabled)
+        }
+    }
+
+    fun setManualTransmissionKickdownEnabled(enabled: Boolean) {
+        updateAutomaticTransmissionSettings {
+            it.copy(manualTransmissionKickdownEnabled = enabled)
         }
     }
 
@@ -1422,6 +1429,7 @@ class DriveController(context: Context) {
                 backfireTriggered = drivetrain.backfireTriggered,
                 backfireSampleIndex = drivetrain.backfireSampleIndex,
                 shiftRejected = drivetrain.shiftRejected,
+                suppressShiftSoundOverride = drivetrain.suppressShiftSoundOverride,
                 tractionLimitActive = drivetrain.tractionLimitActive,
                 tractionLimitPulse = drivetrain.tractionLimitPulse,
                 drivetrainSpeedRadiansPerSecond = drivetrain.drivetrainSpeedRadiansPerSecond,
@@ -1470,6 +1478,8 @@ class DriveController(context: Context) {
                 cruisingLogicEnabled = automaticTransmissionSettings.get().cruisingLogicEnabled,
                 sixGearOnLaunchEnabled = automaticTransmissionSettings.get().sixGearOnLaunchEnabled,
                 allowManualOnLaunchEnabled = automaticTransmissionSettings.get().allowManualOnLaunchEnabled,
+                manualTransmissionKickdownEnabled =
+                    automaticTransmissionSettings.get().manualTransmissionKickdownEnabled,
                 cruisingShiftOffsetTachMaxRpm = CruisingShiftOffsetByTachMaxRpm.resolveTier(drivetrain.tachometerMaximumRpm),
                 cruisingShiftOffsetRpm = CruisingShiftOffsetByTachMaxRpm.resolveOffset(
                     offsets = automaticTransmissionSettings.get().cruisingShiftOffsetsByTachMaxRpm,

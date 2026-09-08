@@ -21,6 +21,7 @@ data class EngineAudioFrame(
     val shiftSerial: Long = 0L,
     val shiftDirection: Int = 0,
     val shiftRejected: Boolean = false,
+    val suppressShiftSoundOverride: Boolean = false,
     val limiterPulse: Boolean = false,
     val backfireTriggered: Boolean = false,
     val backfireSampleIndex: Int = -1,

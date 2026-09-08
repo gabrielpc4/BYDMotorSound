@@ -21,6 +21,26 @@ class CruisingReturnTransitionTest {
     }
 
     @Test
+    fun bandTargetNeverSitsAboveCruisingUpshift() {
+        assertEquals(
+            4_850.0,
+            CruisingReturn.bandTargetRpm(
+                coupledRpm = 5_386.0,
+                cruisingUpshiftRpm = 4_850.0,
+            ),
+            0.0,
+        )
+        assertEquals(
+            3_800.0,
+            CruisingReturn.bandTargetRpm(
+                coupledRpm = 3_800.0,
+                cruisingUpshiftRpm = 4_850.0,
+            ),
+            0.0,
+        )
+    }
+
+    @Test
     fun alreadyInCruisingBandKeepsCurrentGear() {
         val target = CruisingReturn.targetGear(
             currentGear = 10,

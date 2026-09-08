@@ -188,4 +188,14 @@ internal object CruisingReturn {
 
         return candidate
     }
+
+    /**
+     * RPM the return should actually sit on: the mapped value of the chosen gear, but never
+     * above the cruising upshift line. Top gear at high speed still maps above that line on
+     * the racing speed table; chasing the mapped value is what left the needle at ~5400
+     * instead of the ~4850 cruising band.
+     */
+    fun bandTargetRpm(coupledRpm: Double, cruisingUpshiftRpm: Double): Double {
+        return min(coupledRpm, cruisingUpshiftRpm)
+    }
 }

@@ -969,6 +969,41 @@ internal class AssettoDrivetrain(
         if (physics.engine.limiterRpm > 0.0) {
             rpm = rpm.coerceAtMost(physics.engine.limiterRpm)
         }
+
+        applyCruisingBandCap()
+    }
+
+    /**
+     * While cruising, never publish a mapped RPM above the cruising upshift line.
+     *
+     * The speed-to-RPM table is authored on racing thresholds. In a tall gear at high road
+     * speed that table still sits hundreds of RPM above the cruising band, which is the
+     * settle the driver sees after a return if we hand control straight back to the map.
+     */
+    private fun applyCruisingBandCap() {
+        if (!cruisingLogicEnabled) {
+            return
+        }
+
+        if (automaticTransmissionMode != AutomaticTransmissionMode.CRUISING) {
+            return
+        }
+
+        if (launchControlPhase != LaunchControlPhase.INACTIVE) {
+            return
+        }
+
+        val cap = effectiveUpshiftTriggerRpm()
+        if (rpm > cap) {
+            rpm = cap
+        }
+    }
+
+    private fun cruisingBandTargetRpm(coupledRpm: Double): Double {
+        return CruisingReturn.bandTargetRpm(
+            coupledRpm = coupledRpm,
+            cruisingUpshiftRpm = effectiveUpshiftTriggerRpm(),
+        )
     }
 
     /** Internal FMOD wheel speed that would produce [rpm] in [gearForRatio]. */
@@ -1102,7 +1137,7 @@ internal class AssettoDrivetrain(
             currentRpm = rpm,
             currentGear = gear,
             computedTargetGear = targetGear,
-            initialLiveTargetRpm = coupledRpmForGear(targetGear),
+            initialLiveTargetRpm = cruisingBandTargetRpm(coupledRpmForGear(targetGear)),
         )
     }
 
@@ -1125,7 +1160,7 @@ internal class AssettoDrivetrain(
      */
     private fun applyCruisingReturnTransitionRpm(dt: Double) {
         val computedTargetGear = computeCruisingReturnTargetGear()
-        val liveTargetRpm = coupledRpmForGear(computedTargetGear)
+        val liveTargetRpm = cruisingBandTargetRpm(coupledRpmForGear(computedTargetGear))
         val topGear = effectiveVirtualGearProfile().virtualForwardGearCount
         val nextGearCoupledRpm = if (gear < topGear) {
             coupledRpmForGear(gear + 1)

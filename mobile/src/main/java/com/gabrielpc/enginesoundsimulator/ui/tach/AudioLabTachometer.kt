@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -100,6 +101,7 @@ fun AudioLabTachometer(
                 maxHeight.value / (
                     AudioLabDial.SHIFT_ARRAY_HEIGHT +
                         AudioLabDial.VIEWBOX_HEIGHT +
+                        DigitalBarStyle.GAP_BELOW_DIAL +
                         DigitalBarStyle.HEIGHT
                     ),
             ),
@@ -132,6 +134,8 @@ fun AudioLabTachometer(
                         drivetrain.gear > 1,
                 )
             }
+
+            Spacer(modifier = Modifier.height(scale.dp(DigitalBarStyle.GAP_BELOW_DIAL)))
 
             DigitalReadoutBar(
                 drivetrain = drivetrain,
@@ -638,6 +642,8 @@ private fun rememberShiftLightBlink(active: Boolean): Boolean {
 private object DigitalBarStyle {
     const val WIDTH_FRACTION = 0.642f
     const val HEIGHT = 75f
+    /** Breathing room between the dial bezel and the digital readout row. */
+    const val GAP_BELOW_DIAL = 14f
     const val GEAR_COLUMN_WIDTH = 78f
     const val COLUMN_PADDING_HORIZONTAL = 11f
     const val COLUMN_PADDING_VERTICAL = 8f

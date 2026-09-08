@@ -143,6 +143,7 @@ import com.gabrielpc.enginesoundsimulator.ui.theme.Outline
 import com.gabrielpc.enginesoundsimulator.ui.theme.PanelShape
 import com.gabrielpc.enginesoundsimulator.ui.theme.Success
 import com.gabrielpc.enginesoundsimulator.ui.theme.StadiumShape
+import com.gabrielpc.enginesoundsimulator.ui.theme.softFillShape
 import com.gabrielpc.enginesoundsimulator.ui.theme.skinPillShape
 import com.gabrielpc.enginesoundsimulator.ui.theme.skinShape
 import com.gabrielpc.enginesoundsimulator.ui.theme.Surface
@@ -447,7 +448,7 @@ private fun MixerListeningPerspectiveSelector(
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Black,
                 modifier = Modifier
-                    .clip(skinShape(5.dp))
+                    .clip(softFillShape(5.dp))
                     .background(if (active) Accent.copy(alpha = 0.14f) else Color.Transparent)
                     .clickable { onPerspectiveSelected(option) }
                     .padding(horizontal = 12.dp, vertical = 4.dp),
@@ -786,7 +787,7 @@ private fun MixerGainScopeSelector(
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Black,
                     modifier = Modifier
-                        .clip(skinShape(5.dp))
+                        .clip(softFillShape(5.dp))
                         .background(if (active) Accent.copy(alpha = 0.14f) else Color.Transparent)
                         .clickable { onScopeSelected(option) }
                         .padding(horizontal = 12.dp, vertical = 4.dp),

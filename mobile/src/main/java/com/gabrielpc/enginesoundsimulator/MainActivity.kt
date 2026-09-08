@@ -147,8 +147,11 @@ import com.gabrielpc.enginesoundsimulator.ui.theme.OnSurface
 import com.gabrielpc.enginesoundsimulator.ui.theme.Outline
 import com.gabrielpc.enginesoundsimulator.ui.theme.PanelShape
 import com.gabrielpc.enginesoundsimulator.ui.theme.RealPedalsAccent
+import com.gabrielpc.enginesoundsimulator.ui.theme.StatusFault
+import com.gabrielpc.enginesoundsimulator.ui.theme.StatusHealthy
 import com.gabrielpc.enginesoundsimulator.ui.theme.Success
 import com.gabrielpc.enginesoundsimulator.ui.theme.StadiumShape
+import com.gabrielpc.enginesoundsimulator.ui.theme.softFillShape
 import com.gabrielpc.enginesoundsimulator.ui.theme.hardwareShape
 import com.gabrielpc.enginesoundsimulator.ui.theme.skinPillShape
 import com.gabrielpc.enginesoundsimulator.ui.theme.skinShape
@@ -730,7 +733,7 @@ private fun DashboardHeader(
                         modifier = Modifier
                             .size(11.dp)
                             .clip(CircleShape)
-                            .background(if (state.engineSoundEnabled) Success else Danger),
+                            .background(if (state.engineSoundEnabled) StatusHealthy else StatusFault),
                     )
                 }
             }
@@ -877,7 +880,7 @@ private fun ManualShiftHeaderControl(
     Row(
         modifier = Modifier
             .height(52.dp)
-            .clip(skinShape(12.dp))
+            .clip(softFillShape(12.dp))
             .background(Surface)
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -925,7 +928,7 @@ private fun PedalsInputHeaderControl(
     Row(
         modifier = Modifier
             .height(52.dp)
-            .clip(skinShape(12.dp))
+            .clip(softFillShape(12.dp))
             .background(Surface)
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1036,7 +1039,7 @@ private fun HeaderIconButton(
 ) {
     Button(
         onClick = onClick,
-        shape = skinShape(12.dp),
+        shape = softFillShape(12.dp),
         colors = ButtonDefaults.buttonColors(containerColor = Surface, contentColor = accent),
         contentPadding = PaddingValues(0.dp),
         modifier = Modifier.size(52.dp),

@@ -53,6 +53,14 @@ data class DashboardSkin(
     val modeCaptionCalm: Color,
     /** Marks a control that scales all the others, such as the mixer's OVERALL gain. */
     val master: Color,
+    /**
+     * The lamp beside the header title, lit while the sound engine is running.
+     *
+     * Classic reads it as a status dot (green good, red bad). Audio Lab reads it as a real
+     * dashboard warning lamp instead: energised in the skin's red, and simply dark when dead.
+     */
+    val statusHealthy: Color,
+    val statusFault: Color,
     // Banners
     val errorBannerBody: Color,
     val infoBannerBody: Color,
@@ -115,6 +123,8 @@ val ClassicSkin = DashboardSkin(
     favorite = Color(0xFFFFD54F),
     modeCaptionCalm = Color(0xFF5FBAC7),
     master = Color(0xFFFFC456),
+    statusHealthy = Color(0xFF38E58C),
+    statusFault = Color(0xFFFF394F),
     errorBannerBody = Color(0xFF6E1018),
     infoBannerBody = Color(0xFF0B4545),
     hardwareGradient = listOf(Color(0xFF5B6670), Color(0xFF232D35), Color(0xFF11181E)),
@@ -164,6 +174,9 @@ val AudioLabSkin = DashboardSkin(
     favorite = Color(0xFFFFB020),
     modeCaptionCalm = Color(0xFF58D693),
     master = Color(0xFFE73632),
+    statusHealthy = Color(0xFFE73632),
+    // Unlit lamp: dark enough to read as black, light enough to still locate on the header.
+    statusFault = Color(0xFF12181D),
     errorBannerBody = Color(0xFF1D1113),
     infoBannerBody = Color(0xFF172129),
     hardwareGradient = listOf(Color(0xFF212A31), Color(0xFF151C22), Color(0xFF0F1418)),
@@ -269,6 +282,12 @@ internal val ErrorBannerBody: Color
 internal val InfoBannerBody: Color
     @Composable @ReadOnlyComposable get() = LocalDashboardSkin.current.infoBannerBody
 
+internal val StatusHealthy: Color
+    @Composable @ReadOnlyComposable get() = LocalDashboardSkin.current.statusHealthy
+
+internal val StatusFault: Color
+    @Composable @ReadOnlyComposable get() = LocalDashboardSkin.current.statusFault
+
 /**
  * Corner treatment for an element the Classic skin authored with [radius].
  *
@@ -293,6 +312,16 @@ internal fun skinShape(radius: Dp): Shape {
  * rounded corners even under a skin that squares off every panel.
  */
 internal fun hardwareShape(radius: Dp): Shape {
+    return RoundedCornerShape(radius)
+}
+
+/**
+ * Corner treatment for chips defined only by their fill, with no outline around them.
+ *
+ * Squaring off a bordered panel reads as a deliberate frame, but doing it to a bare block of flat
+ * color just reads as an unfinished rectangle, so these keep a soft corner under every skin.
+ */
+internal fun softFillShape(radius: Dp): Shape {
     return RoundedCornerShape(radius)
 }
 

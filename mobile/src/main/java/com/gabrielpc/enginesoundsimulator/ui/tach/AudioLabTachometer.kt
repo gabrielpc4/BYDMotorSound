@@ -97,7 +97,11 @@ fun AudioLabTachometer(
         val scale = AudioLabScale(
             dpPerUnit = min(
                 maxWidth.value / AudioLabDial.VIEWBOX_WIDTH,
-                maxHeight.value / (AudioLabDial.VIEWBOX_HEIGHT + AudioLabDial.SHIFT_ARRAY_HEIGHT),
+                maxHeight.value / (
+                    AudioLabDial.SHIFT_ARRAY_HEIGHT +
+                        AudioLabDial.VIEWBOX_HEIGHT +
+                        DigitalBarStyle.HEIGHT
+                    ),
             ),
         )
 
@@ -127,18 +131,15 @@ fun AudioLabTachometer(
                         drivetrain.automaticTransmissionMode == AutomaticTransmissionMode.CRUISING &&
                         drivetrain.gear > 1,
                 )
-
-                DigitalReadoutBar(
-                    drivetrain = drivetrain,
-                    transmissionPosition = transmissionPosition,
-                    manualShiftModeEnabled = manualShiftModeEnabled,
-                    showAutomaticTransmissionMode = showAutomaticTransmissionMode,
-                    scale = scale,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = scale.dp(AudioLabDial.VIEWBOX_HEIGHT * 0.035f)),
-                )
             }
+
+            DigitalReadoutBar(
+                drivetrain = drivetrain,
+                transmissionPosition = transmissionPosition,
+                manualShiftModeEnabled = manualShiftModeEnabled,
+                showAutomaticTransmissionMode = showAutomaticTransmissionMode,
+                scale = scale,
+            )
         }
     }
 }
@@ -152,7 +153,16 @@ fun AudioLabTachometer(
 private object AudioLabDial {
     const val VIEWBOX_WIDTH = 600f
     const val VIEWBOX_HEIGHT = 520f
-    const val SHIFT_ARRAY_HEIGHT = 50f
+
+    /**
+     * Exactly the lamp row plus its own padding, with no slack.
+     *
+     * The reference tool reserves more room here because its lamps sit under a page header; on the
+     * dashboard the row is the topmost element, so the leftover space just read as a dead gap.
+     */
+    const val SHIFT_ARRAY_HEIGHT = ShiftLightStyle.ROW_TOP_PADDING +
+        ShiftLightStyle.HEIGHT +
+        ShiftLightStyle.ROW_BOTTOM_PADDING
 
     const val CENTER_X = 300f
     const val CENTER_Y = 278f
@@ -506,7 +516,7 @@ private object ShiftLightStyle {
     const val OUTER_RADIUS = 9f
     const val LAMP_RADIUS = 6f
     const val LAMP_INSET = 3f
-    const val ROW_TOP_PADDING = 12f
+    const val ROW_TOP_PADDING = 4f
     const val ROW_BOTTOM_PADDING = 6f
 
     val border = Color(0xFF2D383F)

@@ -21,56 +21,41 @@ data class MixerGlobalGains(
     val shiftOverrideGain: Float = 1.0f,
 ) {
     fun normalized(): MixerGlobalGains = copy(
-        engineInterior = snap(engineInterior),
-        engineExterior = snap(engineExterior),
-        effectsHost = snap(effectsHost),
-        transmission = snap(transmission),
-        gearShift = snap(gearShift),
-        turbo = snap(turbo),
-        backfire = snap(backfire),
-        limiter = snap(limiter),
-        supercharger = snap(supercharger),
-        backfireOverrideGain = snap(backfireOverrideGain),
-        shiftOverrideGain = snap(shiftOverrideGain),
+        engineInterior = clamp(engineInterior),
+        engineExterior = clamp(engineExterior),
+        effectsHost = clamp(effectsHost),
+        transmission = clamp(transmission),
+        gearShift = clamp(gearShift),
+        turbo = clamp(turbo),
+        backfire = clamp(backfire),
+        limiter = clamp(limiter),
+        supercharger = clamp(supercharger),
+        backfireOverrideGain = clamp(backfireOverrideGain),
+        shiftOverrideGain = clamp(shiftOverrideGain),
     )
 
     companion object {
-        val STOPS = floatArrayOf(0f, 0.12f, 0.25f, 0.5f, 1f, 2f, 3f, 5f)
-
         const val MIN = 0f
         const val MAX = 5f
 
-        fun snap(value: Float): Float {
-            return STOPS.minByOrNull { abs(it - value) } ?: 1f
-        }
-
-        fun stopIndex(value: Float): Int {
-            return STOPS.indices.minByOrNull { abs(STOPS[it] - value) } ?: defaultStopIndex()
-        }
-
-        fun stopValue(index: Int): Float {
-            return STOPS[index.coerceIn(0, STOPS.lastIndex)]
+        fun clamp(value: Float): Float {
+            return value.coerceIn(MIN, MAX)
         }
 
         fun formatMultiplier(value: Float): String {
-            if (abs(value) < 0.001f) {
+            val clamped = clamp(value)
+
+            if (abs(clamped) < 0.001f) {
                 return "0x"
             }
 
-            val snapped = snap(value)
-            if (abs(value - snapped) < 0.001f) {
-                return when (snapped) {
-                    0.12f -> "0.12x"
-                    0.25f -> "0.25x"
-                    else -> String.format(Locale.US, "%.1fx", snapped)
-                }
+            val rounded = (clamped * 100f).roundToInt() / 100f
+
+            if (abs(rounded - rounded.roundToInt()) < 0.001f) {
+                return String.format(Locale.US, "%.0fx", rounded)
             }
 
-            return String.format(Locale.US, "%.1fx", value)
-        }
-
-        private fun defaultStopIndex(): Int {
-            return STOPS.indexOfFirst { it == 1f }.coerceAtLeast(0)
+            return String.format(Locale.US, "%.2fx", rounded)
         }
     }
 }

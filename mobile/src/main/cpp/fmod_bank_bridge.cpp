@@ -1132,6 +1132,15 @@ public:
         applyEventOverridesLocked();
     }
 
+    float masterOutputLevel() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!active_) {
+            return 0.0f;
+        }
+
+        return measureOutputLevelLocked();
+    }
+
     std::vector<std::string> voiceSnapshots() {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!active_) {
@@ -2635,11 +2644,76 @@ private:
     void collectVoiceSnapshotsLocked(std::unordered_map<std::string, VoiceAggregate>* aggregates) {
         for (auto& pair : slots_) {
             FMOD::ChannelGroup* root = nullptr;
+            if (pair.second->instance == nullptr) {
+                continue;
+            }
             if (pair.second->instance->getChannelGroup(&root) != FMOD_OK || root == nullptr) {
                 continue;
             }
             visitChannelGroupLocked(*pair.second, root, root, aggregates);
         }
+    }
+
+    static void accumulateChannelAudibilityLocked(FMOD::Channel* channel, float* totalAudibilitySquared) {
+        if (channel == nullptr || totalAudibilitySquared == nullptr) {
+            return;
+        }
+
+        float audibility = 0.0f;
+        if (channel->getAudibility(&audibility) != FMOD_OK) {
+            return;
+        }
+
+        *totalAudibilitySquared += audibility * audibility;
+    }
+
+    void accumulateAudibilitySquaredLocked(FMOD::ChannelGroup* group, float* totalAudibilitySquared) {
+        if (group == nullptr || totalAudibilitySquared == nullptr) {
+            return;
+        }
+
+        int channelCount = 0;
+        if (group->getNumChannels(&channelCount) == FMOD_OK) {
+            for (int index = 0; index < channelCount; ++index) {
+                FMOD::Channel* channel = nullptr;
+                if (group->getChannel(index, &channel) != FMOD_OK || channel == nullptr) {
+                    continue;
+                }
+                accumulateChannelAudibilityLocked(channel, totalAudibilitySquared);
+            }
+        }
+
+        int childCount = 0;
+        if (group->getNumGroups(&childCount) != FMOD_OK) {
+            return;
+        }
+
+        for (int index = 0; index < childCount; ++index) {
+            FMOD::ChannelGroup* child = nullptr;
+            if (group->getGroup(index, &child) == FMOD_OK && child != nullptr) {
+                accumulateAudibilitySquaredLocked(child, totalAudibilitySquared);
+            }
+        }
+    }
+
+    float measureOutputLevelLocked() {
+        float totalAudibilitySquared = 0.0f;
+        for (auto& pair : slots_) {
+            if (pair.second->instance == nullptr) {
+                continue;
+            }
+
+            FMOD::ChannelGroup* root = nullptr;
+            if (pair.second->instance->getChannelGroup(&root) != FMOD_OK || root == nullptr) {
+                continue;
+            }
+
+            accumulateAudibilitySquaredLocked(root, &totalAudibilitySquared);
+        }
+
+        accumulateChannelAudibilityLocked(alfaBackfireChannel_, &totalAudibilitySquared);
+        accumulateChannelAudibilityLocked(shiftChannel_, &totalAudibilitySquared);
+        return std::sqrt(totalAudibilitySquared);
     }
 
     void visitChannelGroupLocked(
@@ -3024,6 +3098,14 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_voiceSnapshot
     jobject
 ) {
     return toJavaStringArray(environment, runtime.voiceSnapshots());
+}
+
+extern "C" JNIEXPORT jfloat JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_masterOutputLevel(
+    JNIEnv*,
+    jobject
+) {
+    return runtime.masterOutputLevel();
 }
 
 extern "C" JNIEXPORT jobjectArray JNICALL

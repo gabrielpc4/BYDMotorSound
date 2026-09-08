@@ -11,6 +11,8 @@ internal object AppPreferenceStores {
     const val AUDIO_MIX_GAINS_LEGACY = "audio_mix_gains"
     const val MIXER_GLOBAL_GAINS = "mixer_global_gains_v1"
     const val MIXER_CAR_SPECIFIC_GAINS = "mixer_car_specific_gains_v2"
+    /** Last GLOBAL/SPECIFIC tab selected in the mixer panel. */
+    const val MIXER_GAIN_SCOPE = "mixer_gain_scope_v1"
     const val BACKFIRE_SETTINGS = "backfire_settings_v1"
     const val FMOD_UPDATE_RATE = "fmod_update_rate_v1"
     const val EXTERIOR_AUDIO_MODE = "exterior_audio_mode_v1"

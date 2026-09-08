@@ -64,7 +64,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -116,6 +118,7 @@ import com.gabrielpc.enginesoundsimulator.drive.UserVisibleMessage
 import com.gabrielpc.enginesoundsimulator.drive.UserVisibleMessageSeverity
 import com.gabrielpc.enginesoundsimulator.drive.InputMode
 import com.gabrielpc.enginesoundsimulator.drive.CruisingShiftOffsetByTachMaxRpm
+import com.gabrielpc.enginesoundsimulator.audio.MasterOutputLevel
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankProfiles
 import com.gabrielpc.enginesoundsimulator.audio.CarSubtitleCatalog
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankResolver
@@ -728,7 +731,38 @@ private fun DashboardHeader(
         mutableStateOf(MemoryHeaderLabels(usageLabel = "— MB", availableLabel = "— MB left"))
     }
     var cpuLabel by remember { mutableStateOf("—% CPU") }
+    var smoothedOutputLinear by remember { mutableFloatStateOf(0f) }
     val context = LocalContext.current
+
+    LaunchedEffect(state.selectedCarId, state.audioMuted, state.engineSoundEnabled) {
+        smoothedOutputLinear = 0f
+    }
+
+    val outputMeterActive = state.engineSoundEnabled &&
+        !state.audioMuted &&
+        state.carAudioReady
+
+    SideEffect {
+        if (!outputMeterActive) {
+            smoothedOutputLinear = 0f
+            return@SideEffect
+        }
+
+        val targetLinear = state.masterOutputLinear
+        val smoothing = if (targetLinear > smoothedOutputLinear) {
+            HEADER_OUTPUT_METER_ATTACK
+        } else {
+            HEADER_OUTPUT_METER_RELEASE
+        }
+
+        smoothedOutputLinear += (targetLinear - smoothedOutputLinear) * smoothing
+    }
+
+    val outputLevelLabel = if (outputMeterActive) {
+        MasterOutputLevel.formatLinear(smoothedOutputLinear)
+    } else {
+        "— dB"
+    }
 
     LaunchedEffect(uiMonitoringActive, Unit) {
         if (!uiMonitoringActive) {
@@ -846,6 +880,14 @@ private fun DashboardHeader(
                     letterSpacing = 0.4.sp,
                     lineHeight = 12.sp,
                 )
+                Text(
+                    text = outputLevelLabel,
+                    color = if (outputMeterActive) AccentSoft else Muted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.4.sp,
+                    lineHeight = 12.sp,
+                )
             }
             if (state.manualShiftModeEnabled) {
                 StatusTag("MANUAL", AccentSoft)
@@ -945,6 +987,8 @@ private const val HEADER_MEMORY_STARTUP_BURST_MS = 10_000L
 private const val HEADER_MEMORY_STARTUP_REFRESH_MS = 250L
 private const val HEADER_MEMORY_REFRESH_MS = 15_000L
 private const val HEADER_CPU_REFRESH_MS = 1_000L
+private const val HEADER_OUTPUT_METER_ATTACK = 0.35f
+private const val HEADER_OUTPUT_METER_RELEASE = 0.12f
 
 @Composable
 private fun ManualShiftHeaderControl(

@@ -46,6 +46,7 @@ class EngineAudioEngine(context: Context) {
     private val controlThread = AtomicReference<Thread?>(null)
     private val snapshotThread = AtomicReference<Thread?>(null)
     private val nativeSources = AtomicReference<List<FmodSourceState>>(emptyList())
+    private val masterOutputLinear = AtomicReference(0f)
     private val mixerDiagnosticsActive = AtomicBoolean(false)
     private val fmodUpdateRateHz = AtomicInteger(FmodUpdateRate.DEFAULT_HZ)
     private val limiterPulseSerial = AtomicLong(0L)
@@ -109,6 +110,8 @@ class EngineAudioEngine(context: Context) {
     }
 
     fun sourceSnapshots(): List<FmodSourceState> = nativeSources.get()
+
+    fun masterOutputLinear(): Float = masterOutputLinear.get()
 
     fun setFmodUpdateRateHz(rateHz: Int) {
         fmodUpdateRateHz.set(FmodUpdateRate.normalize(rateHz))
@@ -667,6 +670,8 @@ class EngineAudioEngine(context: Context) {
                     reportLoadFailure(profile.id, error)
                     return
                 }
+
+                masterOutputLinear.set(bridge.masterOutputLevel().coerceAtLeast(0f))
             }
         } catch (throwable: Throwable) {
             Log.e(TAG, "FMOD bank control stopped for ${profile.id}", throwable)
@@ -679,6 +684,7 @@ class EngineAudioEngine(context: Context) {
                 engineSampleDataReady.set(false)
                 stopSnapshotThread()
                 nativeSources.set(emptyList())
+                masterOutputLinear.set(0f)
             }
             if (opened) bridge.close()
             if (fmodInitialized) runCatching { org.fmod.FMOD.close() }

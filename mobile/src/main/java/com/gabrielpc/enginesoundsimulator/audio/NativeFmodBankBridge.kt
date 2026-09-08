@@ -53,6 +53,9 @@ internal class NativeFmodBankBridge {
     /** Immutable source rows captured from FMOD's actual event/channel hierarchy. */
     external fun voiceSnapshots(): Array<String>
 
+    /** RMS-like final mix level from FMOD channel audibility (0 = silence). */
+    external fun masterOutputLevel(): Float
+
     /** Debug-only data is retained natively and drained at snapshot cadence, never via Logcat. */
     external fun diagnosticRecords(): Array<String>
 

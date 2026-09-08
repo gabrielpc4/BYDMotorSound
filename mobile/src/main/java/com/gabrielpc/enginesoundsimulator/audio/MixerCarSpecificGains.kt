@@ -17,16 +17,16 @@ data class MixerCarSpecificGains(
     val supercharger: Float = 1.0f,
 ) {
     fun normalized(): MixerCarSpecificGains = copy(
-        overall = MixerGlobalGains.snap(overall),
-        engineInterior = MixerGlobalGains.snap(engineInterior),
-        engineExterior = MixerGlobalGains.snap(engineExterior),
-        effectsHost = MixerGlobalGains.snap(effectsHost),
-        transmission = MixerGlobalGains.snap(transmission),
-        gearShift = MixerGlobalGains.snap(gearShift),
-        turbo = MixerGlobalGains.snap(turbo),
-        backfire = MixerGlobalGains.snap(backfire),
-        limiter = MixerGlobalGains.snap(limiter),
-        supercharger = MixerGlobalGains.snap(supercharger),
+        overall = MixerGlobalGains.clamp(overall),
+        engineInterior = MixerGlobalGains.clamp(engineInterior),
+        engineExterior = MixerGlobalGains.clamp(engineExterior),
+        effectsHost = MixerGlobalGains.clamp(effectsHost),
+        transmission = MixerGlobalGains.clamp(transmission),
+        gearShift = MixerGlobalGains.clamp(gearShift),
+        turbo = MixerGlobalGains.clamp(turbo),
+        backfire = MixerGlobalGains.clamp(backfire),
+        limiter = MixerGlobalGains.clamp(limiter),
+        supercharger = MixerGlobalGains.clamp(supercharger),
     )
 }
 

@@ -111,6 +111,8 @@ import com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective
 import com.gabrielpc.enginesoundsimulator.audio.FmodEventSection
 import com.gabrielpc.enginesoundsimulator.audio.MixerCarSpecificGains
 import com.gabrielpc.enginesoundsimulator.audio.MixerEventCategory
+import com.gabrielpc.enginesoundsimulator.audio.MixerGainScope
+import com.gabrielpc.enginesoundsimulator.audio.MixerGainScopeRepository
 import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains
 import com.gabrielpc.enginesoundsimulator.audio.FmodSourceState
 import com.gabrielpc.enginesoundsimulator.audio.FmodUpdateRate
@@ -180,12 +182,6 @@ internal const val MIXER_SCREEN_HORIZONTAL_PADDING = 20
 
 /** Reserve scroll space so mixer sliders can scroll clear of the floating pedals row. */
 private val MIXER_PEDALS_OVERLAY_HEIGHT = 240.dp
-
-/** Which mixer layer the category sliders edit in the mixer panel. */
-private enum class MixerGainScope(val displayName: String) {
-    GLOBAL("GLOBAL"),
-    SPECIFIC("SPECIFIC"),
-}
 
 @Composable
 internal fun MixerDashboardScreen(
@@ -494,7 +490,13 @@ private fun MixerControlsPanel(
     onMixerSpecificGainsChange: (MixerCarSpecificGains) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var gainScope by remember { mutableStateOf(MixerGainScope.SPECIFIC) }
+    val context = LocalContext.current
+    val gainScopeRepository = remember(context) {
+        MixerGainScopeRepository(context.applicationContext)
+    }
+    var gainScope by remember {
+        mutableStateOf(gainScopeRepository.load())
+    }
     val cardShape = skinShape(8.dp)
     val cardModifier = modifier
         .fillMaxHeight()
@@ -522,7 +524,10 @@ private fun MixerControlsPanel(
             MixerGainScopeSelector(
                 scope = gainScope,
                 listeningPerspective = soundPerspective,
-                onScopeSelected = { gainScope = it },
+                onScopeSelected = { selected ->
+                    gainScope = selected
+                    gainScopeRepository.save(selected)
+                },
             )
             if (gainScope == MixerGainScope.SPECIFIC) {
                 MixerLayerGainSlider(
@@ -823,16 +828,12 @@ private fun MixerLayerGainSlider(
     onToggleCategorySolo: (MixerEventCategory, Boolean) -> Unit = { _, _ -> },
     onValueChange: (Float) -> Unit,
 ) {
-    val snappedLayerValue = MixerGlobalGains.snap(layerValue)
+    val clampedLayerValue = MixerGlobalGains.clamp(layerValue)
     val effectiveValue = globalValue * specificValue * overall
-    val stopIndex = MixerGlobalGains.stopIndex(snappedLayerValue).toFloat()
-    val lastStopIndex = (MixerGlobalGains.STOPS.size - 1).toFloat()
     val sliderColors = SliderDefaults.colors(
         thumbColor = accentColor,
         activeTrackColor = accentColor,
         inactiveTrackColor = Outline,
-        activeTickColor = accentColor.copy(alpha = 0.55f),
-        inactiveTickColor = Outline.copy(alpha = 0.85f),
     )
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -876,20 +877,18 @@ private fun MixerLayerGainSlider(
                 }
             }
             Text(
-                text = "${MixerGlobalGains.formatMultiplier(snappedLayerValue)} → ${MixerGlobalGains.formatMultiplier(effectiveValue)}",
+                text = "${MixerGlobalGains.formatMultiplier(clampedLayerValue)} → ${MixerGlobalGains.formatMultiplier(effectiveValue)}",
                 color = if (accentColor == Warning) Warning else OnSurface,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
             )
         }
         Slider(
-            value = stopIndex,
-            onValueChange = { rawIndex ->
-                val index = rawIndex.roundToInt().coerceIn(0, MixerGlobalGains.STOPS.lastIndex)
-                onValueChange(MixerGlobalGains.stopValue(index))
+            value = clampedLayerValue,
+            onValueChange = { value ->
+                onValueChange(MixerGlobalGains.clamp(value))
             },
-            valueRange = 0f..lastStopIndex,
-            steps = MixerGlobalGains.STOPS.size - 2,
+            valueRange = MixerGlobalGains.MIN..MixerGlobalGains.MAX,
             colors = sliderColors,
             modifier = Modifier.fillMaxWidth(),
         )

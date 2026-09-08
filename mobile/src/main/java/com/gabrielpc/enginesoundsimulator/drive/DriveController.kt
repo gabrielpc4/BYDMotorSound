@@ -85,6 +85,8 @@ data class DriveSnapshot(
     val selectedCarIndex: Int,
     val availableCarCount: Int,
     val fmodSources: List<FmodSourceState> = emptyList(),
+    /** Final FMOD mix level used for the dashboard output meter (linear 0..1). */
+    val masterOutputLinear: Float = 0f,
     /** Host-level engine trim applied before category routing. */
     val shiftOverrideGain: Float = 1.0f,
     val backfireOverrideGain: Float = 1.0f,
@@ -266,6 +268,11 @@ class DriveController(context: Context) {
                 audioEngine.sourceSnapshots()
             } else {
                 emptyList()
+            },
+            masterOutputLinear = if (audioEngine.isAudioActive() && !audioMuted.get()) {
+                audioEngine.masterOutputLinear()
+            } else {
+                0f
             },
             selectedCarId = selected.id,
             selectedCarName = selected.displayName,
@@ -1384,6 +1391,11 @@ class DriveController(context: Context) {
                     automaticTransmissionSettings.get().tachometerCruisingShiftRangeOverlayEnabled,
                 transmissionLockedToVehicle = transmission.lockedToVehicle,
                 carAudioReady = isSelectedCarAudioReady(selected.id),
+                masterOutputLinear = if (audioEngine.isAudioActive() && !audioMuted.get()) {
+                    audioEngine.masterOutputLinear()
+                } else {
+                    0f
+                },
                 favoriteCarIds = favoriteCarIds.get(),
                 userMessage = userMessage,
             )

@@ -583,7 +583,9 @@ internal class AssettoDrivetrain(
             )
             driveForce = clutchTorqueApplied * ratio / driven.radius
             engineOmega += (engine.torque - clutchTorqueApplied) / engineInertia * dt
-        } else {
+        } else if (!cruisingReturn.active) {
+            // Cruising return owns the needle while active. Free-rev torque integration would
+            // outrun the glide rate when the driver keeps a light foot on the pedal.
             engineOmega += engine.torque / physics.engine.inertia.coerceAtLeast(0.001) * dt
         }
 

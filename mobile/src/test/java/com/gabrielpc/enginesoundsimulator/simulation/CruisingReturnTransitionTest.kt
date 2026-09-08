@@ -294,6 +294,41 @@ class CruisingReturnTransitionTest {
         assertTrue(afterStart.rpm - afterRestart.rpm > 20.0)
     }
 
+    @Test
+    fun secondGearLightThrottleDoesNotClimbWhileChaseTargetRises() {
+        val transition = CruisingReturnTransition()
+        var externalRpm = 6_026.0
+        var speed = 91.5
+        transition.begin(
+            currentRpm = externalRpm,
+            currentGear = 2,
+            computedTargetGear = 5,
+            initialLiveTargetRpm = 4_138.0,
+        )
+
+        val history = mutableListOf<Double>()
+        repeat(120) {
+            speed += 0.15
+            val liveTarget = 4_138.0 + (speed - 91.5) * 8.0
+            // Simulates free-rev physics fighting the glide when throttle stays on.
+            externalRpm += 60.0
+            val step = transition.step(
+                dt = DT,
+                currentRpm = externalRpm,
+                currentGear = 2,
+                shifting = false,
+                liveTargetRpm = liveTarget,
+                computedTargetGear = 5,
+                nextGearCoupledRpm = 5_964.0,
+            )
+            history.add(step.rpm)
+        }
+
+        assertTrue(history.first() < 6_026.0)
+        assertFalse(climbedWhileAboveTarget(history, startRpm = 6_026.0))
+        assertTrue(history.last() < 5_000.0)
+    }
+
     private fun climbedWhileAboveTarget(history: List<Double>, startRpm: Double): Boolean {
         history.zipWithNext().forEach { (previous, next) ->
             if (previous > CRUISING_UPSHIFT_RPM + 200.0 && next > previous + 8.0) {

@@ -1345,7 +1345,7 @@ private fun AutomaticTransmissionSettingsControl(
                     )
                 }
                 Text(
-                    text = "After braking in racing mode, the next acceleration decides the mode: at or below this pedal level returns to cruising; above it stays in racing.",
+                    text = "After braking or a full throttle lift-off in racing mode, the next acceleration decides the mode: at or below this pedal level returns to cruising; above it stays in racing.",
                     color = Muted,
                     fontSize = 12.sp,
                     lineHeight = 16.sp,
@@ -1388,7 +1388,7 @@ private fun AutomaticTransmissionSettingsControl(
             )
         }
         Text(
-            text = "Manual mode returns to automatic racing after staying at or above redline for this long. Braking in racing mode then uses the return throttle above to decide cruising on the next acceleration.",
+            text = "Manual mode returns to automatic racing after staying at or above redline for this long. Braking or a full throttle lift-off in racing mode then uses the return throttle above to decide cruising on the next acceleration.",
             color = Muted,
             fontSize = 12.sp,
             lineHeight = 16.sp,

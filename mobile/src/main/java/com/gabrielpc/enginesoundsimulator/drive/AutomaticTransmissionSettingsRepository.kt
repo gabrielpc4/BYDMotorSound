@@ -4,7 +4,7 @@ import android.content.Context
 import com.gabrielpc.enginesoundsimulator.AppPreferenceStores
 import kotlin.math.roundToInt
 
-/** Light-acceleration threshold used after braking in racing mode to return to cruising. */
+/** Light-acceleration threshold used after arming a racing return to enter cruising on the next pedal input. */
 internal object RacingReturnThrottlePercent {
     const val MIN = 20
     const val MAX = 80

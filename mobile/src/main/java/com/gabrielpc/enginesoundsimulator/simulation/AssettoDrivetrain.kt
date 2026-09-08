@@ -1359,6 +1359,10 @@ internal class AssettoDrivetrain(
                 racingReturnArmed = true
             }
 
+            if (rawGas <= AutomaticTransmissionPolicy.RACING_RETURN_ARM_MAX_THROTTLE) {
+                racingReturnArmed = true
+            }
+
             if (racingReturnArmed && rawGas > 0.0) {
                 if (rawGas > racingReturnMaxThrottle) {
                     racingReturnArmed = false

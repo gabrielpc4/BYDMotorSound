@@ -8,10 +8,8 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 
 /**
- * Legacy local bridge retained only for already-installed companion packages.
- *
- * New vehicle deliveries use the dashboard's file-manager staging importer instead, so this
- * provider is not part of the supported on-car installation path.
+ * Write-only bridge used by the companion bank-installer APKs. Each archive is validated and
+ * published into the dashboard private store at `files/fmod-banks/`.
  */
 class FmodBankContentProvider : ContentProvider() {
     private lateinit var store: FmodBankStore

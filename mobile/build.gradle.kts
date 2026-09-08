@@ -59,35 +59,6 @@ val fmodSdkDirectory = file(
         ?: throw GradleException("Set fmod.sdk.dir to the local FMOD Android SDK directory."),
 )
 val generatedFmodSdk = file("build/generated/fmodSdk")
-val bankDeliveryOverride = providers.gradleProperty("bankDelivery")
-val fullReleaseBuild = providers.gradleProperty("full").orNull?.let { value ->
-    value.isEmpty() || value.equals("true", ignoreCase = true)
-} == true
-val embedBanksInApk: Boolean = run {
-    bankDeliveryOverride.orNull?.let { override ->
-        require(override in setOf("embedded", "external")) {
-            "bankDelivery must be embedded or external"
-        }
-        return@run override == "embedded"
-    }
-    if (fullReleaseBuild) {
-        return@run true
-    }
-    // Debug and default release builds assume banks are already on the head unit.
-    false
-}
-val embeddedAssetTasks = listOf("original", "modded").associateWith { group ->
-    tasks.register<Exec>("prepare${group.replaceFirstChar(Char::uppercase)}EmbeddedBanks") {
-        val output = file("build/generated/embeddedBanks/$group")
-        inputs.dir(rootProject.file("fmod_bank_packs"))
-        inputs.file(rootProject.file("tools/prepare_embedded_car_assets.py"))
-        inputs.file(file("src/main/java/com/gabrielpc/enginesoundsimulator/audio/FmodBankProfile.kt"))
-        outputs.dir(output)
-        commandLine("python3", rootProject.file("tools/prepare_embedded_car_assets.py"),
-            "--group", group, "--output", output)
-    }
-}
-
 
 val prepareFmodSdk = tasks.register<Sync>("prepareFmodSdk") {
     require(fmodSdkDirectory.isDirectory) { "FMOD Android SDK directory does not exist: $fmodSdkDirectory" }
@@ -224,22 +195,6 @@ android {
         create("separate") {
             dimension = "catalog"
             buildConfigField("String", "CAR_CATALOG_GROUP", "\"\"")
-            buildConfigField("boolean", "EMBEDDED_BANKS", "false")
-        }
-        listOf("original" to "original_cars_pack", "modded" to "modded_car_packs").forEach { (name, group) ->
-            create(name) {
-                dimension = "catalog"
-                applicationIdSuffix = ".$name"
-                resValue("string", "app_name", "${name.replaceFirstChar(Char::uppercase)} Cars • Engine Sounds")
-                buildConfigField("String", "CAR_CATALOG_GROUP", "\"$group\"")
-            }
-        }
-    }
-    if (embedBanksInApk) {
-        listOf("original", "modded").forEach { group ->
-            sourceSets.getByName(group).assets.srcDir(
-                files(file("build/generated/embeddedBanks/$group")).builtBy(embeddedAssetTasks.getValue(group)),
-            )
         }
     }
 
@@ -298,36 +253,9 @@ tasks.configureEach {
 
 androidComponents {
     onVariants(selector().all()) { variant ->
-        if (variant.flavorName == "original" || variant.flavorName == "modded") {
-            val embeddedBanks = when (bankDeliveryOverride.orNull) {
-                "embedded" -> true
-                "external" -> false
-                else -> fullReleaseBuild
-            }
-            variant.buildConfigFields?.put(
-                "EMBEDDED_BANKS",
-                com.android.build.api.variant.BuildConfigField(
-                    "boolean",
-                    embeddedBanks.toString(),
-                    "Whether car banks ship inside this APK",
-                ),
-            )
-        }
         variant.outputs.forEach { output ->
-            val fullSuffix = if (
-                (variant.flavorName == "original" || variant.flavorName == "modded") &&
-                when (bankDeliveryOverride.orNull) {
-                    "embedded" -> true
-                    "external" -> false
-                    else -> fullReleaseBuild
-                }
-            ) {
-                "-full"
-            } else {
-                ""
-            }
             output.outputFileName.set(
-                "engine-sounds-simulator-build-$stampedBuildNumber-${variant.name}$fullSuffix.apk",
+                "engine-sounds-simulator-build-$stampedBuildNumber-${variant.name}.apk",
             )
         }
     }

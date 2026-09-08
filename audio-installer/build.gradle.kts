@@ -2,53 +2,27 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
-import groovy.json.JsonSlurper
-import org.gradle.api.tasks.Sync
+import org.gradle.api.tasks.Exec
 
 val generatedModdedPackAssets = file("build/generated/packAssets/modded")
 val generatedOriginalPackAssets = file("build/generated/packAssets/original")
 val fmodBankPacks = rootProject.file("fmod_bank_packs")
-val prepareModdedPackAssets = tasks.register<Sync>("prepareModdedPackAssets") {
-    from(fmodBankPacks) {
-        include("modded-*.bydbank", "assetto-common*.bydbank", "index.json")
-        into("packs")
-    }
-    into(generatedModdedPackAssets)
-}
-val prepareOriginalPackAssets = tasks.register("prepareOriginalPackAssets") {
-    val output = generatedOriginalPackAssets
-    inputs.dir(fmodBankPacks)
-    outputs.dir(output)
-    doLast {
-        val indexFile = fmodBankPacks.resolve("index.json")
-        require(indexFile.isFile) {
-            "Missing $indexFile. Run python3 tools/build_fmod_bank_packs.py first."
-        }
-        @Suppress("UNCHECKED_CAST")
-        val index = JsonSlurper().parse(indexFile) as Map<String, Any>
-        @Suppress("UNCHECKED_CAST")
-        val packs = index["packs"] as List<Map<String, Any>>
-        val selected = packs.filter { pack ->
-            val active = pack["active"] as Boolean
-            val group = pack["group"] as String
-            val dependency = pack["dependency"] as? Boolean ?: false
-            active && (group == "original_cars_pack" || dependency)
-        }
-        val destination = output.resolve("packs")
-        if (destination.exists()) {
-            destination.deleteRecursively()
-        }
-        destination.mkdirs()
-        indexFile.copyTo(destination.resolve("index.json"), overwrite = true)
-        selected.forEach { pack ->
-            val asset = pack["asset"] as String
-            val source = fmodBankPacks.resolve(asset)
-            require(source.isFile) { "Missing original bank archive: $source" }
-            source.copyTo(destination.resolve(asset), overwrite = true)
-        }
+val prepareInstallerAssetsScript = rootProject.file("tools/prepare_installer_pack_assets.py")
+listOf("original", "modded").forEach { group ->
+    tasks.register<Exec>("prepare${group.replaceFirstChar(Char::uppercase)}PackAssets") {
+        val output = file("build/generated/packAssets/$group")
+        inputs.dir(fmodBankPacks)
+        inputs.file(prepareInstallerAssetsScript)
+        outputs.dir(output)
+        commandLine("python3", prepareInstallerAssetsScript, "--group", group, "--output", output)
     }
 }
-tasks.named("preBuild").configure { dependsOn(prepareModdedPackAssets, prepareOriginalPackAssets) }
+tasks.named("preBuild").configure {
+    dependsOn(
+        tasks.named("prepareOriginalPackAssets"),
+        tasks.named("prepareModdedPackAssets"),
+    )
+}
 
 
 android {

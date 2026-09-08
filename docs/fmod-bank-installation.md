@@ -2,8 +2,9 @@
 
 ## Unified dashboard
 
-The product app is the `separate` variant. It exposes both catalogs and switches them in the car
-picker. Banks do not ship inside this APK.
+The product dashboard is `com.gabrielpc.enginesoundsimulator`. It exposes both catalogs and
+switches them in the car picker. Banks arrive from two companion installer APKs that write
+through the dashboard Content Provider into `files/fmod-banks/`, or from file-manager import.
 
 | Piece | Application ID | Role |
 | --- | --- | --- |
@@ -26,9 +27,7 @@ Install the dashboard first. Each installer streams its `.bydbank` archives thro
 `content://com.gabrielpc.enginesoundsimulator.fmodbanks`
 
 into the dashboard's private store (`files/fmod-banks/`). That is the same checksum and atomic
-rename path as file-manager import. A later dashboard update keeps those files. The standalone
-`.original` / `.modded` dashboard flavors are not this path: their Content Provider authorities
-do not match the installers.
+rename path as file-manager import. A later dashboard update keeps those files.
 
 The picker shows every car whose pack and both shared dependencies are already published.
 Shared banks are dependencies and never appear as cars.

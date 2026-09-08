@@ -173,8 +173,19 @@ internal class FmodBankStore(
         }
     }
 
+    /**
+     * Publishes an APK-embedded pack through [install], the same checksum and rename path used
+     * by file-manager import. Returns true when a new package was written.
+     */
     @Synchronized
-    fun prepareEmbeddedPack(group: String, packId: String, assets: AssetManager, assetRoot: String) {
+    fun prepareEmbeddedPack(assets: AssetManager, assetRoot: String): Boolean {
+        val expected = assets.open("$assetRoot/$MANIFEST_NAME").use(::readManifest)
+
+        return prepareEmbeddedPack(expected.group, expected.id, assets, assetRoot)
+    }
+
+    @Synchronized
+    fun prepareEmbeddedPack(group: String, packId: String, assets: AssetManager, assetRoot: String): Boolean {
         val expected = assets.open("$assetRoot/$MANIFEST_NAME").use(::readManifest)
         require(expected.group == group && expected.id == packId) { "Embedded bank identity mismatch" }
         val directory = installedDirectory(group, packId)
@@ -183,9 +194,13 @@ internal class FmodBankStore(
                 expected.files.all { safeDestination(directory, it.path).length() == it.bytes }
         }.getOrDefault(false)
 
-        if (!matches) {
-            assets.open("$assetRoot/payload.bydbank").use { install(group, packId, it) }
+        if (matches) {
+            return false
         }
+
+        assets.open("$assetRoot/payload.bydbank").use { install(group, packId, it) }
+
+        return true
     }
 
     @Synchronized
@@ -371,23 +386,65 @@ internal class FmodBankResolver(context: Context) {
         stagedImportDirectory = appContext.getExternalFilesDir(null)?.resolve(STAGED_IMPORT_DIRECTORY_NAME),
     )
 
-    private val embedded = if (BuildConfig.EMBEDDED_BANKS) EmbeddedFmodBanks(appContext) else null
+    /**
+     * Older full APKs extracted into this cache. Update builds may still read it, but new
+     * full installs publish into [store] so the catalog survives an APK overwrite.
+     */
+    private val legacyEmbeddedCache = FmodBankStore(
+        filesDirectory = appContext.noBackupFilesDir.resolve("embedded-audio"),
+    )
+
+    private val embedded = if (BuildConfig.EMBEDDED_BANKS) {
+        EmbeddedFmodBanks(appContext, store)
+    } else {
+        null
+    }
+
+    private fun isAvailableInStore(candidate: FmodBankStore, profile: FmodBankProfile): Boolean {
+        return runCatching {
+            candidate.bankFile(profile)
+            candidate.sharedBankFile(FmodBankProfiles.commonStringsPackId)
+            candidate.sharedBankFile(FmodBankProfiles.commonPackId)
+            candidate.physicsFile(profile)
+        }.isSuccess
+    }
+
+    private fun bankStore(profile: FmodBankProfile): FmodBankStore {
+        if (isAvailableInStore(store, profile)) {
+            return store
+        }
+
+        if (isAvailableInStore(legacyEmbeddedCache, profile)) {
+            return legacyEmbeddedCache
+        }
+
+        return store
+    }
 
     fun importStagedPacks(): FmodBankImportResult = if (embedded == null) {
         store.importStagedPacks()
-    } else FmodBankImportResult(0, 0, emptyList())
+    } else {
+        FmodBankImportResult(0, 0, emptyList())
+    }
 
     fun hasStagedPacks(): Boolean = embedded == null && store.hasStagedPacks()
+
+    fun installEmbeddedPacks(): FmodBankImportResult {
+        return embedded?.installAllPacks() ?: FmodBankImportResult(0, 0, emptyList())
+    }
 
     fun bankFiles(profile: FmodBankProfile): FmodBankFiles {
         require(profile in FmodBankProfiles.all) { "Car is outside this app catalog" }
 
-        return embedded?.bankFiles(profile) ?: FmodBankFiles(
-            commonStrings = store.sharedBankFile(FmodBankProfiles.commonStringsPackId),
-            common = store.sharedBankFile(FmodBankProfiles.commonPackId),
-            car = store.bankFile(profile),
-            physics = store.physicsFile(profile),
-        )
+        return embedded?.bankFiles(profile) ?: run {
+            val resolved = bankStore(profile)
+            FmodBankFiles(
+                commonStrings = resolved.sharedBankFile(FmodBankProfiles.commonStringsPackId),
+                common = resolved.sharedBankFile(FmodBankProfiles.commonPackId),
+                car = resolved.bankFile(profile),
+                physics = resolved.physicsFile(profile),
+            )
+        }
     }
 
     /**
@@ -396,25 +453,38 @@ internal class FmodBankResolver(context: Context) {
      * valid `physics.json` here would make the selected bank run with unrelated drivetrain data.
      */
     fun isInstalled(profile: FmodBankProfile): Boolean {
-        if (profile !in FmodBankProfiles.all) return false
+        if (profile !in FmodBankProfiles.all) {
+            return false
+        }
+
         embedded?.let { return it.contains(profile) }
 
         return runCatching {
-            store.bankFile(profile)
-            store.sharedBankFile(FmodBankProfiles.commonStringsPackId)
-            store.sharedBankFile(FmodBankProfiles.commonPackId)
+            val resolved = bankStore(profile)
+            resolved.bankFile(profile)
+            resolved.sharedBankFile(FmodBankProfiles.commonStringsPackId)
+            resolved.sharedBankFile(FmodBankProfiles.commonPackId)
             physics(profile)
         }.isSuccess
     }
 
     fun physics(profile: FmodBankProfile): AssettoPhysics =
-        (embedded?.physics(profile) ?: AssettoPhysicsLoader.load(store.physicsFile(profile))).also { physics ->
+        (
+            embedded?.physics(profile)
+                ?: AssettoPhysicsLoader.load(bankStore(profile).physicsFile(profile))
+            ).also { physics ->
             require(physics.profileId == profile.id) {
                 "Installed ${profile.displayName} package has physics for ${physics.profileId}, not ${profile.id}."
             }
         }
 
-    fun previewFile(profile: FmodBankProfile): File? = if (embedded == null) store.previewFile(profile) else null
+    fun previewFile(profile: FmodBankProfile): File? {
+        if (embedded != null) {
+            return null
+        }
+
+        return bankStore(profile).previewFile(profile)
+    }
 
     /** Installed bank previews win. Only official cars may fall back to APK-bundled artwork. */
     fun openCarPreviewInput(profile: FmodBankProfile): InputStream? {

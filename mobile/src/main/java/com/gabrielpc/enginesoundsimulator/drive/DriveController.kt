@@ -174,6 +174,7 @@ class DriveController(context: Context) {
     private val uiActive = AtomicBoolean(false)
     private val audioInterrupted = AtomicBoolean(false)
     private val stagedBankImportRunning = AtomicBoolean(false)
+    private val embeddedBankInstallRunning = AtomicBoolean(false)
     private val audioMuted = AtomicBoolean(false)
     // Deliberately session-only: this diagnostic/listening mode must never become a car preference.
     private val backfireSettings = AtomicReference(BackfireSettings())
@@ -302,6 +303,7 @@ class DriveController(context: Context) {
                 // copy packs through the file manager in that interval, then reopen the app; do
                 // not require a process restart before the staged files can be discovered.
                 if (bankResolver.hasStagedPacks()) importStagedBankPacksAsync()
+                if (BuildConfig.EMBEDDED_BANKS) publishEmbeddedBanksAsync()
                 return
             }
             refreshInstalledProfileCache()
@@ -323,6 +325,7 @@ class DriveController(context: Context) {
                 mediaShiftButtonCoordinator.start()
                 thread.start()
                 if (stagedPacksPending) importStagedBankPacksAsync()
+                if (BuildConfig.EMBEDDED_BANKS) publishEmbeddedBanksAsync()
             } catch (error: Throwable) {
                 running.set(false)
                 generation.incrementAndGet()
@@ -1065,7 +1068,11 @@ class DriveController(context: Context) {
         } else userMessage = UserVisibleMessage(
             id = SystemClock.elapsedRealtime(),
             title = if (BuildConfig.EMBEDDED_BANKS) "Bundled car audio is unavailable" else "Car audio is not installed",
-            detail = if (BuildConfig.EMBEDDED_BANKS) "Reinstall this app to restore its bundled car data." else "Copy its bank package to Internal storage/Android/data/${appContext.packageName}/files/fmod-bank-import/, then reopen the app.",
+            detail = if (BuildConfig.EMBEDDED_BANKS) {
+                "Reinstall this app to restore its bundled car data."
+            } else {
+                "Install a full APK once so banks stay in this app, or copy its bank package to Internal storage/Android/data/${appContext.packageName}/files/fmod-bank-import/ and reopen."
+            },
         )
     }
 
@@ -1118,6 +1125,62 @@ class DriveController(context: Context) {
                 }
                 result.failures.firstOrNull()?.let { failure ->
                     append(". First error: $failure")
+                }
+            },
+            severity = if (result.failures.isEmpty()) {
+                UserVisibleMessageSeverity.INFO
+            } else {
+                UserVisibleMessageSeverity.ERROR
+            },
+        )
+    }
+
+    /**
+     * A full APK publishes every bundled pack into the same private store that update APKs
+     * read. The selected car is extracted first on the audio path; this background pass
+     * finishes the rest of the catalog without using the companion Content Provider.
+     */
+    private fun publishEmbeddedBanksAsync() {
+        if (!embeddedBankInstallRunning.compareAndSet(false, true)) {
+            return
+        }
+
+        Thread({
+            val result = bankResolver.installEmbeddedPacks()
+            synchronized(lifecycleLock) {
+                embeddedBankInstallRunning.set(false)
+                if (!running.get()) {
+                    return@synchronized
+                }
+                completeEmbeddedBankInstall(result)
+            }
+        }, "fmod-embedded-bank-install").apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    private fun completeEmbeddedBankInstall(result: FmodBankImportResult) {
+        if (result.importedPackCount == 0 && result.failures.isEmpty()) {
+            return
+        }
+
+        refreshInstalledProfileCache()
+        userMessage = UserVisibleMessage(
+            id = SystemClock.elapsedRealtime(),
+            title = if (result.failures.isEmpty()) {
+                "Bundled car audio is installed"
+            } else {
+                "Bundled car audio needs attention"
+            },
+            detail = buildString {
+                append("Installed ${result.importedPackCount} package(s) into this app")
+                if (result.alreadyInstalledPackCount > 0) {
+                    append("; ${result.alreadyInstalledPackCount} already matched")
+                }
+                append(". A smaller update APK can keep using them.")
+                result.failures.firstOrNull()?.let { failure ->
+                    append(" First error: $failure")
                 }
             },
             severity = if (result.failures.isEmpty()) {

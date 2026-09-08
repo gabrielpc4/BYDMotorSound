@@ -60,16 +60,21 @@ val fmodSdkDirectory = file(
 )
 val generatedFmodSdk = file("build/generated/fmodSdk")
 val bankDeliveryOverride = providers.gradleProperty("bankDelivery")
+val fullReleaseBuild = providers.gradleProperty("full").orNull?.let { value ->
+    value.isEmpty() || value.equals("true", ignoreCase = true)
+} == true
 val embedBanksInApk: Boolean = run {
-    val override = bankDeliveryOverride.orNull
-    if (override != null) {
+    bankDeliveryOverride.orNull?.let { override ->
         require(override in setOf("embedded", "external")) {
             "bankDelivery must be embedded or external"
         }
         return@run override == "embedded"
     }
-    // Debug builds stay lean for iteration; release APKs keep bundled banks for pendrive installs.
-    gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+    if (fullReleaseBuild) {
+        return@run true
+    }
+    // Debug and default release builds assume banks are already on the head unit.
+    false
 }
 val embeddedAssetTasks = listOf("original", "modded").associateWith { group ->
     tasks.register<Exec>("prepare${group.replaceFirstChar(Char::uppercase)}EmbeddedBanks") {
@@ -297,7 +302,7 @@ androidComponents {
             val embeddedBanks = when (bankDeliveryOverride.orNull) {
                 "embedded" -> true
                 "external" -> false
-                else -> variant.buildType == "release"
+                else -> fullReleaseBuild
             }
             variant.buildConfigFields?.put(
                 "EMBEDDED_BANKS",
@@ -309,8 +314,20 @@ androidComponents {
             )
         }
         variant.outputs.forEach { output ->
+            val fullSuffix = if (
+                (variant.flavorName == "original" || variant.flavorName == "modded") &&
+                when (bankDeliveryOverride.orNull) {
+                    "embedded" -> true
+                    "external" -> false
+                    else -> fullReleaseBuild
+                }
+            ) {
+                "-full"
+            } else {
+                ""
+            }
             output.outputFileName.set(
-                "engine-sounds-simulator-build-$stampedBuildNumber-${variant.name}.apk",
+                "engine-sounds-simulator-build-$stampedBuildNumber-${variant.name}$fullSuffix.apk",
             )
         }
     }

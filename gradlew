@@ -210,6 +210,28 @@ DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
 #   * For example: A user cannot expect ${Hostname} to be expanded, as it is an environment variable and will be
 #     treated as '${Hostname}' itself on the command line.
 
+# Full release APKs embed car banks; default release assumes banks are already on device.
+__byd_want_full=
+__byd_n=0
+for __byd_a in "$@"; do
+  case "$__byd_a" in
+    --full|-full) __byd_want_full=1 ;;
+    *)
+      eval "__byd_arg_${__byd_n}=\"\$__byd_a\""
+      __byd_n=$((__byd_n + 1))
+      ;;
+  esac
+done
+set --
+__byd_i=0
+while [ "$__byd_i" -lt "$__byd_n" ]; do
+  eval "set -- \"\$@\" \"\${__byd_arg_${__byd_i}}\""
+  __byd_i=$((__byd_i + 1))
+done
+if [ -n "$__byd_want_full" ]; then
+  set -- "$@" "-Pfull"
+fi
+
 set -- \
         "-Dorg.gradle.appname=$APP_BASE_NAME" \
         -classpath "$CLASSPATH" \

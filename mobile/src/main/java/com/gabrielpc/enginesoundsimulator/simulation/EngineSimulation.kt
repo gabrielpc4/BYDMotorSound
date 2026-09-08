@@ -2,6 +2,7 @@ package com.gabrielpc.enginesoundsimulator.simulation
 
 import com.gabrielpc.enginesoundsimulator.drive.BackfireSettings
 import com.gabrielpc.enginesoundsimulator.drive.GearProfileSelection
+import com.gabrielpc.enginesoundsimulator.drive.VirtualGearSpeedBoundariesSettings
 import com.gabrielpc.enginesoundsimulator.telemetry.vehicleDriveSignalsAvailable
 
 /**
@@ -114,9 +115,10 @@ class EngineSimulation {
     private val bydSealSimulatedPedalsMotion = BydSealSimulatedPedalsMotion()
     private var gearProfileSelection: GearProfileSelection =
         GearProfileSelection.virtual(VirtualGearProfile.DEFAULT_VIRTUAL_GEARS)
+    private var virtualGearSpeedBoundaries: VirtualGearSpeedBoundariesSettings =
+        VirtualGearSpeedBoundariesSettings()
     private var virtualGearProfile: VirtualGearProfile? = null
     private var equalSpeedGearMapping: EqualSpeedGearMapping? = null
-    private var launchEqualSpeedGearMapping: EqualSpeedGearMapping? = null
     private var previousInputWasSimulated: Boolean? = null
     private var automaticTransmissionConfig = AutomaticTransmissionConfig()
 
@@ -127,9 +129,6 @@ class EngineSimulation {
         automaticTransmissionConfig = AutomaticTransmissionConfig.fromSettings(settings)
         if (previous.cruisingLogicEnabled != settings.cruisingLogicEnabled) {
             drivetrain?.applyCruisingLogicToggle(settings.cruisingLogicEnabled)
-        }
-        if (previous.sixGearOnLaunchEnabled != settings.sixGearOnLaunchEnabled && !settings.sixGearOnLaunchEnabled) {
-            drivetrain?.clearLaunchSixGearOverride()
         }
         if (
             previous.manualTransmissionKickdownEnabled != settings.manualTransmissionKickdownEnabled &&
@@ -243,6 +242,21 @@ class EngineSimulation {
         }
     }
 
+    internal fun updateVirtualGearSpeedBoundaries(settings: VirtualGearSpeedBoundariesSettings) {
+        val normalized = settings.normalized()
+        if (virtualGearSpeedBoundaries == normalized) {
+            return
+        }
+
+        virtualGearSpeedBoundaries = normalized
+        physics?.let { activePhysics ->
+            rebuildGearMapping(activePhysics)
+            drivetrain?.updateGearProfileMode(virtualGearProfile!!)
+        }
+    }
+
+    internal fun virtualGearSpeedBoundaries(): VirtualGearSpeedBoundariesSettings = virtualGearSpeedBoundaries
+
     internal fun updateVirtualGearCount(count: Int) {
         updateGearProfileSelection(GearProfileSelection.virtual(count))
     }
@@ -250,12 +264,19 @@ class EngineSimulation {
     private fun rebuildGearMapping(activePhysics: AssettoPhysics) {
         val profile = when (val selection = gearProfileSelection) {
             is GearProfileSelection.Original -> VirtualGearProfile.fromOriginal(activePhysics)
-            is GearProfileSelection.Virtual -> VirtualGearProfile.from(activePhysics, selection.count)
+            is GearProfileSelection.Virtual -> {
+                val preset = GearProfileSelection.coercePreset(selection.count)
+                val boundaries = virtualGearSpeedBoundaries.boundariesFor(preset)
+                    .map { it.toDouble() }
+                VirtualGearProfile.from(
+                    physics = activePhysics,
+                    virtualGearCount = preset,
+                    physicalBoundarySpeedsKmh = boundaries,
+                )
+            }
         }
         virtualGearProfile = profile
-        val launchProfile = VirtualGearProfile.from(activePhysics, VirtualGearProfile.MIN_VIRTUAL_GEARS)
         equalSpeedGearMapping = EqualSpeedGearMapping.from(activePhysics, profile)
-        launchEqualSpeedGearMapping = EqualSpeedGearMapping.from(activePhysics, launchProfile)
     }
 
     internal fun updateBackfireSettings(settings: BackfireSettings) {
@@ -301,7 +322,6 @@ class EngineSimulation {
             rawThrottle = input.throttle.coerceIn(0.0, 1.0),
             brake = input.brake.coerceIn(0.0, 1.0),
             enabled = input.transmissionPosition == TransmissionPosition.DRIVE,
-            sixGearOnLaunchEnabled = automaticTransmissionConfig.sixGearOnLaunchEnabled,
             allowManualOnLaunchEnabled = automaticTransmissionConfig.allowManualOnLaunchEnabled,
             automaticShifting = !manualShiftEnabled,
             deltaSeconds = dt,
@@ -356,14 +376,7 @@ class EngineSimulation {
         val realOrDocumentedExtrapolatedPresentationSpeedKmh = realExtrapolatedPresentationSpeedKmh
             ?: documentedExtrapolatedPresentationSpeedKmh
         val drivetrainRawSpeedKmh = realOrDocumentedRawSpeedKmh
-        val fmodMapping = if (
-            activeDrivetrain.isLaunchSixGearOverrideActive() &&
-            launchEqualSpeedGearMapping != null
-        ) {
-            launchEqualSpeedGearMapping
-        } else {
-            equalSpeedGearMapping
-        }
+        val fmodMapping = equalSpeedGearMapping
         val fmodMappingFrame = if (input.transmissionPosition == TransmissionPosition.DRIVE) {
             // Both input modes use the same internal FMOD speed mapping in D. It changes only
             // the road-speed-to-RPM conversion; the drivetrain still reads every shift and RPM

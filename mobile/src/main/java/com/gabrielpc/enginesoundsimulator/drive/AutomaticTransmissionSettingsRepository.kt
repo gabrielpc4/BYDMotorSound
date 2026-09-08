@@ -159,7 +159,6 @@ internal object ManualAutodownshiftRpm {
 
 internal data class AutomaticTransmissionSettings(
     val cruisingLogicEnabled: Boolean = true,
-    val sixGearOnLaunchEnabled: Boolean = false,
     val allowManualOnLaunchEnabled: Boolean = false,
     val manualTransmissionKickdownEnabled: Boolean = true,
     val cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int> = CruisingShiftOffsetByTachMaxRpm.defaultOffsets(),
@@ -184,7 +183,6 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
         migrateLegacyOffsetIfNeeded()
         return AutomaticTransmissionSettings(
             cruisingLogicEnabled = preferences.getBoolean(KEY_CRUISING_LOGIC_ENABLED, true),
-            sixGearOnLaunchEnabled = preferences.getBoolean(KEY_SIX_GEAR_ON_LAUNCH_ENABLED, false),
             allowManualOnLaunchEnabled = preferences.getBoolean(KEY_ALLOW_MANUAL_ON_LAUNCH_ENABLED, false),
             manualTransmissionKickdownEnabled = preferences.getBoolean(
                 KEY_MANUAL_TRANSMISSION_KICKDOWN_ENABLED,
@@ -235,7 +233,6 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
         val normalizedOffsets = CruisingShiftOffsetByTachMaxRpm.normalizeMap(settings.cruisingShiftOffsetsByTachMaxRpm)
         val editor = preferences.edit()
             .putBoolean(KEY_CRUISING_LOGIC_ENABLED, settings.cruisingLogicEnabled)
-            .putBoolean(KEY_SIX_GEAR_ON_LAUNCH_ENABLED, settings.sixGearOnLaunchEnabled)
             .putBoolean(KEY_ALLOW_MANUAL_ON_LAUNCH_ENABLED, settings.allowManualOnLaunchEnabled)
             .putBoolean(
                 KEY_MANUAL_TRANSMISSION_KICKDOWN_ENABLED,
@@ -338,7 +335,6 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
 
     private companion object {
         const val KEY_CRUISING_LOGIC_ENABLED = "cruising_logic_enabled"
-        const val KEY_SIX_GEAR_ON_LAUNCH_ENABLED = "six_gear_on_launch_enabled"
         const val KEY_ALLOW_MANUAL_ON_LAUNCH_ENABLED = "allow_manual_on_launch_enabled"
         const val KEY_MANUAL_TRANSMISSION_KICKDOWN_ENABLED = "manual_transmission_kickdown_enabled"
         const val KEY_CRUISING_SHIFT_OFFSET_RPM = "cruising_shift_offset_rpm"

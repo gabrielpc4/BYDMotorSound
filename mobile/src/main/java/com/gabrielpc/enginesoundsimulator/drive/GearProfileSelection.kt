@@ -2,7 +2,7 @@ package com.gabrielpc.enginesoundsimulator.drive
 
 import com.gabrielpc.enginesoundsimulator.simulation.VirtualGearProfile
 
-/** Forward-gear profile: bank-authored ratios or a virtual 6–15 gear layout. */
+/** Forward-gear profile: bank-authored ratios or a virtual 6 / 10 / 15 gear layout. */
 sealed class GearProfileSelection {
     data object Original : GearProfileSelection()
 
@@ -13,10 +13,7 @@ sealed class GearProfileSelection {
     fun virtualCountOrNull(): Int? {
         return when (this) {
             is Original -> null
-            is Virtual -> count.coerceIn(
-                VirtualGearProfile.MIN_VIRTUAL_GEARS,
-                VirtualGearProfile.MAX_VIRTUAL_GEARS,
-            )
+            is Virtual -> coercePreset(count)
         }
     }
 
@@ -29,13 +26,14 @@ sealed class GearProfileSelection {
     }
 
     companion object {
+        val VIRTUAL_PRESETS: List<Int> = VirtualGearSpeedBoundaries.PRESETS
+
+        fun coercePreset(count: Int): Int {
+            return VirtualGearSpeedBoundaries.coerceVirtualPreset(count)
+        }
+
         fun virtual(count: Int): Virtual {
-            return Virtual(
-                count = count.coerceIn(
-                    VirtualGearProfile.MIN_VIRTUAL_GEARS,
-                    VirtualGearProfile.MAX_VIRTUAL_GEARS,
-                ),
-            )
+            return Virtual(count = coercePreset(count))
         }
 
         fun fromPersisted(value: String?): GearProfileSelection {

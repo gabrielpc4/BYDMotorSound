@@ -107,10 +107,11 @@ data class DriveSnapshot(
     val fmodUpdateRateHz: Int = FmodUpdateRate.DEFAULT_HZ,
     val gearProfileSelection: GearProfileSelection = GearProfileSelection.virtual(VirtualGearProfile.DEFAULT_VIRTUAL_GEARS),
     val virtualForwardGearCount: Int = VirtualGearProfile.DEFAULT_VIRTUAL_GEARS,
+    val virtualGearSpeedBoundaries: VirtualGearSpeedBoundariesSettings = VirtualGearSpeedBoundariesSettings(),
     val exteriorPureAudio: Boolean = false,
     val minimumAudioThrottle: Float = MinimumAudioThrottle.DEFAULT,
+    val speedAudioSettings: SpeedAudioSettings = SpeedAudioSettings(),
     val cruisingLogicEnabled: Boolean = true,
-    val sixGearOnLaunchEnabled: Boolean = false,
     val allowManualOnLaunchEnabled: Boolean = false,
     val manualTransmissionKickdownEnabled: Boolean = true,
     val pedalAudioThrottleRampUpMilliseconds: Int = PedalAudioThrottleRampMilliseconds.DEFAULT,
@@ -158,7 +159,9 @@ class DriveController(context: Context) {
     private val backfireSettingsRepository = BackfireSettingsRepository(appContext)
     private val effectSoundOverrideRepository = EffectSoundOverrideRepository(appContext)
     private val gearProfileSelectionRepository = GearProfileSelectionRepository(appContext)
+    private val virtualGearSpeedBoundariesRepository = VirtualGearSpeedBoundariesRepository(appContext)
     private val minimumAudioThrottleRepository = MinimumAudioThrottleRepository(appContext)
+    private val speedAudioSettingsRepository = SpeedAudioSettingsRepository(appContext)
     private val automaticTransmissionSettingsRepository = AutomaticTransmissionSettingsRepository(appContext)
     private val selectedProfile = AtomicReference(resolveInitialProfile())
     private val selectedPerspective = AtomicReference(soundPerspectiveRepository.load(selectedProfile.get()))
@@ -192,8 +195,10 @@ class DriveController(context: Context) {
     private val mixerCarSpecificGains = AtomicReference(MixerCarSpecificGains())
     private val fmodUpdateRateHz = AtomicInteger(fmodUpdateRateRepository.load())
     private val gearProfileSelection = AtomicReference(gearProfileSelectionRepository.load())
+    private val virtualGearSpeedBoundaries = AtomicReference(virtualGearSpeedBoundariesRepository.load())
     private val exteriorPureAudio = AtomicBoolean(false)
     private val minimumAudioThrottleSettings = AtomicReference(minimumAudioThrottleRepository.load())
+    private val speedAudioSettings = AtomicReference(speedAudioSettingsRepository.load())
     private val automaticTransmissionSettings = AtomicReference(automaticTransmissionSettingsRepository.load())
     private val favoriteCarIds = AtomicReference(carFavoritesRepository.load())
     /** Monotonic across the controller lifetime so audio-worker skips/repeats are measurable. */
@@ -250,8 +255,10 @@ class DriveController(context: Context) {
         simulation.updateBackfireSettings(backfireSettings.get())
         applyEffectSoundOverrides()
         simulation.updateGearProfileSelection(gearProfileSelection.get())
+        simulation.updateVirtualGearSpeedBoundaries(virtualGearSpeedBoundaries.get())
         audioEngine.setBackfireAllowedSamples(backfireSettings.get().allowedSamples)
         applyMinimumAudioThrottleSettings(minimumAudioThrottleSettings.get())
+        applySpeedAudioSettings(speedAudioSettings.get())
         applyManualShiftSoundOverrideCoupling(manualShiftEnabled.get())
         simulation.updateAutomaticTransmissionSettings(automaticTransmissionSettings.get())
         initializeCarNavigation(selectedProfile.get().id)
@@ -300,8 +307,10 @@ class DriveController(context: Context) {
             fmodUpdateRateHz = fmodUpdateRateHz.get(),
             gearProfileSelection = gearProfileSelection.get(),
             virtualForwardGearCount = simulation.effectiveForwardGearCount(),
+            virtualGearSpeedBoundaries = virtualGearSpeedBoundaries.get(),
             exteriorPureAudio = exteriorPureAudio.get(),
             minimumAudioThrottle = minimumAudioThrottleSettings.get().minimum,
+            speedAudioSettings = speedAudioSettings.get(),
             pedalAudioThrottleRampUpMilliseconds = minimumAudioThrottleSettings.get().rampUpMilliseconds,
             pedalAudioThrottleRampDownMilliseconds = minimumAudioThrottleSettings.get().rampDownMilliseconds,
             favoriteCarIds = favoriteCarIds.get(),
@@ -414,6 +423,31 @@ class DriveController(context: Context) {
         setGearProfileSelection(GearProfileSelection.virtual(count))
     }
 
+    fun setVirtualGearSpeedBoundary(preset: Int, boundaryIndex: Int, speedKmh: Int) {
+        val gearCount = VirtualGearSpeedBoundaries.coerceVirtualPreset(preset)
+        val current = virtualGearSpeedBoundaries.get()
+        val updatedBoundaries = VirtualGearSpeedBoundaries.withBoundaryAtIndex(
+            boundaries = current.boundariesFor(gearCount),
+            gearCount = gearCount,
+            boundaryIndex = boundaryIndex,
+            speedKmh = speedKmh,
+        )
+        applyVirtualGearSpeedBoundaries(current.withPresetBoundaries(gearCount, updatedBoundaries))
+    }
+
+    fun restoreVirtualGearSpeedBoundaries(preset: Int) {
+        applyVirtualGearSpeedBoundaries(
+            virtualGearSpeedBoundaries.get().withRestoredPreset(preset),
+        )
+    }
+
+    private fun applyVirtualGearSpeedBoundaries(settings: VirtualGearSpeedBoundariesSettings) {
+        val normalized = settings.normalized()
+        virtualGearSpeedBoundaries.set(normalized)
+        virtualGearSpeedBoundariesRepository.save(normalized)
+        simulation.updateVirtualGearSpeedBoundaries(normalized)
+    }
+
     fun setCruisingShiftOffsetForTachMaxRpm(tachMaxRpmTier: Int, offsetRpm: Int) {
         if (tachMaxRpmTier !in CruisingShiftOffsetByTachMaxRpm.TIERS) {
             return
@@ -486,12 +520,6 @@ class DriveController(context: Context) {
     fun setCruisingLogicEnabled(enabled: Boolean) {
         updateAutomaticTransmissionSettings {
             it.copy(cruisingLogicEnabled = enabled)
-        }
-    }
-
-    fun setSixGearOnLaunchEnabled(enabled: Boolean) {
-        updateAutomaticTransmissionSettings {
-            it.copy(sixGearOnLaunchEnabled = enabled)
         }
     }
 
@@ -629,6 +657,17 @@ class DriveController(context: Context) {
         }
     }
 
+    fun setSpeedAudioSettings(updated: SpeedAudioSettings) {
+        val normalized = updated.normalized()
+        speedAudioSettings.set(normalized)
+        speedAudioSettingsRepository.save(normalized)
+        applySpeedAudioSettings(normalized)
+    }
+
+    private fun applySpeedAudioSettings(settings: SpeedAudioSettings) {
+        audioEngine.setSpeedAudioSettings(settings)
+    }
+
     private fun updateMinimumAudioThrottleSettings(
         transform: (MinimumAudioThrottleSettings) -> MinimumAudioThrottleSettings,
     ) {
@@ -739,7 +778,9 @@ class DriveController(context: Context) {
         backfireSettingsRepository.reset()
         effectSoundOverrideRepository.reset()
         gearProfileSelectionRepository.reset()
+        virtualGearSpeedBoundariesRepository.reset()
         minimumAudioThrottleRepository.reset()
+        speedAudioSettingsRepository.reset()
         automaticTransmissionSettingsRepository.reset()
         fmodUpdateRateRepository.reset()
         exteriorAudioModeRepository.reset()
@@ -753,9 +794,12 @@ class DriveController(context: Context) {
         backfireSettings.set(BackfireSettings())
         effectSoundOverrides.set(EffectSoundOverrideSettings())
         gearProfileSelection.set(GearProfileSelection.virtual(VirtualGearProfile.DEFAULT_VIRTUAL_GEARS))
+        virtualGearSpeedBoundaries.set(VirtualGearSpeedBoundariesSettings())
         minimumAudioThrottleSettings.set(MinimumAudioThrottleSettings())
+        speedAudioSettings.set(SpeedAudioSettings())
         automaticTransmissionSettings.set(AutomaticTransmissionSettings())
         simulation.updateGearProfileSelection(GearProfileSelection.virtual(VirtualGearProfile.DEFAULT_VIRTUAL_GEARS))
+        simulation.updateVirtualGearSpeedBoundaries(VirtualGearSpeedBoundariesSettings())
         simulation.updateAutomaticTransmissionSettings(AutomaticTransmissionSettings())
         simulation.updateBackfireSettings(backfireSettings.get())
         audioEngine.setBackfireAudioEnabled(true)
@@ -769,6 +813,7 @@ class DriveController(context: Context) {
         audioEngine.setFmodUpdateRateHz(FmodUpdateRate.DEFAULT_HZ)
         audioEngine.setExteriorPureAudio(false)
         applyMinimumAudioThrottleSettings(MinimumAudioThrottleSettings())
+        applySpeedAudioSettings(SpeedAudioSettings())
         syncEffectiveMixGainsToAudioEngine()
         simulation.reset()
         audioEngine.setSoundProgram(selectedProfile.get(), selectedPerspective.get())
@@ -1478,8 +1523,8 @@ class DriveController(context: Context) {
                 soundPerspective = selectedPerspective.get(),
                 gearProfileSelection = gearProfileSelection.get(),
                 virtualForwardGearCount = simulation.effectiveForwardGearCount(),
+                virtualGearSpeedBoundaries = virtualGearSpeedBoundaries.get(),
                 cruisingLogicEnabled = automaticTransmissionSettings.get().cruisingLogicEnabled,
-                sixGearOnLaunchEnabled = automaticTransmissionSettings.get().sixGearOnLaunchEnabled,
                 allowManualOnLaunchEnabled = automaticTransmissionSettings.get().allowManualOnLaunchEnabled,
                 manualTransmissionKickdownEnabled =
                     automaticTransmissionSettings.get().manualTransmissionKickdownEnabled,

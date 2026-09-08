@@ -11,7 +11,6 @@ import com.gabrielpc.enginesoundsimulator.drive.RacingReturnThrottlePercent
 
 internal data class AutomaticTransmissionConfig(
     val cruisingLogicEnabled: Boolean = true,
-    val sixGearOnLaunchEnabled: Boolean = false,
     val allowManualOnLaunchEnabled: Boolean = false,
     val manualTransmissionKickdownEnabled: Boolean = true,
     val cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int> = emptyMap(),
@@ -29,7 +28,6 @@ internal data class AutomaticTransmissionConfig(
         fun fromSettings(settings: AutomaticTransmissionSettings): AutomaticTransmissionConfig {
             return AutomaticTransmissionConfig(
                 cruisingLogicEnabled = settings.cruisingLogicEnabled,
-                sixGearOnLaunchEnabled = settings.sixGearOnLaunchEnabled,
                 allowManualOnLaunchEnabled = settings.allowManualOnLaunchEnabled,
                 manualTransmissionKickdownEnabled = settings.manualTransmissionKickdownEnabled,
                 cruisingShiftOffsetsByTachMaxRpm = settings.cruisingShiftOffsetsByTachMaxRpm,

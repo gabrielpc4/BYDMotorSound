@@ -1,5 +1,6 @@
 package com.gabrielpc.enginesoundsimulator.simulation
 
+import com.gabrielpc.enginesoundsimulator.drive.VirtualGearSpeedBoundaries
 import kotlin.math.abs
 import kotlin.math.ln
 
@@ -23,8 +24,8 @@ internal data class VirtualGearProfile(
             "Virtual gear count must be between 1 and $MAX_VIRTUAL_GEARS"
         }
         if (!usesAuthoredRatiosOnly) {
-            require(virtualForwardGearCount in MIN_VIRTUAL_GEARS..MAX_VIRTUAL_GEARS) {
-                "Virtual gear count must be between $MIN_VIRTUAL_GEARS and $MAX_VIRTUAL_GEARS"
+            require(virtualForwardGearCount in VirtualGearSpeedBoundaries.PRESETS) {
+                "Virtual gear count must be one of ${VirtualGearSpeedBoundaries.PRESETS}"
             }
         }
         require(synthesizedRatios.size == virtualForwardGearCount) {
@@ -74,14 +75,17 @@ internal data class VirtualGearProfile(
         fun from(
             physics: AssettoPhysics,
             virtualGearCount: Int,
+            physicalBoundarySpeedsKmh: List<Double>? = null,
         ): VirtualGearProfile {
-            val count = virtualGearCount.coerceIn(MIN_VIRTUAL_GEARS, MAX_VIRTUAL_GEARS)
+            val count = VirtualGearSpeedBoundaries.coerceVirtualPreset(virtualGearCount)
             val wheelRadius = drivenWheelRadius(physics)
             val ratios = synthesizeForwardRatios(
                 authoredRatios = physics.drivetrain.forwardRatios,
                 virtualCount = count,
             )
-            val boundaries = physicalBoundarySpeedsKmh(count)
+            val boundaries = physicalBoundarySpeedsKmh
+                ?.map { it.toDouble() }
+                ?: defaultPhysicalBoundarySpeedsKmh(count)
             return VirtualGearProfile(
                 virtualForwardGearCount = count,
                 synthesizedRatios = ratios,
@@ -101,7 +105,7 @@ internal data class VirtualGearProfile(
             return VirtualGearProfile(
                 virtualForwardGearCount = count,
                 synthesizedRatios = ratios.toList(),
-                physicalBoundarySpeedsKmh = physicalBoundarySpeedsKmh(count),
+                physicalBoundarySpeedsKmh = equalPhysicalBoundarySpeedsKmh(count),
                 finalDrive = physics.drivetrain.finalDrive,
                 wheelRadiusMeters = wheelRadius,
                 usesAuthoredRatiosOnly = true,
@@ -133,6 +137,15 @@ internal data class VirtualGearProfile(
         }
 
         internal fun physicalBoundarySpeedsKmh(virtualGearCount: Int): List<Double> {
+            return defaultPhysicalBoundarySpeedsKmh(virtualGearCount)
+        }
+
+        internal fun defaultPhysicalBoundarySpeedsKmh(virtualGearCount: Int): List<Double> {
+            return VirtualGearSpeedBoundaries.defaultBoundariesKmh(virtualGearCount)
+                .map { it.toDouble() }
+        }
+
+        private fun equalPhysicalBoundarySpeedsKmh(virtualGearCount: Int): List<Double> {
             return List(virtualGearCount + 1) { index ->
                 TOP_SPEED_KMH * index / virtualGearCount
             }

@@ -22,11 +22,13 @@ internal object AppPreferenceStores {
     const val TRANSMISSION_SOUND_SETTINGS = "transmission_sound_settings_v1"
     const val CAR_EFFECT_MODES = "car_effect_modes_v2"
     const val VIRTUAL_GEAR_COUNT = "virtual_gear_count_v1"
+    const val VIRTUAL_GEAR_SPEED_BOUNDARIES = "virtual_gear_speed_boundaries_v1"
     /** Last catalog tab shown by the shared car picker (modded or original). */
     const val CAR_PICKER_GROUP = "car_picker_group_v1"
     const val CAR_FAVORITES = "car_favorites_v1"
     const val MINIMUM_AUDIO_THROTTLE = "minimum_audio_throttle_v2"
     const val CRUISING_SHIFT_OFFSET_RPM = "cruising_shift_offset_rpm_v1"
     const val AUTOMATIC_TRANSMISSION_SETTINGS = "automatic_transmission_settings_v1"
+    const val SPEED_AUDIO_SETTINGS = "speed_audio_settings_v1"
     const val DASHBOARD_VISUAL_THEME = "dashboard_visual_theme_v1"
 }

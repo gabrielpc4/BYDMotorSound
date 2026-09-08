@@ -8,6 +8,8 @@ import android.util.Log
 import com.gabrielpc.enginesoundsimulator.diagnostics.DebugTelemetry
 import com.gabrielpc.enginesoundsimulator.drive.MinimumAudioThrottle
 import com.gabrielpc.enginesoundsimulator.drive.PedalAudioThrottleRampMilliseconds
+import com.gabrielpc.enginesoundsimulator.drive.SpeedAudioGainResolver
+import com.gabrielpc.enginesoundsimulator.drive.SpeedAudioSettings
 import com.gabrielpc.enginesoundsimulator.simulation.nativeFmodSpatialCoordinates
 import java.io.File
 import java.io.FileInputStream
@@ -77,6 +79,7 @@ class EngineAudioEngine(context: Context) {
     private val minimumAudioThrottle = AtomicReference(MinimumAudioThrottle.DEFAULT)
     private val pedalAudioThrottleRampUpMilliseconds = AtomicReference(PedalAudioThrottleRampMilliseconds.DEFAULT)
     private val pedalAudioThrottleRampDownMilliseconds = AtomicReference(PedalAudioThrottleRampMilliseconds.DEFAULT)
+    private val speedAudioSettings = AtomicReference(SpeedAudioSettings())
     private val engineSampleDataReady = AtomicBoolean(false)
     private val hasEmbeddedSupercharger = AtomicBoolean(false)
     private var sentExteriorPureAudio: Boolean? = null
@@ -203,6 +206,10 @@ class EngineAudioEngine(context: Context) {
         pedalAudioThrottleRampDownMilliseconds.set(
             PedalAudioThrottleRampMilliseconds.normalize(rampDownMilliseconds),
         )
+    }
+
+    fun setSpeedAudioSettings(settings: SpeedAudioSettings) {
+        speedAudioSettings.set(settings.normalized())
     }
 
     fun setBackfireAllowedSamples(samples: Set<Int>) {
@@ -492,8 +499,13 @@ class EngineAudioEngine(context: Context) {
                 var categoryGainCalls = 0
                 var overrideBatchCalls = 0
                 val requestedHostEffectsGain = hostEffectsGain.get()
-                val effectiveHostEngineInteriorGain = effectiveHostEngineInteriorGain()
-                val effectiveHostEngineExteriorGain = effectiveHostEngineExteriorGain()
+                val speedAudioMultiplier = SpeedAudioGainResolver.combinedMultiplier(
+                    rpm = frame.rpm,
+                    speedKmh = frame.presentationSpeedKmh,
+                    settings = speedAudioSettings.get(),
+                )
+                val effectiveHostEngineInteriorGain = effectiveHostEngineInteriorGain() * speedAudioMultiplier
+                val effectiveHostEngineExteriorGain = effectiveHostEngineExteriorGain() * speedAudioMultiplier
                 if (
                     effectiveHostEngineInteriorGain != sentHostEngineInteriorGain ||
                     effectiveHostEngineExteriorGain != sentHostEngineExteriorGain ||

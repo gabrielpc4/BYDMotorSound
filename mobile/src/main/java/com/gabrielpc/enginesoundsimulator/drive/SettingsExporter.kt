@@ -36,6 +36,8 @@ internal object SettingsExporter {
         val shiftModeRepository = ShiftModeRepository(appContext)
         val fmodUpdateRateRepository = FmodUpdateRateRepository(appContext)
         val gearProfileSelectionRepository = GearProfileSelectionRepository(appContext)
+        val virtualGearSpeedBoundariesRepository = VirtualGearSpeedBoundariesRepository(appContext)
+        val speedAudioSettingsRepository = SpeedAudioSettingsRepository(appContext)
         val minimumAudioThrottleRepository = MinimumAudioThrottleRepository(appContext)
         val automaticTransmissionSettingsRepository = AutomaticTransmissionSettingsRepository(appContext)
         val backfireSettingsRepository = BackfireSettingsRepository(appContext)
@@ -62,6 +64,7 @@ internal object SettingsExporter {
                 put("manualShiftEnabled", shiftModeRepository.isManualEnabled())
                 put("fmodUpdateRateHz", fmodUpdateRateRepository.load())
                 put("gearProfileSelection", GearProfileSelection.toPersisted(gearProfileSelectionRepository.load()))
+                put("virtualGearSpeedBoundaries", virtualGearSpeedBoundariesToJson(virtualGearSpeedBoundariesRepository.load()))
                 put(
                     "virtualForwardGearCount",
                     gearProfileSelectionRepository.load().virtualCountOrNull()
@@ -70,6 +73,7 @@ internal object SettingsExporter {
                 put("carPickerGroup", carPickerGroup)
                 put("favoriteCarIds", JSONArray(carFavoritesRepository.load().sorted()))
                 put("minimumAudioThrottle", minimumAudioThrottleToJson(minimumAudioThrottleRepository.load()))
+                put("speedAudio", speedAudioToJson(speedAudioSettingsRepository.load()))
                 put("automaticTransmission", automaticTransmissionToJson(automaticTransmissionSettingsRepository.load()))
                 put("backfire", backfireToJson(backfireSettingsRepository.load()))
                 put("effectSoundOverrides", effectSoundOverridesToJson(effectSoundOverrideRepository.load()))
@@ -174,10 +178,33 @@ internal object SettingsExporter {
         }
     }
 
+    private fun speedAudioToJson(settings: SpeedAudioSettings): JSONObject {
+        val normalized = settings.normalized()
+        return JSONObject().apply {
+            put("lowRangeMaxRpm", normalized.lowRangeMaxRpm)
+            put("midRangeMaxRpm", normalized.midRangeMaxRpm)
+            put("lowRangeGain", normalized.lowRangeGain.toDouble())
+            put("midRangeGain", normalized.midRangeGain.toDouble())
+            put("highRangeGain", normalized.highRangeGain.toDouble())
+            put("speedGainCoefficient", normalized.speedGainCoefficient.toDouble())
+        }
+    }
+
+    private fun virtualGearSpeedBoundariesToJson(settings: VirtualGearSpeedBoundariesSettings): JSONObject {
+        val normalized = settings.normalized()
+        return JSONObject().apply {
+            VirtualGearSpeedBoundaries.PRESETS.forEach { preset ->
+                put(
+                    preset.toString(),
+                    JSONArray(normalized.boundariesFor(preset)),
+                )
+            }
+        }
+    }
+
     private fun automaticTransmissionToJson(settings: AutomaticTransmissionSettings): JSONObject {
         return JSONObject().apply {
             put("cruisingLogicEnabled", settings.cruisingLogicEnabled)
-            put("sixGearOnLaunchEnabled", settings.sixGearOnLaunchEnabled)
             put("allowManualOnLaunchEnabled", settings.allowManualOnLaunchEnabled)
             put("manualTransmissionKickdownEnabled", settings.manualTransmissionKickdownEnabled)
             put(

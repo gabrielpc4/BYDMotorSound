@@ -115,6 +115,7 @@ import com.gabrielpc.enginesoundsimulator.drive.DriveSnapshot
 import com.gabrielpc.enginesoundsimulator.drive.BackfireSettings
 import com.gabrielpc.enginesoundsimulator.drive.EffectSoundKind
 import com.gabrielpc.enginesoundsimulator.drive.GearProfileSelection
+import com.gabrielpc.enginesoundsimulator.drive.SpeedAudioSettings
 import com.gabrielpc.enginesoundsimulator.drive.UserVisibleMessage
 import com.gabrielpc.enginesoundsimulator.drive.UserVisibleMessageSeverity
 import com.gabrielpc.enginesoundsimulator.drive.InputMode
@@ -275,9 +276,9 @@ class MainActivity : ComponentActivity() {
                         onRescanBanks = controller::rescanBanks,
                         onToggleManualShiftMode = controller::toggleManualShiftMode,
                         onMediaShiftButton = controller::handleMediaShiftButton,
-                        onVirtualForwardGearCountChange = controller::setVirtualForwardGearCount,
                         onGearProfileSelectionChange = controller::setGearProfileSelection,
-                        onSixGearOnLaunchEnabledChange = controller::setSixGearOnLaunchEnabled,
+                        onVirtualGearSpeedBoundaryChange = controller::setVirtualGearSpeedBoundary,
+                        onRestoreVirtualGearSpeedBoundaries = controller::restoreVirtualGearSpeedBoundaries,
                         onAllowManualOnLaunchEnabledChange = controller::setAllowManualOnLaunchEnabled,
                         onManualTransmissionKickdownEnabledChange =
                             controller::setManualTransmissionKickdownEnabled,
@@ -305,6 +306,7 @@ class MainActivity : ComponentActivity() {
                         onOverrideGainChange = controller::setEffectSoundOverrideGain,
                         onBackfireSettingsChange = controller::setBackfireSettings,
                         onPreviewBackfireSample = backfirePreviewPlayer::play,
+                        onSpeedAudioSettingsChange = controller::setSpeedAudioSettings,
                         onEventMute = controller::setFmodEventMute,
                         onEventSolo = controller::setFmodEventSolo,
                         onPreviousCar = controller::selectPreviousCar,
@@ -410,9 +412,9 @@ private fun MotorSoundDashboard(
     onRescanBanks: () -> Unit,
     onToggleManualShiftMode: () -> Unit,
     onMediaShiftButton: (Int) -> Boolean,
-    onVirtualForwardGearCountChange: (Int) -> Unit,
     onGearProfileSelectionChange: (GearProfileSelection) -> Unit,
-    onSixGearOnLaunchEnabledChange: (Boolean) -> Unit,
+    onVirtualGearSpeedBoundaryChange: (Int, Int, Int) -> Unit,
+    onRestoreVirtualGearSpeedBoundaries: (Int) -> Unit,
     onAllowManualOnLaunchEnabledChange: (Boolean) -> Unit,
     onManualTransmissionKickdownEnabledChange: (Boolean) -> Unit,
     onTachometerCruisingShiftRangeOverlayEnabledChange: (Boolean) -> Unit,
@@ -438,6 +440,7 @@ private fun MotorSoundDashboard(
     onOverrideGainChange: (EffectSoundKind, Float) -> Unit,
     onBackfireSettingsChange: (BackfireSettings) -> Unit,
     onPreviewBackfireSample: (Int) -> Unit,
+    onSpeedAudioSettingsChange: (SpeedAudioSettings) -> Unit,
     onEventMute: (String, Boolean) -> Unit,
     onEventSolo: (String, Boolean) -> Unit,
     onPreviousCar: () -> Unit,
@@ -582,6 +585,8 @@ private fun MotorSoundDashboard(
                                         onCruisingLogicChange = onCruisingLogicChange,
                                         onEffectOverrideChange = onEffectOverrideChange,
                                         onOverrideGainChange = onOverrideGainChange,
+                                        gearProfileSelection = state.gearProfileSelection,
+                                        onGearProfileSelectionChange = onGearProfileSelectionChange,
                                         modifier = Modifier.padding(
                                             start = DashboardLayoutDefaults.classicContentStartPadding,
                                             bottom = 2.dp,
@@ -642,8 +647,6 @@ private fun MotorSoundDashboard(
                             onResetMixerCarSpecificGains = onResetMixerCarSpecificGains,
                             onEventMute = onEventMute,
                             onEventSolo = onEventSolo,
-                            gearProfileSelection = state.gearProfileSelection,
-                            onGearProfileSelectionChange = onGearProfileSelectionChange,
                             exteriorPureAudio = state.exteriorPureAudio,
                             onExteriorPureAudioChange = onExteriorPureAudioChange,
                             modifier = Modifier
@@ -658,10 +661,10 @@ private fun MotorSoundDashboard(
                             onFmodUpdateRateChange = onFmodUpdateRateChange,
                             backfireSettings = state.backfireSettings,
                             onBackfireSettingsChange = onBackfireSettingsChange,
-                            virtualForwardGearCount = state.virtualForwardGearCount,
-                            onVirtualForwardGearCountChange = onVirtualForwardGearCountChange,
-                            sixGearOnLaunchEnabled = state.sixGearOnLaunchEnabled,
-                            onSixGearOnLaunchEnabledChange = onSixGearOnLaunchEnabledChange,
+                            virtualGearSpeedBoundaries = state.virtualGearSpeedBoundaries,
+                            gearProfileSelection = state.gearProfileSelection,
+                            onVirtualGearSpeedBoundaryChange = onVirtualGearSpeedBoundaryChange,
+                            onRestoreVirtualGearSpeedBoundaries = onRestoreVirtualGearSpeedBoundaries,
                             allowManualOnLaunchEnabled = state.allowManualOnLaunchEnabled,
                             onAllowManualOnLaunchEnabledChange = onAllowManualOnLaunchEnabledChange,
                             manualTransmissionKickdownEnabled = state.manualTransmissionKickdownEnabled,
@@ -693,6 +696,8 @@ private fun MotorSoundDashboard(
                             cruisingShiftOffsetsByTachMaxRpm = state.cruisingShiftOffsetsByTachMaxRpm,
                             onCruisingShiftOffsetForTachMaxRpmChange = onCruisingShiftOffsetForTachMaxRpmChange,
                             onPreviewBackfireSample = onPreviewBackfireSample,
+                            speedAudioSettings = state.speedAudioSettings,
+                            onSpeedAudioSettingsChange = onSpeedAudioSettingsChange,
                         )
                     }
                 }
@@ -1324,6 +1329,8 @@ private fun DashboardClassicAudioControlsStack(
     onCruisingLogicChange: (Boolean) -> Unit,
     onEffectOverrideChange: (EffectSoundKind, Boolean) -> Unit,
     onOverrideGainChange: (EffectSoundKind, Float) -> Unit,
+    gearProfileSelection: GearProfileSelection,
+    onGearProfileSelectionChange: (GearProfileSelection) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -1336,6 +1343,10 @@ private fun DashboardClassicAudioControlsStack(
             onEngineExternalChange = onEngineExternalChange,
             onEnginePureChange = onEnginePureChange,
             onCruisingLogicChange = onCruisingLogicChange,
+        )
+        DashboardGearProfileControls(
+            selection = gearProfileSelection,
+            onSelectionChange = onGearProfileSelectionChange,
         )
         DashboardEffectControls(
             state = state,
@@ -1506,6 +1517,106 @@ private fun DashboardCruisingRpmOffsetSlider(
             modifier = Modifier.fillMaxWidth(),
         )
     }
+}
+
+@Composable
+private fun DashboardGearProfileControls(
+    selection: GearProfileSelection,
+    onSelectionChange: (GearProfileSelection) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val layout = DashboardClassicEffectLayout
+    val rowHeight = 42.dp
+    val presets = listOf(
+        DashboardGearPreset(
+            label = "ORIGINAL",
+            selection = GearProfileSelection.Original,
+            active = selection.isOriginal(),
+        ),
+        DashboardGearPreset(
+            label = "6",
+            selection = GearProfileSelection.virtual(6),
+            active = selection.matchesMixerPreset(6),
+        ),
+        DashboardGearPreset(
+            label = "10",
+            selection = GearProfileSelection.virtual(10),
+            active = selection.matchesMixerPreset(10),
+        ),
+        DashboardGearPreset(
+            label = "15",
+            selection = GearProfileSelection.virtual(15),
+            active = selection.matchesMixerPreset(15),
+        ),
+    )
+
+    Row(
+        modifier = modifier.wrapContentWidth(),
+        horizontalArrangement = Arrangement.spacedBy(layout.columnGap),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(layout.effectLabelColumnWidth)
+                .height(rowHeight),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Text(
+                text = "GEARS",
+                color = Accent,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(layout.columnPadding),
+        ) {
+            presets.forEach { preset ->
+                DashboardGearPresetButton(
+                    label = preset.label,
+                    selected = preset.active,
+                    onClick = {
+                        onSelectionChange(preset.selection)
+                    },
+                )
+            }
+        }
+    }
+}
+
+private data class DashboardGearPreset(
+    val label: String,
+    val selection: GearProfileSelection,
+    val active: Boolean,
+)
+
+@Composable
+private fun DashboardGearPresetButton(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Text(
+        text = label,
+        color = if (selected) {
+            Background
+        } else {
+            Accent
+        },
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Bold,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .width(72.dp)
+            .height(38.dp)
+            .clip(skinShape(6.dp))
+            .background(if (selected) Accent else SurfaceRaised)
+            .border(1.dp, if (selected) Accent else Outline, skinShape(6.dp))
+            .clickable(onClick = onClick)
+            .padding(top = 10.dp),
+    )
 }
 
 @Composable

@@ -119,10 +119,14 @@ import com.gabrielpc.enginesoundsimulator.audio.MixerGainScopeRepository
 import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains
 import com.gabrielpc.enginesoundsimulator.audio.FmodSourceState
 import com.gabrielpc.enginesoundsimulator.audio.FmodUpdateRate
+import com.gabrielpc.enginesoundsimulator.drive.GearProfileSelection
 import com.gabrielpc.enginesoundsimulator.drive.CruisingShiftOffsetByTachMaxRpm
 import com.gabrielpc.enginesoundsimulator.drive.DriveSnapshot
-import com.gabrielpc.enginesoundsimulator.drive.GearProfileSelection
 import com.gabrielpc.enginesoundsimulator.drive.BackfireSettings
+import com.gabrielpc.enginesoundsimulator.drive.VirtualGearSpeedBoundaries
+import com.gabrielpc.enginesoundsimulator.drive.VirtualGearSpeedBoundariesSettings
+import com.gabrielpc.enginesoundsimulator.drive.SpeedAudioGain
+import com.gabrielpc.enginesoundsimulator.drive.SpeedAudioSettings
 import com.gabrielpc.enginesoundsimulator.drive.MinimumAudioThrottle
 import com.gabrielpc.enginesoundsimulator.drive.AutomaticDownshiftMilliseconds
 import com.gabrielpc.enginesoundsimulator.drive.AutomaticUpshiftMilliseconds
@@ -206,8 +210,6 @@ internal fun MixerDashboardScreen(
     onResetMixerCarSpecificGains: () -> Unit,
     onEventMute: (String, Boolean) -> Unit,
     onEventSolo: (String, Boolean) -> Unit,
-    gearProfileSelection: GearProfileSelection,
-    onGearProfileSelectionChange: (GearProfileSelection) -> Unit,
     soundPerspective: EngineSoundPerspective,
     onSoundPerspectiveChange: (EngineSoundPerspective) -> Unit,
     exteriorPureAudio: Boolean,
@@ -406,8 +408,6 @@ internal fun MixerDashboardScreen(
                     onResetMixerCarSpecificGains()
                     mixerSpecificGains = MixerCarSpecificGains()
                 },
-                gearProfileSelection = gearProfileSelection,
-                onGearProfileSelectionChange = onGearProfileSelectionChange,
                 modifier = Modifier.fillMaxSize(),
             )
             MixerDriveControls(
@@ -504,8 +504,6 @@ private fun MixerControlsPanel(
     onMixerGainsChange: (MixerGlobalGains) -> Unit,
     onMixerSpecificGainsChange: (MixerCarSpecificGains) -> Unit,
     onResetCarSpecificGains: () -> Unit,
-    gearProfileSelection: GearProfileSelection,
-    onGearProfileSelectionChange: (GearProfileSelection) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -730,10 +728,6 @@ private fun MixerControlsPanel(
                     },
                 )
             }
-            MixerGearProfileSelector(
-                selection = gearProfileSelection,
-                onSelectionChange = onGearProfileSelectionChange,
-            )
             MixerLayerGainSlider(
                 label = "POPS & BANGS",
                 eventCategory = MixerEventCategory.BACKFIRE,
@@ -813,84 +807,6 @@ private fun layerValueForScope(
 
     return specificValue
 }
-
-@Composable
-private fun MixerGearProfileSelector(
-    selection: GearProfileSelection,
-    onSelectionChange: (GearProfileSelection) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val presets = listOf(
-        MixerGearPreset(
-            label = "ORIGINAL",
-            selection = GearProfileSelection.Original,
-            active = selection.isOriginal(),
-        ),
-        MixerGearPreset(
-            label = "6",
-            selection = GearProfileSelection.virtual(6),
-            active = selection.matchesMixerPreset(6),
-        ),
-        MixerGearPreset(
-            label = "10",
-            selection = GearProfileSelection.virtual(10),
-            active = selection.matchesMixerPreset(10),
-        ),
-        MixerGearPreset(
-            label = "15",
-            selection = GearProfileSelection.virtual(15),
-            active = selection.matchesMixerPreset(15),
-        ),
-    )
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(softFillShape(5.dp))
-            .padding(vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "GEARS",
-            color = Muted,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp,
-            modifier = Modifier.width(72.dp),
-        )
-        presets.forEach { preset ->
-            Text(
-                text = preset.label,
-                color = if (preset.active) {
-                    Accent
-                } else {
-                    Muted
-                },
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Black,
-                modifier = Modifier
-                    .clip(softFillShape(5.dp))
-                    .background(
-                        if (preset.active) {
-                            Accent.copy(alpha = 0.14f)
-                        } else {
-                            Color.Transparent
-                        },
-                    )
-                    .clickable {
-                        onSelectionChange(preset.selection)
-                    }
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-            )
-        }
-    }
-}
-
-private data class MixerGearPreset(
-    val label: String,
-    val selection: GearProfileSelection,
-    val active: Boolean,
-)
 
 @Composable
 private fun MixerGainScopeSelector(
@@ -1054,10 +970,10 @@ internal fun SettingsScreen(
     onFmodUpdateRateChange: (Int) -> Unit,
     backfireSettings: BackfireSettings,
     onBackfireSettingsChange: (BackfireSettings) -> Unit,
-    virtualForwardGearCount: Int,
-    onVirtualForwardGearCountChange: (Int) -> Unit,
-    sixGearOnLaunchEnabled: Boolean,
-    onSixGearOnLaunchEnabledChange: (Boolean) -> Unit,
+    virtualGearSpeedBoundaries: VirtualGearSpeedBoundariesSettings,
+    gearProfileSelection: GearProfileSelection,
+    onVirtualGearSpeedBoundaryChange: (Int, Int, Int) -> Unit,
+    onRestoreVirtualGearSpeedBoundaries: (Int) -> Unit,
     allowManualOnLaunchEnabled: Boolean,
     onAllowManualOnLaunchEnabledChange: (Boolean) -> Unit,
     manualTransmissionKickdownEnabled: Boolean,
@@ -1087,6 +1003,8 @@ internal fun SettingsScreen(
     cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int>,
     onCruisingShiftOffsetForTachMaxRpmChange: (Int, Int) -> Unit,
     onPreviewBackfireSample: (Int) -> Unit,
+    speedAudioSettings: SpeedAudioSettings,
+    onSpeedAudioSettingsChange: (SpeedAudioSettings) -> Unit,
 ) {
     var selectedTab by remember { mutableStateOf(SettingsSection.GENERAL) }
     var showResetConfirmation by remember { mutableStateOf(false) }
@@ -1106,6 +1024,9 @@ internal fun SettingsScreen(
             }
             SettingsTab("BACKFIRE", selectedTab == SettingsSection.BACKFIRE) {
                 selectedTab = SettingsSection.BACKFIRE
+            }
+            SettingsTab("SPEED AUDIO", selectedTab == SettingsSection.SPEED_AUDIO) {
+                selectedTab = SettingsSection.SPEED_AUDIO
             }
             SettingsTab("BANK IMPORT", selectedTab == SettingsSection.BANK_IMPORT) {
                 selectedTab = SettingsSection.BANK_IMPORT
@@ -1139,13 +1060,11 @@ internal fun SettingsScreen(
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                 )
             }
-            VirtualForwardGearCountControl(
-                gearCount = virtualForwardGearCount,
-                onGearCountChange = onVirtualForwardGearCountChange,
-                sixGearOnLaunchEnabled = sixGearOnLaunchEnabled,
-                onSixGearOnLaunchEnabledChange = onSixGearOnLaunchEnabledChange,
-                allowManualOnLaunchEnabled = allowManualOnLaunchEnabled,
-                onAllowManualOnLaunchEnabledChange = onAllowManualOnLaunchEnabledChange,
+            VirtualGearSpeedBoundariesSettingsControl(
+                settings = virtualGearSpeedBoundaries,
+                gearProfileSelection = gearProfileSelection,
+                onBoundaryChange = onVirtualGearSpeedBoundaryChange,
+                onRestorePreset = onRestoreVirtualGearSpeedBoundaries,
             )
             CruisingShiftOffsetsByTachMaxRpmControl(
                 offsets = cruisingShiftOffsetsByTachMaxRpm,
@@ -1168,6 +1087,8 @@ internal fun SettingsScreen(
                 onManualAutodownshiftRpmChange = onManualAutodownshiftRpmChange,
                 manualTransmissionKickdownEnabled = manualTransmissionKickdownEnabled,
                 onManualTransmissionKickdownEnabledChange = onManualTransmissionKickdownEnabledChange,
+                allowManualOnLaunchEnabled = allowManualOnLaunchEnabled,
+                onAllowManualOnLaunchEnabledChange = onAllowManualOnLaunchEnabledChange,
                 tachometerCruisingShiftRangeOverlayEnabled = tachometerCruisingShiftRangeOverlayEnabled,
                 onTachometerCruisingShiftRangeOverlayEnabledChange = onTachometerCruisingShiftRangeOverlayEnabledChange,
             )
@@ -1200,6 +1121,16 @@ internal fun SettingsScreen(
                     settings = backfireSettings,
                     onChange = onBackfireSettingsChange,
                     onPreview = onPreviewBackfireSample,
+                )
+            }
+            SettingsSection.SPEED_AUDIO -> Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                SpeedAudioSettingsPanel(
+                    settings = speedAudioSettings,
+                    onChange = onSpeedAudioSettingsChange,
                 )
             }
             SettingsSection.BANK_IMPORT -> BankImportDiagnosticsPanel(
@@ -1244,7 +1175,232 @@ internal fun SettingsScreen(
 private enum class SettingsSection {
     GENERAL,
     BACKFIRE,
+    SPEED_AUDIO,
     BANK_IMPORT,
+}
+
+@Composable
+private fun SpeedAudioSettingsPanel(
+    settings: SpeedAudioSettings,
+    onChange: (SpeedAudioSettings) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val normalized = settings.normalized()
+    val gainSteps = SpeedAudioGain.gainSliderSteps()
+    val speedCoefficientSteps = SpeedAudioGain.speedCoefficientSliderSteps()
+    val lowBoundaryMin = 1_000
+    val lowBoundaryMax = 8_000
+    val midBoundaryMin = normalized.lowRangeMaxRpm + 100
+    val midBoundaryMax = 12_000
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .border(1.dp, Outline, skinShape(8.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text(
+            text = "SPEED AUDIO",
+            color = Accent,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 1.2.sp,
+        )
+        Text(
+            text = "Adjust engine host gain by RPM band and add a speed-only bonus on top. Final multiplier is 1 + RPM offset + speed bonus.",
+            color = Muted,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            SpeedAudioBoundaryCard(
+                title = "LOW / MID BOUNDARY",
+                description = "Upper limit of the low RPM band. Low range covers 0 to below this RPM.",
+                valueRpm = normalized.lowRangeMaxRpm,
+                valueRange = lowBoundaryMin.toFloat()..lowBoundaryMax.toFloat(),
+                steps = ((lowBoundaryMax - lowBoundaryMin) / 100) - 1,
+                onValueChange = { value ->
+                    val selectedRpm = value.roundToInt()
+                    onChange(
+                        normalized.copy(
+                            lowRangeMaxRpm = selectedRpm,
+                            midRangeMaxRpm = normalized.midRangeMaxRpm.coerceAtLeast(selectedRpm + 100),
+                        ),
+                    )
+                },
+                modifier = Modifier.weight(1f),
+            )
+
+            SpeedAudioBoundaryCard(
+                title = "MID / HIGH BOUNDARY",
+                description = "Upper limit of the mid RPM band. High range starts above this RPM.",
+                valueRpm = normalized.midRangeMaxRpm,
+                valueRange = midBoundaryMin.toFloat()..midBoundaryMax.toFloat(),
+                steps = ((midBoundaryMax - midBoundaryMin) / 100).coerceAtLeast(1) - 1,
+                onValueChange = { value ->
+                    onChange(normalized.copy(midRangeMaxRpm = value.roundToInt()))
+                },
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        SpeedAudioGainCard(
+            title = "0 to < ${String.format(Locale.US, "%,d", normalized.lowRangeMaxRpm)} RPM",
+            description = "Gain offset applied while the engine stays below the low/mid boundary.",
+            gain = normalized.lowRangeGain,
+            gainSteps = gainSteps,
+            onGainChange = { gain ->
+                onChange(normalized.copy(lowRangeGain = gain))
+            },
+        )
+
+        SpeedAudioGainCard(
+            title = "${String.format(Locale.US, "%,d", normalized.lowRangeMaxRpm)} to ${String.format(Locale.US, "%,d", normalized.midRangeMaxRpm)} RPM",
+            description = "Gain offset applied between the two RPM boundaries.",
+            gain = normalized.midRangeGain,
+            gainSteps = gainSteps,
+            onGainChange = { gain ->
+                onChange(normalized.copy(midRangeGain = gain))
+            },
+        )
+
+        SpeedAudioGainCard(
+            title = "> ${String.format(Locale.US, "%,d", normalized.midRangeMaxRpm)} RPM",
+            description = "Gain offset applied above the mid/high boundary.",
+            gain = normalized.highRangeGain,
+            gainSteps = gainSteps,
+            onGainChange = { gain ->
+                onChange(normalized.copy(highRangeGain = gain))
+            },
+        )
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "SPEED COEFFICIENT",
+                    color = Accent,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black,
+                )
+                Text(
+                    text = SpeedAudioGain.formatSpeedCoefficient(normalized.speedGainCoefficient),
+                    color = OnSurface,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black,
+                )
+            }
+            Text(
+                text = "Adds positive gain from road speed only, scaled to ${SpeedAudioGain.SPEED_REFERENCE_KMH.toInt()} km/h. Never reduces volume.",
+                color = Muted,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+            Slider(
+                value = normalized.speedGainCoefficient,
+                onValueChange = { value ->
+                    onChange(normalized.copy(speedGainCoefficient = value))
+                },
+                valueRange = SpeedAudioGain.SPEED_COEFFICIENT_MIN..SpeedAudioGain.SPEED_COEFFICIENT_MAX,
+                steps = speedCoefficientSteps.coerceAtLeast(0),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SpeedAudioBoundaryCard(
+    title: String,
+    description: String,
+    valueRpm: Int,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(title, color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
+            Text(
+                text = String.format(Locale.US, "%,d RPM", valueRpm),
+                color = OnSurface,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Black,
+            )
+        }
+        Text(
+            text = description,
+            color = Muted,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+        )
+        Slider(
+            value = valueRpm.toFloat(),
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            steps = steps.coerceAtLeast(0),
+        )
+    }
+}
+
+@Composable
+private fun SpeedAudioGainCard(
+    title: String,
+    description: String,
+    gain: Float,
+    gainSteps: Int,
+    onGainChange: (Float) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(title, color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
+            Text(
+                text = SpeedAudioGain.formatGainOffset(gain),
+                color = OnSurface,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Black,
+            )
+        }
+        Text(
+            text = description,
+            color = Muted,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+        )
+        Slider(
+            value = gain,
+            onValueChange = { value ->
+                onGainChange(SpeedAudioGain.normalizeGain(value))
+            },
+            valueRange = SpeedAudioGain.MIN..SpeedAudioGain.MAX,
+            steps = gainSteps.coerceAtLeast(0),
+        )
+    }
 }
 
 @Composable
@@ -1382,78 +1538,53 @@ private fun SettingsGridRow(
 }
 
 @Composable
-private fun VirtualForwardGearCountControl(
-    gearCount: Int,
-    onGearCountChange: (Int) -> Unit,
-    sixGearOnLaunchEnabled: Boolean,
-    onSixGearOnLaunchEnabledChange: (Boolean) -> Unit,
-    allowManualOnLaunchEnabled: Boolean,
-    onAllowManualOnLaunchEnabledChange: (Boolean) -> Unit,
+private fun VirtualGearSpeedBoundariesSettingsControl(
+    settings: VirtualGearSpeedBoundariesSettings,
+    gearProfileSelection: GearProfileSelection,
+    onBoundaryChange: (preset: Int, boundaryIndex: Int, speedKmh: Int) -> Unit,
+    onRestorePreset: (Int) -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
+    val activePreset = gearProfileSelection.virtualCountOrNull()
+
     Column(
         modifier = modifier
             .border(1.dp, Outline, skinShape(8.dp))
             .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("VIRTUAL FORWARD GEARS", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
-                    Text(
-                        text = "$gearCount gears",
-                        color = OnSurface,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Black,
-                    )
-                }
-
-                Slider(
-                    value = gearCount.toFloat(),
-                    onValueChange = { value ->
-                        val selectedCount = value.roundToInt()
-
-                        if (selectedCount != gearCount) {
-                            onGearCountChange(selectedCount)
-                        }
-                    },
-                    valueRange = VirtualGearProfile.MIN_VIRTUAL_GEARS.toFloat()..VirtualGearProfile.MAX_VIRTUAL_GEARS.toFloat(),
-                    steps = VirtualGearProfile.MAX_VIRTUAL_GEARS - VirtualGearProfile.MIN_VIRTUAL_GEARS - 1,
-                )
-            }
-
-            Column(
-                modifier = Modifier.width(280.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                SixGearOnLaunchSetting(
-                    enabled = sixGearOnLaunchEnabled,
-                    onEnabledChange = onSixGearOnLaunchEnabledChange,
-                )
-
-                AllowManualOnLaunchSetting(
-                    enabled = allowManualOnLaunchEnabled,
-                    onEnabledChange = onAllowManualOnLaunchEnabledChange,
-                )
-            }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                text = "GEAR SPEED BANDS",
+                color = Accent,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Black,
+            )
+            Text(
+                text = if (activePreset != null) {
+                    "Drag dividers to set how each gear maps to road speed for the $activePreset-gear preset selected on the dashboard."
+                } else {
+                    "Select 6, 10, or 15 on the main dashboard to tune virtual gear speed bands. ORIGINAL uses the bank ratios and cannot be edited here."
+                },
+                color = Muted,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
         }
 
-        VirtualGearDistributionChart(
-            gearCount = gearCount,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        if (activePreset != null) {
+            VirtualGearDistributionChart(
+                gearCount = activePreset,
+                boundariesKmh = settings.boundariesFor(activePreset),
+                onBoundaryChange = { boundaryIndex, speedKmh ->
+                    onBoundaryChange(activePreset, boundaryIndex, speedKmh)
+                },
+                onRestoreDefaults = {
+                    onRestorePreset(activePreset)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
@@ -1492,68 +1623,6 @@ private fun TachometerShiftOverlayToggle(
 
         Text(
             text = description,
-            color = Muted,
-            fontSize = 11.sp,
-            lineHeight = 14.sp,
-        )
-    }
-}
-
-@Composable
-private fun SixGearOnLaunchSetting(
-    enabled: Boolean,
-    onEnabledChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("6-GEAR ON LAUNCH", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Black)
-            Switch(
-                checked = enabled,
-                onCheckedChange = onEnabledChange,
-            )
-        }
-
-        Text(
-            text = "Launch control temporarily uses the 6-gear ratio profile until throttle lift or brake.",
-            color = Muted,
-            fontSize = 11.sp,
-            lineHeight = 14.sp,
-        )
-    }
-}
-
-@Composable
-private fun AllowManualOnLaunchSetting(
-    enabled: Boolean,
-    onEnabledChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("ALLOW MANUAL ON LAUNCH", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Black)
-            Switch(
-                checked = enabled,
-                onCheckedChange = onEnabledChange,
-            )
-        }
-
-        Text(
-            text = "When off, arming launch control switches to automatic shift mode.",
             color = Muted,
             fontSize = 11.sp,
             lineHeight = 14.sp,
@@ -1653,6 +1722,8 @@ private fun AutomaticTransmissionSettingsControl(
     onManualAutodownshiftRpmChange: (Int) -> Unit,
     manualTransmissionKickdownEnabled: Boolean,
     onManualTransmissionKickdownEnabledChange: (Boolean) -> Unit,
+    allowManualOnLaunchEnabled: Boolean,
+    onAllowManualOnLaunchEnabledChange: (Boolean) -> Unit,
     tachometerCruisingShiftRangeOverlayEnabled: Boolean,
     onTachometerCruisingShiftRangeOverlayEnabledChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
@@ -1810,13 +1881,28 @@ private fun AutomaticTransmissionSettingsControl(
         }
         val manualRedlineStopIndex = ManualRedlineHoldSeconds.stopIndex(manualRedlineHoldSeconds).toFloat()
         val manualRedlineLastStopIndex = (ManualRedlineHoldSeconds.STOPS.size - 1).toFloat()
-        TachometerShiftOverlayToggle(
-            title = "MANUAL TRANSMISSION KICKDOWN",
-            description = "Manual mode: a sharp throttle stomp downshifts toward the best gear for acceleration, then the next upshift alone uses automatic timing.",
-            enabled = manualTransmissionKickdownEnabled,
-            onEnabledChange = onManualTransmissionKickdownEnabledChange,
-            embedded = true,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            TachometerShiftOverlayToggle(
+                title = "MANUAL TRANSMISSION KICKDOWN",
+                description = "Manual mode: a sharp throttle stomp downshifts toward the best gear for acceleration, then the next upshift alone uses automatic timing.",
+                enabled = manualTransmissionKickdownEnabled,
+                onEnabledChange = onManualTransmissionKickdownEnabledChange,
+                modifier = Modifier.weight(1f),
+                embedded = true,
+            )
+            TachometerShiftOverlayToggle(
+                title = "ALLOW MANUAL ON LAUNCH",
+                description = "When off, arming launch control switches to automatic shift mode.",
+                enabled = allowManualOnLaunchEnabled,
+                onEnabledChange = onAllowManualOnLaunchEnabledChange,
+                modifier = Modifier.weight(1f),
+                embedded = true,
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,

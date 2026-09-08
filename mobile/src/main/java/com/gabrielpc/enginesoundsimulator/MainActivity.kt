@@ -265,6 +265,7 @@ class MainActivity : ComponentActivity() {
                             themeController.resetToDefault()
                         },
                         onExportSettings = controller::exportAllPreferences,
+                        onRescanBanks = controller::rescanBanks,
                         onToggleManualShiftMode = controller::toggleManualShiftMode,
                         onMediaShiftButton = controller::handleMediaShiftButton,
                         onVirtualForwardGearCountChange = controller::setVirtualForwardGearCount,
@@ -392,6 +393,7 @@ private fun MotorSoundDashboard(
     onCruisingLogicChange: (Boolean) -> Unit,
     onResetAllPreferences: () -> Unit,
     onExportSettings: () -> Unit,
+    onRescanBanks: () -> Unit,
     onToggleManualShiftMode: () -> Unit,
     onMediaShiftButton: (Int) -> Boolean,
     onVirtualForwardGearCountChange: (Int) -> Unit,
@@ -627,6 +629,7 @@ private fun MotorSoundDashboard(
                         DashboardMainScreen.SETTINGS -> SettingsScreen(
                             onExportSettings = onExportSettings,
                             onResetAll = onResetAllPreferences,
+                            onRescanBanks = onRescanBanks,
                             fmodUpdateRateHz = state.fmodUpdateRateHz,
                             onFmodUpdateRateChange = onFmodUpdateRateChange,
                             backfireSettings = state.backfireSettings,

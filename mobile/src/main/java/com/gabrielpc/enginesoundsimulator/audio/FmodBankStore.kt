@@ -30,13 +30,16 @@ internal data class FmodBankImportResult(
 internal class FmodBankStore(
     filesDirectory: File,
     private val stagedImportDirectory: File? = null,
+    private val externalPacksDirectory: File? = null,
 ) {
     private val packsDirectory = File(filesDirectory, "fmod-banks")
+    private val installedPackRoots = listOfNotNull(
+        packsDirectory,
+        externalPacksDirectory,
+    ).distinctBy { it.absolutePath }
 
-    fun installedPackIds(): Set<String> = packsDirectory.listFiles()
-        .orEmpty()
-        .filter(File::isDirectory)
-        .flatMap { group -> group.listFiles().orEmpty().filter(File::isDirectory) }
+    fun installedPackIds(): Set<String> = installedPackRoots
+        .flatMap(::packDirectories)
         .filter { File(it, MANIFEST_NAME).isFile }
         .filter { directory ->
             runCatching {
@@ -45,6 +48,73 @@ internal class FmodBankStore(
             }.getOrDefault(false)
         }
         .mapTo(linkedSetOf()) { "${it.parentFile?.name}/${it.name}" }
+
+    fun diagnoseStorage(): FmodBankStorageDiagnostics {
+        val lines = mutableListOf<String>()
+        val validPackIds = linkedSetOf<String>()
+        var issueCount = 0
+
+        installedPackRoots.forEachIndexed { index, root ->
+            val label = if (index == 0) "PRIVATE RUNTIME" else "ANDROID/DATA DIRECT"
+            lines += "$label: ${root.absolutePath}"
+            if (!root.exists()) {
+                lines += "  NOT PRESENT — this optional bank source is not in use"
+                return@forEachIndexed
+            }
+            if (!root.isDirectory || !root.canRead()) {
+                lines += "  ERROR — path is not a readable directory"
+                issueCount++
+                return@forEachIndexed
+            }
+
+            val rootPacks = packDirectories(root)
+            lines += "  Found ${rootPacks.size} pack directories"
+            SUPPORTED_IMPORT_GROUPS.sorted().forEach { group ->
+                val groupDirectory = File(root, group)
+                val count = groupDirectory.listFiles().orEmpty().count(File::isDirectory)
+                lines += "  $group: $count"
+            }
+
+            rootPacks.sortedBy { "${it.parentFile?.name}/${it.name}" }.forEach { directory ->
+                val packLabel = "${directory.parentFile?.name}/${directory.name}"
+                runCatching {
+                    val manifestFile = File(directory, MANIFEST_NAME)
+                    require(manifestFile.isFile) { "manifest.json is missing" }
+                    val manifest = manifestFile.inputStream().use(::readManifest)
+                    require(manifest.group == directory.parentFile?.name) {
+                        "manifest group is ${manifest.group}"
+                    }
+                    require(manifest.id == directory.name) {
+                        "manifest id is ${manifest.id}"
+                    }
+                    require(manifest.files.count { file ->
+                        file.path.startsWith("bank/") && file.path.endsWith(".bank")
+                    } == 1) {
+                        "exactly one bank file is required"
+                    }
+                    manifest.files.forEach { entry ->
+                        val payload = safeDestination(directory, entry.path)
+                        require(payload.isFile) { "${entry.path} is missing" }
+                        require(payload.length() == entry.bytes) {
+                            "${entry.path} has ${payload.length()} bytes; expected ${entry.bytes}"
+                        }
+                    }
+                    validPackIds += packLabel
+                }.onFailure { error ->
+                    issueCount++
+                    lines += "  ERROR $packLabel — ${error.message ?: error::class.java.simpleName}"
+                }
+            }
+        }
+
+        lines += "VALID PACKS: ${validPackIds.size}"
+        lines += "ISSUES: $issueCount"
+        return FmodBankStorageDiagnostics(
+            validPackCount = validPackIds.size,
+            issueCount = issueCount,
+            lines = lines,
+        )
+    }
 
     fun bankFile(profile: FmodBankProfile): File = bankFile(profile.packGroup, profile.bankPackId, profile.displayName)
 
@@ -221,9 +291,19 @@ internal class FmodBankStore(
 
     private fun installedDirectory(group: String, packId: String): File? {
         if (!SAFE_PACK_ID.matches(group) || !SAFE_PACK_ID.matches(packId)) return null
-        val directory = File(File(packsDirectory, group), packId)
-        return directory.takeIf { File(it, MANIFEST_NAME).isFile }
+        return installedPackRoots.firstNotNullOfOrNull { root ->
+            val directory = File(File(root, group), packId)
+            directory.takeIf { File(it, MANIFEST_NAME).isFile }
+        }
     }
+
+    private fun packDirectories(root: File): List<File> = root.listFiles()
+        .orEmpty()
+        .filter(File::isDirectory)
+        .filter { it.name in SUPPORTED_IMPORT_GROUPS }
+        .flatMap { group ->
+            group.listFiles().orEmpty().filter(File::isDirectory)
+        }
 
     private fun readManifest(input: InputStream): FmodBankManifest = JsonReader(InputStreamReader(input, Charsets.UTF_8)).use { reader ->
         reader.beginObject()
@@ -347,16 +427,48 @@ internal class FmodBankStore(
     }
 }
 
+internal data class FmodBankStorageDiagnostics(
+    val validPackCount: Int,
+    val issueCount: Int,
+    val lines: List<String>,
+)
+
 internal class FmodBankResolver(context: Context) {
     private val appContext = context.applicationContext
+    private val externalFilesDirectory = appContext.getExternalFilesDir(null)
+    private val diagnosticLogFile = externalFilesDirectory?.resolve(BANK_DIAGNOSTIC_LOG_NAME)
+        ?: File(appContext.filesDir, BANK_DIAGNOSTIC_LOG_NAME)
     private val store = FmodBankStore(
         filesDirectory = appContext.filesDir,
-        stagedImportDirectory = appContext.getExternalFilesDir(null)?.resolve(STAGED_IMPORT_DIRECTORY_NAME),
+        stagedImportDirectory = externalFilesDirectory?.resolve(STAGED_IMPORT_DIRECTORY_NAME),
+        externalPacksDirectory = externalFilesDirectory?.resolve(INSTALLED_BANK_DIRECTORY_NAME),
     )
 
     fun importStagedPacks(): FmodBankImportResult = store.importStagedPacks()
 
     fun hasStagedPacks(): Boolean = store.hasStagedPacks()
+
+    @Synchronized
+    fun diagnose(): FmodBankDiagnostics {
+        val generatedAt = System.currentTimeMillis()
+        val storage = store.diagnoseStorage()
+        val recognizedCarCount = FmodBankProfiles.all.count(::isInstalled)
+        val scanLines = buildList {
+            add("=== BANK SCAN $generatedAt ===")
+            addAll(storage.lines)
+            add("RECOGNIZED CARS: $recognizedCarCount / ${FmodBankProfiles.all.size}")
+            add("DIAGNOSTIC LOG: ${diagnosticLogFile.absolutePath}")
+        }
+        appendDiagnosticScan(scanLines)
+
+        return FmodBankDiagnostics(
+            generatedAtEpochMillis = generatedAt,
+            recognizedCarCount = recognizedCarCount,
+            validPackCount = storage.validPackCount,
+            issueCount = storage.issueCount,
+            logLines = diagnosticLogFile.readLines().takeLast(MAX_DIAGNOSTIC_LOG_LINES),
+        )
+    }
 
     fun bankFiles(profile: FmodBankProfile): FmodBankFiles {
         require(profile in FmodBankProfiles.all) { "Car is outside this app catalog" }
@@ -404,6 +516,18 @@ internal class FmodBankResolver(context: Context) {
         }
         return runCatching { appContext.assets.open(profile.previewAssetName) }.getOrNull()
     }
+
+    private fun appendDiagnosticScan(lines: List<String>) {
+        diagnosticLogFile.parentFile?.mkdirs()
+        diagnosticLogFile.appendText(lines.joinToString(separator = "\n", postfix = "\n"))
+        val retainedLines = diagnosticLogFile.readLines().takeLast(MAX_DIAGNOSTIC_LOG_LINES)
+        diagnosticLogFile.writeText(retainedLines.joinToString(separator = "\n", postfix = "\n"))
+    }
+
+    private companion object {
+        const val BANK_DIAGNOSTIC_LOG_NAME = "bank-import-diagnostics.log"
+        const val MAX_DIAGNOSTIC_LOG_LINES = 500
+    }
 }
 
 /**
@@ -411,6 +535,7 @@ internal class FmodBankResolver(context: Context) {
  * grants the owning app access without asking for broad storage permission, including on DiLink.
  */
 internal const val STAGED_IMPORT_DIRECTORY_NAME = "fmod-bank-import"
+internal const val INSTALLED_BANK_DIRECTORY_NAME = "fmod-banks"
 
 internal data class FmodBankFiles(
     val commonStrings: File,

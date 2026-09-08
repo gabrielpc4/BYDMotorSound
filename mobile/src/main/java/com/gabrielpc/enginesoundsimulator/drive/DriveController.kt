@@ -174,6 +174,7 @@ class DriveController(context: Context) {
     private val transmissionPosition = AtomicReference(TransmissionPosition.DRIVE)
     private val uiActive = AtomicBoolean(false)
     private val audioInterrupted = AtomicBoolean(false)
+    private val bankRescanRunning = AtomicBoolean(false)
     private val stagedBankImportRunning = AtomicBoolean(false)
     private val audioMuted = AtomicBoolean(false)
     // Deliberately session-only: this diagnostic/listening mode must never become a car preference.
@@ -930,6 +931,54 @@ class DriveController(context: Context) {
             false
         } else {
             simulation.requestManualDownshift()
+        }
+    }
+
+    fun rescanBanks() {
+        if (!bankRescanRunning.compareAndSet(false, true)) {
+            return
+        }
+
+        Thread({
+            try {
+                synchronized(lifecycleLock) {
+                    refreshInstalledProfileCache()
+                    val installed = installedProfiles()
+                    val current = selectedProfile.get()
+                    val target = installed.firstOrNull { profile ->
+                        profile.id == current.id
+                    } ?: defaultInstalledProfile()
+
+                    if (installed.isEmpty()) {
+                        userMessage = UserVisibleMessage(
+                            id = SystemClock.elapsedRealtime(),
+                            title = "No valid FMOD banks found",
+                            detail = "Open Settings > BANK IMPORT to inspect paths and pack errors.",
+                        )
+                        return@synchronized
+                    }
+
+                    reconcileCarNavigationState()
+                    applySelectedCar(
+                        profile = target,
+                        forceAudioReload = true,
+                    )
+                    if (!audioMuted.get() && !audioEngine.isAudioActive()) {
+                        audioEngine.start()
+                    }
+                    userMessage = UserVisibleMessage(
+                        id = SystemClock.elapsedRealtime(),
+                        title = "FMOD banks rescanned",
+                        detail = "Recognized ${installed.size} car(s) from the available bank folders.",
+                        severity = UserVisibleMessageSeverity.INFO,
+                    )
+                }
+            } finally {
+                bankRescanRunning.set(false)
+            }
+        }, "fmod-bank-rescan").apply {
+            isDaemon = true
+            start()
         }
     }
 

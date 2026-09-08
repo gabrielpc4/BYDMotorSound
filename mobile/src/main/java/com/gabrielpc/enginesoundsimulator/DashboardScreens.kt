@@ -64,8 +64,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -104,6 +106,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.gabrielpc.enginesoundsimulator.RuntimeFeatureFlags
+import com.gabrielpc.enginesoundsimulator.audio.FmodBankDiagnostics
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankProfile
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankProfiles
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankResolver
@@ -899,6 +902,7 @@ private fun MixerLayerGainSlider(
 internal fun SettingsScreen(
     onExportSettings: () -> Unit,
     onResetAll: () -> Unit,
+    onRescanBanks: () -> Unit,
     fmodUpdateRateHz: Int,
     onFmodUpdateRateChange: (Int) -> Unit,
     backfireSettings: BackfireSettings,
@@ -929,10 +933,10 @@ internal fun SettingsScreen(
     onCruisingShiftOffsetForTachMaxRpmChange: (Int, Int) -> Unit,
     onPreviewBackfireSample: (Int) -> Unit,
 ) {
-    var backfireTab by remember { mutableStateOf(false) }
+    var selectedTab by remember { mutableStateOf(SettingsSection.GENERAL) }
     var showResetConfirmation by remember { mutableStateOf(false) }
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp),
+        modifier = Modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -942,10 +946,23 @@ internal fun SettingsScreen(
             modifier = Modifier.fillMaxWidth().border(1.dp, Outline, skinShape(8.dp)),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            SettingsTab("GENERAL", !backfireTab) { backfireTab = false }
-            SettingsTab("BACKFIRE", backfireTab) { backfireTab = true }
+            SettingsTab("GENERAL", selectedTab == SettingsSection.GENERAL) {
+                selectedTab = SettingsSection.GENERAL
+            }
+            SettingsTab("BACKFIRE", selectedTab == SettingsSection.BACKFIRE) {
+                selectedTab = SettingsSection.BACKFIRE
+            }
+            SettingsTab("BANK IMPORT", selectedTab == SettingsSection.BANK_IMPORT) {
+                selectedTab = SettingsSection.BANK_IMPORT
+            }
         }
-        if (!backfireTab) {
+        when (selectedTab) {
+            SettingsSection.GENERAL -> Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
             SettingsGridRow {
                 FmodUpdateRateControl(
                     rateHz = fmodUpdateRateHz,
@@ -1010,11 +1027,21 @@ internal fun SettingsScreen(
                     Text("RESET ALL", color = OnSurface, fontWeight = FontWeight.Black)
                 }
             }
-        } else {
-            BackfireSettingsPanel(
-                settings = backfireSettings,
-                onChange = onBackfireSettingsChange,
-                onPreview = onPreviewBackfireSample,
+            }
+            SettingsSection.BACKFIRE -> Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                BackfireSettingsPanel(
+                    settings = backfireSettings,
+                    onChange = onBackfireSettingsChange,
+                    onPreview = onPreviewBackfireSample,
+                )
+            }
+            SettingsSection.BANK_IMPORT -> BankImportDiagnosticsPanel(
+                onRescanBanks = onRescanBanks,
+                modifier = Modifier.weight(1f),
             )
         }
     }
@@ -1049,6 +1076,132 @@ internal fun SettingsScreen(
             containerColor = Surface,
         )
     }
+}
+
+private enum class SettingsSection {
+    GENERAL,
+    BACKFIRE,
+    BANK_IMPORT,
+}
+
+@Composable
+private fun BankImportDiagnosticsPanel(
+    onRescanBanks: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val resolver = remember(context) {
+        FmodBankResolver(context.applicationContext)
+    }
+    var refreshSerial by remember { mutableStateOf(0) }
+    var diagnostics by remember { mutableStateOf<FmodBankDiagnostics?>(null) }
+    var loading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(refreshSerial) {
+        loading = true
+        diagnostics = withContext(Dispatchers.IO) {
+            resolver.diagnose()
+        }
+        loading = false
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "FMOD BANK DISCOVERY",
+                    color = Accent,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.2.sp,
+                )
+                Text(
+                    text = "Checks both private files and Android/data direct-copy storage.",
+                    color = Muted,
+                    fontSize = 16.sp,
+                    lineHeight = 20.sp,
+                )
+            }
+            Button(
+                enabled = !loading,
+                onClick = {
+                    onRescanBanks()
+                    refreshSerial += 1
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Accent.copy(alpha = 0.85f)),
+            ) {
+                Text(
+                    text = if (loading) "SCANNING…" else "RESCAN BANKS",
+                    color = Background,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Black,
+                )
+            }
+        }
+
+        diagnostics?.let { report ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                DiagnosticStatusTag("${report.recognizedCarCount} CARS", AccentSoft)
+                DiagnosticStatusTag("${report.validPackCount} VALID PACKS", Success)
+                DiagnosticStatusTag(
+                    text = "${report.issueCount} ISSUES",
+                    color = if (report.issueCount == 0) Success else Danger,
+                )
+            }
+        }
+
+        MaterialSurface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .border(1.dp, Outline, skinShape(8.dp)),
+            color = Color.Black.copy(alpha = 0.35f),
+            shape = skinShape(8.dp),
+        ) {
+            val logScrollState = rememberScrollState()
+            LaunchedEffect(diagnostics?.generatedAtEpochMillis) {
+                logScrollState.scrollTo(logScrollState.maxValue)
+            }
+            Text(
+                text = diagnostics?.logLines?.joinToString("\n")
+                    ?: "Scanning bank folders…",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(logScrollState)
+                    .padding(14.dp),
+                color = if (diagnostics?.issueCount == 0) AccentSoft else OnSurface,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 16.sp,
+                lineHeight = 22.sp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DiagnosticStatusTag(
+    text: String,
+    color: Color,
+) {
+    Text(
+        text = text,
+        color = color,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Black,
+        modifier = Modifier
+            .border(1.dp, color.copy(alpha = 0.65f), skinShape(4.dp))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    )
 }
 
 @Composable
@@ -1627,7 +1780,7 @@ private fun RowScope.SettingsTab(label: String, selected: Boolean, onClick: () -
     Text(
         text = label,
         color = if (selected) Accent else Muted,
-        fontSize = 13.sp,
+        fontSize = 15.sp,
         fontWeight = FontWeight.Black,
         modifier = Modifier
             .weight(1f)

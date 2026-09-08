@@ -37,6 +37,34 @@ Shared banks are dependencies and never appear as cars.
 Stage archives beneath `Android/data/com.gabrielpc.enginesoundsimulator/files/fmod-bank-import/`.
 A car becomes available once its own pack and both shared dependencies are in the private store.
 
+### Direct expanded-bank copy through `Android/data`
+
+The dashboard also recognizes an already-expanded runtime tree copied by the vehicle file manager
+to its app-specific external files directory:
+
+`Internal storage/Android/data/com.gabrielpc.enginesoundsimulator/files/fmod-banks/`
+
+This location is distinct from the private `/data/user/0/.../files/` directory shown by settings
+exports. Android normally maps the file-manager-visible `Android/data` folder to app-specific
+external storage, so the dashboard explicitly checks both roots.
+
+From the repo root:
+
+```sh
+python3 tools/build_fmod_bank_packs.py --force
+python3 tools/export_direct_app_files_tree.py --force
+```
+
+This creates `com.gabrielpc.enginesoundsimulator/files/fmod-banks/` with every active pack already
+expanded. Copy that `fmod-banks` directory to the `Android/data/.../files/` destination above,
+preserving the `original_cars_pack/` and `modded_car_packs/` subfolders. Reopen the dashboard;
+installed cars should appear without an archive import or a second copy of the multi-gigabyte
+catalog.
+
+See `com.gabrielpc.enginesoundsimulator/COPY_TO_BYD.txt` for step-by-step copy instructions.
+Settings > BANK IMPORT shows both resolved paths, valid-pack counts, recognized-car counts, and
+per-pack errors. `RESCAN BANKS` refreshes the catalog without reinstalling the app.
+
 ## Package groups
 
 `tools/build_fmod_bank_packs.py` reads official cars only from

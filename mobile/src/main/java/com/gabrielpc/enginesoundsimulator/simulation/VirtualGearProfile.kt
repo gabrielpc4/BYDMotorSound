@@ -16,10 +16,16 @@ internal data class VirtualGearProfile(
     val physicalBoundarySpeedsKmh: List<Double>,
     val finalDrive: Double,
     val wheelRadiusMeters: Double,
+    val usesAuthoredRatiosOnly: Boolean = false,
 ) {
     init {
-        require(virtualForwardGearCount in MIN_VIRTUAL_GEARS..MAX_VIRTUAL_GEARS) {
-            "Virtual gear count must be between $MIN_VIRTUAL_GEARS and $MAX_VIRTUAL_GEARS"
+        require(virtualForwardGearCount in 1..MAX_VIRTUAL_GEARS) {
+            "Virtual gear count must be between 1 and $MAX_VIRTUAL_GEARS"
+        }
+        if (!usesAuthoredRatiosOnly) {
+            require(virtualForwardGearCount in MIN_VIRTUAL_GEARS..MAX_VIRTUAL_GEARS) {
+                "Virtual gear count must be between $MIN_VIRTUAL_GEARS and $MAX_VIRTUAL_GEARS"
+            }
         }
         require(synthesizedRatios.size == virtualForwardGearCount) {
             "Expected $virtualForwardGearCount synthesized ratios, got ${synthesizedRatios.size}"
@@ -82,6 +88,23 @@ internal data class VirtualGearProfile(
                 physicalBoundarySpeedsKmh = boundaries,
                 finalDrive = physics.drivetrain.finalDrive,
                 wheelRadiusMeters = wheelRadius,
+                usesAuthoredRatiosOnly = false,
+            )
+        }
+
+        /** Bank-authored forward ratios and count without virtual synthesis or custom shift times. */
+        fun fromOriginal(physics: AssettoPhysics): VirtualGearProfile {
+            val ratios = physics.drivetrain.forwardRatios
+            require(ratios.isNotEmpty()) { "Bank must provide at least one forward ratio" }
+            val count = ratios.size
+            val wheelRadius = drivenWheelRadius(physics)
+            return VirtualGearProfile(
+                virtualForwardGearCount = count,
+                synthesizedRatios = ratios.toList(),
+                physicalBoundarySpeedsKmh = physicalBoundarySpeedsKmh(count),
+                finalDrive = physics.drivetrain.finalDrive,
+                wheelRadiusMeters = wheelRadius,
+                usesAuthoredRatiosOnly = true,
             )
         }
 

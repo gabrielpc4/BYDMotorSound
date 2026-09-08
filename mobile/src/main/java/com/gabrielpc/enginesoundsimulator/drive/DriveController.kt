@@ -105,6 +105,7 @@ data class DriveSnapshot(
     val carAudioReady: Boolean = false,
     val manualShiftModeEnabled: Boolean = false,
     val fmodUpdateRateHz: Int = FmodUpdateRate.DEFAULT_HZ,
+    val gearProfileSelection: GearProfileSelection = GearProfileSelection.virtual(VirtualGearProfile.DEFAULT_VIRTUAL_GEARS),
     val virtualForwardGearCount: Int = VirtualGearProfile.DEFAULT_VIRTUAL_GEARS,
     val exteriorPureAudio: Boolean = false,
     val minimumAudioThrottle: Float = MinimumAudioThrottle.DEFAULT,
@@ -156,7 +157,7 @@ class DriveController(context: Context) {
     private val exteriorAudioModeRepository = ExteriorAudioModeRepository(appContext)
     private val backfireSettingsRepository = BackfireSettingsRepository(appContext)
     private val effectSoundOverrideRepository = EffectSoundOverrideRepository(appContext)
-    private val virtualGearCountRepository = VirtualGearCountRepository(appContext)
+    private val gearProfileSelectionRepository = GearProfileSelectionRepository(appContext)
     private val minimumAudioThrottleRepository = MinimumAudioThrottleRepository(appContext)
     private val automaticTransmissionSettingsRepository = AutomaticTransmissionSettingsRepository(appContext)
     private val selectedProfile = AtomicReference(resolveInitialProfile())
@@ -190,7 +191,7 @@ class DriveController(context: Context) {
     private val mixerGlobalGains = AtomicReference(MixerGlobalGains())
     private val mixerCarSpecificGains = AtomicReference(MixerCarSpecificGains())
     private val fmodUpdateRateHz = AtomicInteger(fmodUpdateRateRepository.load())
-    private val virtualForwardGearCount = AtomicInteger(virtualGearCountRepository.load())
+    private val gearProfileSelection = AtomicReference(gearProfileSelectionRepository.load())
     private val exteriorPureAudio = AtomicBoolean(false)
     private val minimumAudioThrottleSettings = AtomicReference(minimumAudioThrottleRepository.load())
     private val automaticTransmissionSettings = AtomicReference(automaticTransmissionSettingsRepository.load())
@@ -248,7 +249,7 @@ class DriveController(context: Context) {
         effectSoundOverrides.set(effectSoundOverrideRepository.load())
         simulation.updateBackfireSettings(backfireSettings.get())
         applyEffectSoundOverrides()
-        simulation.updateVirtualGearCount(virtualForwardGearCount.get())
+        simulation.updateGearProfileSelection(gearProfileSelection.get())
         audioEngine.setBackfireAllowedSamples(backfireSettings.get().allowedSamples)
         applyMinimumAudioThrottleSettings(minimumAudioThrottleSettings.get())
         applyManualShiftSoundOverrideCoupling(manualShiftEnabled.get())
@@ -297,7 +298,8 @@ class DriveController(context: Context) {
             hasTurbo = activePhysics.get()?.engine?.turbos?.isNotEmpty() == true,
             hasSupercharger = resolveHasSupercharger(),
             fmodUpdateRateHz = fmodUpdateRateHz.get(),
-            virtualForwardGearCount = virtualForwardGearCount.get(),
+            gearProfileSelection = gearProfileSelection.get(),
+            virtualForwardGearCount = simulation.effectiveForwardGearCount(),
             exteriorPureAudio = exteriorPureAudio.get(),
             minimumAudioThrottle = minimumAudioThrottleSettings.get().minimum,
             pedalAudioThrottleRampUpMilliseconds = minimumAudioThrottleSettings.get().rampUpMilliseconds,
@@ -402,14 +404,14 @@ class DriveController(context: Context) {
         audioEngine.setFmodUpdateRateHz(normalized)
     }
 
+    fun setGearProfileSelection(selection: GearProfileSelection) {
+        gearProfileSelection.set(selection)
+        gearProfileSelectionRepository.save(selection)
+        simulation.updateGearProfileSelection(selection)
+    }
+
     fun setVirtualForwardGearCount(count: Int) {
-        val normalized = count.coerceIn(
-            VirtualGearProfile.MIN_VIRTUAL_GEARS,
-            VirtualGearProfile.MAX_VIRTUAL_GEARS,
-        )
-        virtualForwardGearCount.set(normalized)
-        virtualGearCountRepository.save(normalized)
-        simulation.updateVirtualGearCount(normalized)
+        setGearProfileSelection(GearProfileSelection.virtual(count))
     }
 
     fun setCruisingShiftOffsetForTachMaxRpm(tachMaxRpmTier: Int, offsetRpm: Int) {
@@ -736,7 +738,7 @@ class DriveController(context: Context) {
         appContext.getSharedPreferences(AppPreferenceStores.CAR_PICKER_GROUP, Context.MODE_PRIVATE).edit().clear().apply()
         backfireSettingsRepository.reset()
         effectSoundOverrideRepository.reset()
-        virtualGearCountRepository.reset()
+        gearProfileSelectionRepository.reset()
         minimumAudioThrottleRepository.reset()
         automaticTransmissionSettingsRepository.reset()
         fmodUpdateRateRepository.reset()
@@ -750,10 +752,10 @@ class DriveController(context: Context) {
         exteriorPureAudio.set(false)
         backfireSettings.set(BackfireSettings())
         effectSoundOverrides.set(EffectSoundOverrideSettings())
-        virtualForwardGearCount.set(VirtualGearProfile.DEFAULT_VIRTUAL_GEARS)
+        gearProfileSelection.set(GearProfileSelection.virtual(VirtualGearProfile.DEFAULT_VIRTUAL_GEARS))
         minimumAudioThrottleSettings.set(MinimumAudioThrottleSettings())
         automaticTransmissionSettings.set(AutomaticTransmissionSettings())
-        simulation.updateVirtualGearCount(VirtualGearProfile.DEFAULT_VIRTUAL_GEARS)
+        simulation.updateGearProfileSelection(GearProfileSelection.virtual(VirtualGearProfile.DEFAULT_VIRTUAL_GEARS))
         simulation.updateAutomaticTransmissionSettings(AutomaticTransmissionSettings())
         simulation.updateBackfireSettings(backfireSettings.get())
         audioEngine.setBackfireAudioEnabled(true)
@@ -1474,7 +1476,8 @@ class DriveController(context: Context) {
                 selectedCarIndex = installedProfiles().indexOf(selected),
                 availableCarCount = installedProfiles().size,
                 soundPerspective = selectedPerspective.get(),
-                virtualForwardGearCount = virtualForwardGearCount.get(),
+                gearProfileSelection = gearProfileSelection.get(),
+                virtualForwardGearCount = simulation.effectiveForwardGearCount(),
                 cruisingLogicEnabled = automaticTransmissionSettings.get().cruisingLogicEnabled,
                 sixGearOnLaunchEnabled = automaticTransmissionSettings.get().sixGearOnLaunchEnabled,
                 allowManualOnLaunchEnabled = automaticTransmissionSettings.get().allowManualOnLaunchEnabled,

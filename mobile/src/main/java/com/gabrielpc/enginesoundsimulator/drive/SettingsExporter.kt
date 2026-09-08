@@ -16,6 +16,7 @@ import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains
 import com.gabrielpc.enginesoundsimulator.audio.SelectedCarRepository
 import org.json.JSONArray
 import org.json.JSONObject
+import com.gabrielpc.enginesoundsimulator.simulation.VirtualGearProfile
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -34,7 +35,7 @@ internal object SettingsExporter {
         val selectedCarRepository = SelectedCarRepository(appContext)
         val shiftModeRepository = ShiftModeRepository(appContext)
         val fmodUpdateRateRepository = FmodUpdateRateRepository(appContext)
-        val virtualGearCountRepository = VirtualGearCountRepository(appContext)
+        val gearProfileSelectionRepository = GearProfileSelectionRepository(appContext)
         val minimumAudioThrottleRepository = MinimumAudioThrottleRepository(appContext)
         val automaticTransmissionSettingsRepository = AutomaticTransmissionSettingsRepository(appContext)
         val backfireSettingsRepository = BackfireSettingsRepository(appContext)
@@ -60,7 +61,12 @@ internal object SettingsExporter {
                 put("selectedCarId", selectedCarRepository.load().id)
                 put("manualShiftEnabled", shiftModeRepository.isManualEnabled())
                 put("fmodUpdateRateHz", fmodUpdateRateRepository.load())
-                put("virtualForwardGearCount", virtualGearCountRepository.load())
+                put("gearProfileSelection", GearProfileSelection.toPersisted(gearProfileSelectionRepository.load()))
+                put(
+                    "virtualForwardGearCount",
+                    gearProfileSelectionRepository.load().virtualCountOrNull()
+                        ?: VirtualGearProfile.DEFAULT_VIRTUAL_GEARS,
+                )
                 put("carPickerGroup", carPickerGroup)
                 put("favoriteCarIds", JSONArray(carFavoritesRepository.load().sorted()))
                 put("minimumAudioThrottle", minimumAudioThrottleToJson(minimumAudioThrottleRepository.load()))

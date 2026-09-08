@@ -114,6 +114,7 @@ import com.gabrielpc.enginesoundsimulator.drive.DriveController
 import com.gabrielpc.enginesoundsimulator.drive.DriveSnapshot
 import com.gabrielpc.enginesoundsimulator.drive.BackfireSettings
 import com.gabrielpc.enginesoundsimulator.drive.EffectSoundKind
+import com.gabrielpc.enginesoundsimulator.drive.GearProfileSelection
 import com.gabrielpc.enginesoundsimulator.drive.UserVisibleMessage
 import com.gabrielpc.enginesoundsimulator.drive.UserVisibleMessageSeverity
 import com.gabrielpc.enginesoundsimulator.drive.InputMode
@@ -275,6 +276,7 @@ class MainActivity : ComponentActivity() {
                         onToggleManualShiftMode = controller::toggleManualShiftMode,
                         onMediaShiftButton = controller::handleMediaShiftButton,
                         onVirtualForwardGearCountChange = controller::setVirtualForwardGearCount,
+                        onGearProfileSelectionChange = controller::setGearProfileSelection,
                         onSixGearOnLaunchEnabledChange = controller::setSixGearOnLaunchEnabled,
                         onAllowManualOnLaunchEnabledChange = controller::setAllowManualOnLaunchEnabled,
                         onManualTransmissionKickdownEnabledChange =
@@ -409,6 +411,7 @@ private fun MotorSoundDashboard(
     onToggleManualShiftMode: () -> Unit,
     onMediaShiftButton: (Int) -> Boolean,
     onVirtualForwardGearCountChange: (Int) -> Unit,
+    onGearProfileSelectionChange: (GearProfileSelection) -> Unit,
     onSixGearOnLaunchEnabledChange: (Boolean) -> Unit,
     onAllowManualOnLaunchEnabledChange: (Boolean) -> Unit,
     onManualTransmissionKickdownEnabledChange: (Boolean) -> Unit,
@@ -639,6 +642,8 @@ private fun MotorSoundDashboard(
                             onResetMixerCarSpecificGains = onResetMixerCarSpecificGains,
                             onEventMute = onEventMute,
                             onEventSolo = onEventSolo,
+                            gearProfileSelection = state.gearProfileSelection,
+                            onGearProfileSelectionChange = onGearProfileSelectionChange,
                             exteriorPureAudio = state.exteriorPureAudio,
                             onExteriorPureAudioChange = onExteriorPureAudioChange,
                             modifier = Modifier

@@ -75,6 +75,7 @@ internal class AssettoDrivetrainFrame(
 internal class AssettoDrivetrain(
     private var physics: AssettoPhysics,
     private var virtualGearProfile: VirtualGearProfile,
+    private var usesAuthoredShiftDurations: Boolean = virtualGearProfile.usesAuthoredRatiosOnly,
 ) {
     private var launchSixGearProfile: VirtualGearProfile = buildLaunchSixGearProfile(physics)
     private var sixGearOnLaunchEnabled = false
@@ -197,9 +198,10 @@ internal class AssettoDrivetrain(
         resetLaunchControl()
     }
 
-    fun updateVirtualGearProfile(updated: VirtualGearProfile) {
+    fun updateGearProfileMode(updated: VirtualGearProfile) {
         val hadLaunchProfileOverride = launchSixGearOverrideActive || launchReturnArmed
         virtualGearProfile = updated
+        usesAuthoredShiftDurations = updated.usesAuthoredRatiosOnly
         launchSixGearProfile = buildLaunchSixGearProfile(physics)
         landingRpmByGear = DoubleArray(updated.virtualForwardGearCount + 1)
         if (hadLaunchProfileOverride) {
@@ -207,6 +209,11 @@ internal class AssettoDrivetrain(
         } else {
             gear = gear.coerceIn(0, updated.virtualForwardGearCount)
         }
+    }
+
+    /** @deprecated Use [updateGearProfileMode] */
+    fun updateVirtualGearProfile(updated: VirtualGearProfile) {
+        updateGearProfileMode(updated)
     }
 
     internal fun updateLaunchControl(
@@ -934,6 +941,7 @@ internal class AssettoDrivetrain(
         // responsive, while FMOD still receives the same authored event triggers and
         // continuous parameters. The bank timing is retained above for diagnostics.
         shiftDuration = when {
+            usesAuthoredShiftDurations -> authoredShiftDuration
             cruisingReturn.active && direction < 0 -> CRUISING_RETURN_DOWNSHIFT_SECONDS
             direction > 0 -> automaticUpshiftSeconds
             racingStompPendingTargetGear != null && direction < 0 -> racingKickdownDownshiftSeconds

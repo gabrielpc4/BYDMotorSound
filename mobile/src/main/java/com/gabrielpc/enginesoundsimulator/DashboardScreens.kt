@@ -121,6 +121,7 @@ import com.gabrielpc.enginesoundsimulator.audio.FmodSourceState
 import com.gabrielpc.enginesoundsimulator.audio.FmodUpdateRate
 import com.gabrielpc.enginesoundsimulator.drive.CruisingShiftOffsetByTachMaxRpm
 import com.gabrielpc.enginesoundsimulator.drive.DriveSnapshot
+import com.gabrielpc.enginesoundsimulator.drive.GearProfileSelection
 import com.gabrielpc.enginesoundsimulator.drive.BackfireSettings
 import com.gabrielpc.enginesoundsimulator.drive.MinimumAudioThrottle
 import com.gabrielpc.enginesoundsimulator.drive.AutomaticDownshiftMilliseconds
@@ -205,6 +206,8 @@ internal fun MixerDashboardScreen(
     onResetMixerCarSpecificGains: () -> Unit,
     onEventMute: (String, Boolean) -> Unit,
     onEventSolo: (String, Boolean) -> Unit,
+    gearProfileSelection: GearProfileSelection,
+    onGearProfileSelectionChange: (GearProfileSelection) -> Unit,
     soundPerspective: EngineSoundPerspective,
     onSoundPerspectiveChange: (EngineSoundPerspective) -> Unit,
     exteriorPureAudio: Boolean,
@@ -403,6 +406,8 @@ internal fun MixerDashboardScreen(
                     onResetMixerCarSpecificGains()
                     mixerSpecificGains = MixerCarSpecificGains()
                 },
+                gearProfileSelection = gearProfileSelection,
+                onGearProfileSelectionChange = onGearProfileSelectionChange,
                 modifier = Modifier.fillMaxSize(),
             )
             MixerDriveControls(
@@ -499,6 +504,8 @@ private fun MixerControlsPanel(
     onMixerGainsChange: (MixerGlobalGains) -> Unit,
     onMixerSpecificGainsChange: (MixerCarSpecificGains) -> Unit,
     onResetCarSpecificGains: () -> Unit,
+    gearProfileSelection: GearProfileSelection,
+    onGearProfileSelectionChange: (GearProfileSelection) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -723,6 +730,10 @@ private fun MixerControlsPanel(
                     },
                 )
             }
+            MixerGearProfileSelector(
+                selection = gearProfileSelection,
+                onSelectionChange = onGearProfileSelectionChange,
+            )
             MixerLayerGainSlider(
                 label = "POPS & BANGS",
                 eventCategory = MixerEventCategory.BACKFIRE,
@@ -802,6 +813,84 @@ private fun layerValueForScope(
 
     return specificValue
 }
+
+@Composable
+private fun MixerGearProfileSelector(
+    selection: GearProfileSelection,
+    onSelectionChange: (GearProfileSelection) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val presets = listOf(
+        MixerGearPreset(
+            label = "ORIGINAL",
+            selection = GearProfileSelection.Original,
+            active = selection.isOriginal(),
+        ),
+        MixerGearPreset(
+            label = "6",
+            selection = GearProfileSelection.virtual(6),
+            active = selection.matchesMixerPreset(6),
+        ),
+        MixerGearPreset(
+            label = "10",
+            selection = GearProfileSelection.virtual(10),
+            active = selection.matchesMixerPreset(10),
+        ),
+        MixerGearPreset(
+            label = "15",
+            selection = GearProfileSelection.virtual(15),
+            active = selection.matchesMixerPreset(15),
+        ),
+    )
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(softFillShape(5.dp))
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "GEARS",
+            color = Muted,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp,
+            modifier = Modifier.width(72.dp),
+        )
+        presets.forEach { preset ->
+            Text(
+                text = preset.label,
+                color = if (preset.active) {
+                    Accent
+                } else {
+                    Muted
+                },
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Black,
+                modifier = Modifier
+                    .clip(softFillShape(5.dp))
+                    .background(
+                        if (preset.active) {
+                            Accent.copy(alpha = 0.14f)
+                        } else {
+                            Color.Transparent
+                        },
+                    )
+                    .clickable {
+                        onSelectionChange(preset.selection)
+                    }
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+            )
+        }
+    }
+}
+
+private data class MixerGearPreset(
+    val label: String,
+    val selection: GearProfileSelection,
+    val active: Boolean,
+)
 
 @Composable
 private fun MixerGainScopeSelector(

@@ -1,6 +1,7 @@
 package com.gabrielpc.enginesoundsimulator.simulation
 
 import com.gabrielpc.enginesoundsimulator.drive.BackfireSettings
+import com.gabrielpc.enginesoundsimulator.drive.GearProfileSelection
 import com.gabrielpc.enginesoundsimulator.telemetry.vehicleDriveSignalsAvailable
 
 /**
@@ -111,7 +112,8 @@ class EngineSimulation {
     private var latestState = DrivetrainState()
     private val presentationSpeedEstimator = QuantizedPresentationSpeedEstimator()
     private val bydSealSimulatedPedalsMotion = BydSealSimulatedPedalsMotion()
-    private var virtualGearCount = VirtualGearProfile.DEFAULT_VIRTUAL_GEARS
+    private var gearProfileSelection: GearProfileSelection =
+        GearProfileSelection.virtual(VirtualGearProfile.DEFAULT_VIRTUAL_GEARS)
     private var virtualGearProfile: VirtualGearProfile? = null
     private var equalSpeedGearMapping: EqualSpeedGearMapping? = null
     private var launchEqualSpeedGearMapping: EqualSpeedGearMapping? = null
@@ -223,26 +225,35 @@ class EngineSimulation {
         )
     }
 
-    internal fun updateVirtualGearCount(count: Int) {
-        val clamped = count.coerceIn(
-            VirtualGearProfile.MIN_VIRTUAL_GEARS,
-            VirtualGearProfile.MAX_VIRTUAL_GEARS,
-        )
-        if (clamped == virtualGearCount && virtualGearProfile != null) {
+    internal fun gearProfileSelection(): GearProfileSelection = gearProfileSelection
+
+    internal fun effectiveForwardGearCount(): Int {
+        return virtualGearProfile?.virtualForwardGearCount ?: VirtualGearProfile.DEFAULT_VIRTUAL_GEARS
+    }
+
+    internal fun updateGearProfileSelection(selection: GearProfileSelection) {
+        if (gearProfileSelection == selection && virtualGearProfile != null) {
             return
         }
 
-        virtualGearCount = clamped
+        gearProfileSelection = selection
         physics?.let { activePhysics ->
             rebuildGearMapping(activePhysics)
-            drivetrain?.updateVirtualGearProfile(virtualGearProfile!!)
+            drivetrain?.updateGearProfileMode(virtualGearProfile!!)
         }
     }
 
+    internal fun updateVirtualGearCount(count: Int) {
+        updateGearProfileSelection(GearProfileSelection.virtual(count))
+    }
+
     private fun rebuildGearMapping(activePhysics: AssettoPhysics) {
-        val profile = VirtualGearProfile.from(activePhysics, virtualGearCount)
-        val launchProfile = VirtualGearProfile.from(activePhysics, VirtualGearProfile.MIN_VIRTUAL_GEARS)
+        val profile = when (val selection = gearProfileSelection) {
+            is GearProfileSelection.Original -> VirtualGearProfile.fromOriginal(activePhysics)
+            is GearProfileSelection.Virtual -> VirtualGearProfile.from(activePhysics, selection.count)
+        }
         virtualGearProfile = profile
+        val launchProfile = VirtualGearProfile.from(activePhysics, VirtualGearProfile.MIN_VIRTUAL_GEARS)
         equalSpeedGearMapping = EqualSpeedGearMapping.from(activePhysics, profile)
         launchEqualSpeedGearMapping = EqualSpeedGearMapping.from(activePhysics, launchProfile)
     }

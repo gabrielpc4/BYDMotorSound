@@ -3,6 +3,7 @@ package com.gabrielpc.enginesoundsimulator.simulation
 import com.gabrielpc.enginesoundsimulator.drive.AutomaticTransmissionSettings
 import com.gabrielpc.enginesoundsimulator.drive.ManualAutodownshiftRpm
 import com.gabrielpc.enginesoundsimulator.drive.ManualRedlineHoldSeconds
+import com.gabrielpc.enginesoundsimulator.drive.RacingEnterDelayMilliseconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingReturnHoldSeconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingReturnThrottlePercent
 
@@ -13,6 +14,7 @@ internal data class AutomaticTransmissionConfig(
     val racingReturnMaxThrottle: Double = RacingReturnThrottlePercent.asFraction(
         RacingReturnThrottlePercent.DEFAULT,
     ),
+    val racingEnterDelayMilliseconds: Int = RacingEnterDelayMilliseconds.DEFAULT,
     val racingReturnHoldSeconds: Double = RacingReturnHoldSeconds.DEFAULT.toDouble(),
     val manualRedlineHoldSeconds: Double? = ManualRedlineHoldSeconds.asHoldSeconds(ManualRedlineHoldSeconds.DEFAULT),
     val manualAutodownshiftRpm: Double = ManualAutodownshiftRpm.DEFAULT.toDouble(),
@@ -25,6 +27,9 @@ internal data class AutomaticTransmissionConfig(
                 cruisingShiftOffsetsByTachMaxRpm = settings.cruisingShiftOffsetsByTachMaxRpm,
                 racingReturnMaxThrottle = RacingReturnThrottlePercent.asFraction(
                     settings.racingReturnThrottlePercent,
+                ),
+                racingEnterDelayMilliseconds = RacingEnterDelayMilliseconds.normalize(
+                    settings.racingEnterDelayMilliseconds,
                 ),
                 racingReturnHoldSeconds = settings.racingReturnHoldSeconds.toDouble(),
                 manualRedlineHoldSeconds = ManualRedlineHoldSeconds.asHoldSeconds(settings.manualRedlineHoldSeconds),

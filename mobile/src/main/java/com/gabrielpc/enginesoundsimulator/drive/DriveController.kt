@@ -113,6 +113,7 @@ data class DriveSnapshot(
     val cruisingShiftOffsetRpm: Int = CruisingShiftOffsetByTachMaxRpm.defaultOffsets().getValue(7_000),
     val cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int> = CruisingShiftOffsetByTachMaxRpm.defaultOffsets(),
     val racingReturnThrottlePercent: Int = RacingReturnThrottlePercent.DEFAULT,
+    val racingEnterDelayMilliseconds: Int = RacingEnterDelayMilliseconds.DEFAULT,
     val racingReturnHoldSeconds: Int = RacingReturnHoldSeconds.DEFAULT,
     val manualRedlineHoldSeconds: Int = ManualRedlineHoldSeconds.DEFAULT,
     val manualAutodownshiftRpm: Int = ManualAutodownshiftRpm.DEFAULT,
@@ -434,6 +435,12 @@ class DriveController(context: Context) {
     fun setRacingReturnHoldSeconds(seconds: Int) {
         updateAutomaticTransmissionSettings {
             it.copy(racingReturnHoldSeconds = RacingReturnHoldSeconds.normalize(seconds))
+        }
+    }
+
+    fun setRacingEnterDelayMilliseconds(milliseconds: Int) {
+        updateAutomaticTransmissionSettings {
+            it.copy(racingEnterDelayMilliseconds = RacingEnterDelayMilliseconds.normalize(milliseconds))
         }
     }
 
@@ -1370,6 +1377,7 @@ class DriveController(context: Context) {
                 ),
                 cruisingShiftOffsetsByTachMaxRpm = automaticTransmissionSettings.get().cruisingShiftOffsetsByTachMaxRpm,
                 racingReturnThrottlePercent = automaticTransmissionSettings.get().racingReturnThrottlePercent,
+                racingEnterDelayMilliseconds = automaticTransmissionSettings.get().racingEnterDelayMilliseconds,
                 racingReturnHoldSeconds = automaticTransmissionSettings.get().racingReturnHoldSeconds,
                 manualRedlineHoldSeconds = automaticTransmissionSettings.get().manualRedlineHoldSeconds,
                 manualAutodownshiftRpm = automaticTransmissionSettings.get().manualAutodownshiftRpm,

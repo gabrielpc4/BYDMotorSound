@@ -120,6 +120,7 @@ import com.gabrielpc.enginesoundsimulator.drive.BackfireSettings
 import com.gabrielpc.enginesoundsimulator.drive.MinimumAudioThrottle
 import com.gabrielpc.enginesoundsimulator.drive.ManualAutodownshiftRpm
 import com.gabrielpc.enginesoundsimulator.drive.ManualRedlineHoldSeconds
+import com.gabrielpc.enginesoundsimulator.drive.RacingEnterDelayMilliseconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingReturnHoldSeconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingReturnThrottlePercent
 import com.gabrielpc.enginesoundsimulator.drive.PedalAudioThrottleRampMilliseconds
@@ -911,6 +912,8 @@ internal fun SettingsScreen(
     onMinimumAudioThrottleChange: (Float) -> Unit,
     racingReturnThrottlePercent: Int,
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
+    racingEnterDelayMilliseconds: Int,
+    onRacingEnterDelayMillisecondsChange: (Int) -> Unit,
     racingReturnHoldSeconds: Int,
     onRacingReturnHoldSecondsChange: (Int) -> Unit,
     manualRedlineHoldSeconds: Int,
@@ -980,6 +983,8 @@ internal fun SettingsScreen(
                 onMinimumAudioThrottleChange = onMinimumAudioThrottleChange,
                 racingReturnThrottlePercent = racingReturnThrottlePercent,
                 onRacingReturnThrottlePercentChange = onRacingReturnThrottlePercentChange,
+                racingEnterDelayMilliseconds = racingEnterDelayMilliseconds,
+                onRacingEnterDelayMillisecondsChange = onRacingEnterDelayMillisecondsChange,
                 manualRedlineHoldSeconds = manualRedlineHoldSeconds,
                 onManualRedlineHoldSecondsChange = onManualRedlineHoldSecondsChange,
                 manualAutodownshiftRpm = manualAutodownshiftRpm,
@@ -1279,6 +1284,8 @@ private fun AutomaticTransmissionSettingsControl(
     onMinimumAudioThrottleChange: (Float) -> Unit,
     racingReturnThrottlePercent: Int,
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
+    racingEnterDelayMilliseconds: Int,
+    onRacingEnterDelayMillisecondsChange: (Int) -> Unit,
     manualRedlineHoldSeconds: Int,
     onManualRedlineHoldSecondsChange: (Int) -> Unit,
     manualAutodownshiftRpm: Int,
@@ -1372,6 +1379,36 @@ private fun AutomaticTransmissionSettingsControl(
                 embedded = true,
             )
         }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("RACING ENTER DELAY", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
+            Text(
+                text = RacingEnterDelayMilliseconds.format(racingEnterDelayMilliseconds),
+                color = OnSurface,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Black,
+            )
+        }
+        Text(
+            text = "When cruising switches to racing on a hard throttle, wait this long before the kickdown gear and RPM snap. Zero is instant.",
+            color = Muted,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+        )
+        Slider(
+            value = racingEnterDelayMilliseconds.toFloat(),
+            onValueChange = { value ->
+                val selectedDelay = RacingEnterDelayMilliseconds.normalize(value.roundToInt())
+                if (selectedDelay != racingEnterDelayMilliseconds) {
+                    onRacingEnterDelayMillisecondsChange(selectedDelay)
+                }
+            },
+            valueRange = RacingEnterDelayMilliseconds.MIN.toFloat()..RacingEnterDelayMilliseconds.MAX.toFloat(),
+            steps = (RacingEnterDelayMilliseconds.MAX - RacingEnterDelayMilliseconds.MIN) / RacingEnterDelayMilliseconds.STEP,
+        )
         val manualRedlineStopIndex = ManualRedlineHoldSeconds.stopIndex(manualRedlineHoldSeconds).toFloat()
         val manualRedlineLastStopIndex = (ManualRedlineHoldSeconds.STOPS.size - 1).toFloat()
         Row(

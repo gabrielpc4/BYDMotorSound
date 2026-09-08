@@ -144,6 +144,9 @@ internal class AssettoDrivetrain(
     private var emergencyUpshiftElapsedSeconds = 0.0
     /** Remaining target after a cruising stomp switches to racing. */
     private var racingStompPendingTargetGear: Int? = null
+    private var racingStompAwaitingCruisingEnter = false
+    private var racingStompDelayRemainingSeconds = 0.0
+    private var racingEnterDelaySeconds = 0.0
     /** Armed when launch 6-gear ends; full profile resumes on the next throttle application. */
     private var launchReturnArmed = false
     /** Remaining target after launch profile return resumes the configured gear count. */
@@ -413,6 +416,7 @@ internal class AssettoDrivetrain(
             tachometerMaximumRpm = physics.engine.tachometerMaximumRpm,
         )
         racingReturnMaxThrottle = automaticTransmissionConfig.racingReturnMaxThrottle.coerceIn(0.0, 1.0)
+        racingEnterDelaySeconds = automaticTransmissionConfig.racingEnterDelayMilliseconds / 1_000.0
         manualRedlineHoldSeconds = automaticTransmissionConfig.manualRedlineHoldSeconds
         manualAutodownshiftRpm = automaticTransmissionConfig.manualAutodownshiftRpm.coerceAtLeast(0.0)
         cruisingLogicEnabled = automaticTransmissionConfig.cruisingLogicEnabled
@@ -468,6 +472,7 @@ internal class AssettoDrivetrain(
             automaticShifting = automaticShifting,
             dt = dt,
         )
+        applyCruisingToRacingKickdown(dt)
         applyRacingStompDownshift(dt)
         applyLaunchReturnGearSync(dt)
         updateEmergencyUpshift(dt)
@@ -1044,7 +1049,7 @@ internal class AssettoDrivetrain(
         cruisingLogicEnabled = enabled
         automaticTransmissionMode = AutomaticTransmissionMode.CRUISING
         racingReturnArmed = false
-        racingStompPendingTargetGear = null
+        clearRacingStompPending()
 
         if (!enabled) {
             automaticTransmissionMode = AutomaticTransmissionMode.RACING
@@ -1125,7 +1130,7 @@ internal class AssettoDrivetrain(
     private fun resetAutomaticTransmissionMode() {
         automaticTransmissionMode = AutomaticTransmissionMode.CRUISING
         racingReturnArmed = false
-        racingStompPendingTargetGear = null
+        clearRacingStompPending()
         clearCruisingReturnTransition()
     }
 
@@ -1285,7 +1290,72 @@ internal class AssettoDrivetrain(
         return selectedGear
     }
 
+    private fun clearRacingStompPending() {
+        racingStompPendingTargetGear = null
+        racingStompAwaitingCruisingEnter = false
+        racingStompDelayRemainingSeconds = 0.0
+    }
+
+    private fun applyCruisingToRacingKickdown(dt: Double) {
+        if (!racingStompAwaitingCruisingEnter) {
+            return
+        }
+
+        val targetGear = racingStompPendingTargetGear ?: run {
+            clearRacingStompPending()
+            return
+        }
+
+        if (automaticTransmissionMode != AutomaticTransmissionMode.RACING) {
+            clearRacingStompPending()
+            return
+        }
+
+        if (gear <= targetGear) {
+            clearRacingStompPending()
+            return
+        }
+
+        if (shifting) {
+            return
+        }
+
+        if (racingStompDelayRemainingSeconds > 0.0) {
+            racingStompDelayRemainingSeconds = max(0.0, racingStompDelayRemainingSeconds - dt)
+            if (racingStompDelayRemainingSeconds > 0.0) {
+                return
+            }
+        }
+
+        applyInstantRacingStomp(targetGear)
+    }
+
+    private fun applyInstantRacingStomp(targetGear: Int) {
+        setGearImmediately(targetGear)
+        landingRpmByGear.fill(0.0)
+        val upshiftRpm = upshiftTriggerRpmForGear()
+        for (indexedGear in 2..targetGear) {
+            landingRpmByGear[indexedGear] = landingRpmAfterUpshift(
+                fromGear = indexedGear - 1,
+                upshiftRpm = upshiftRpm,
+            )
+        }
+
+        if (shouldLockRpmToMappedRoadSpeed()) {
+            rpm = coupledRpmForGear(gear)
+            if (physics.engine.limiterRpm > 0.0) {
+                rpm = rpm.coerceAtMost(physics.engine.limiterRpm)
+            }
+        }
+
+        clearRacingStompPending()
+    }
+
     private fun applyRacingStompDownshift(dt: Double) {
+        if (racingStompAwaitingCruisingEnter) {
+            return
+        }
+
         val targetGear = racingStompPendingTargetGear ?: return
 
         if (shifting) {
@@ -1293,14 +1363,14 @@ internal class AssettoDrivetrain(
         }
 
         if (gear <= targetGear) {
-            racingStompPendingTargetGear = null
+            clearRacingStompPending()
             return
         }
 
         if (downshiftAllowed(gear - 1, dt)) {
             manualShiftRequest = -1
         } else {
-            racingStompPendingTargetGear = null
+            clearRacingStompPending()
         }
     }
 
@@ -1369,7 +1439,7 @@ internal class AssettoDrivetrain(
         if (launchControlPhase != LaunchControlPhase.INACTIVE) {
             automaticTransmissionMode = AutomaticTransmissionMode.RACING
             racingReturnArmed = false
-            racingStompPendingTargetGear = null
+            clearRacingStompPending()
             clearCruisingReturnTransition()
             return
         }
@@ -1377,7 +1447,7 @@ internal class AssettoDrivetrain(
         if (speedMetersPerSecond <= AutomaticTransmissionPolicy.CRUISING_RETURN_MAX_SPEED_MPS) {
             automaticTransmissionMode = AutomaticTransmissionMode.CRUISING
             racingReturnArmed = false
-            racingStompPendingTargetGear = null
+            clearRacingStompPending()
         }
 
         val racingThrottleRequested = rawGas > AutomaticTransmissionPolicy.RACING_ENTER_MIN_THROTTLE
@@ -1394,6 +1464,8 @@ internal class AssettoDrivetrain(
                 val targetGear = computeRacingStompTargetGear(dt)
                 if (targetGear < gear) {
                     racingStompPendingTargetGear = targetGear
+                    racingStompAwaitingCruisingEnter = true
+                    racingStompDelayRemainingSeconds = racingEnterDelaySeconds
                 }
             }
         }
@@ -1413,7 +1485,7 @@ internal class AssettoDrivetrain(
                 } else {
                     automaticTransmissionMode = AutomaticTransmissionMode.CRUISING
                     racingReturnArmed = false
-                    racingStompPendingTargetGear = null
+                    clearRacingStompPending()
                     beginCruisingReturnTransition()
                 }
             }
@@ -1756,7 +1828,7 @@ internal class AssettoDrivetrain(
             launchControlArmedStartRpm = rpm
             automaticTransmissionMode = AutomaticTransmissionMode.RACING
             racingReturnArmed = false
-            racingStompPendingTargetGear = null
+            clearRacingStompPending()
             clearCruisingReturnTransition()
         }
         if (launchControlPhase == LaunchControlPhase.DISARMING && previousPhase == LaunchControlPhase.ARMED) {

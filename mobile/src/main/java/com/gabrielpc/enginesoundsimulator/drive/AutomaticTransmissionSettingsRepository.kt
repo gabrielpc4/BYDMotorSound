@@ -21,6 +21,23 @@ internal object RacingReturnThrottlePercent {
     }
 }
 
+/** Delay before cruising→racing kickdown snaps gear and RPM (0 = instant). */
+internal object RacingEnterDelayMilliseconds {
+    const val MIN = 0
+    const val MAX = 1_000
+    const val DEFAULT = 0
+    const val STEP = 100
+
+    fun normalize(value: Int): Int {
+        val stepped = ((value.toFloat() / STEP).roundToInt() * STEP)
+        return stepped.coerceIn(MIN, MAX)
+    }
+
+    fun format(value: Int): String {
+        return "${normalize(value)} ms"
+    }
+}
+
 /** Time below [RacingReturnThrottlePercent] required to leave racing mode. */
 internal object RacingReturnHoldSeconds {
     const val MIN = 0
@@ -90,6 +107,7 @@ internal data class AutomaticTransmissionSettings(
     val sixGearOnLaunchEnabled: Boolean = false,
     val cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int> = CruisingShiftOffsetByTachMaxRpm.defaultOffsets(),
     val racingReturnThrottlePercent: Int = RacingReturnThrottlePercent.DEFAULT,
+    val racingEnterDelayMilliseconds: Int = RacingEnterDelayMilliseconds.DEFAULT,
     val racingReturnHoldSeconds: Int = RacingReturnHoldSeconds.DEFAULT,
     val manualRedlineHoldSeconds: Int = ManualRedlineHoldSeconds.DEFAULT,
     val manualAutodownshiftRpm: Int = ManualAutodownshiftRpm.DEFAULT,
@@ -113,6 +131,12 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
                 preferences.getInt(
                     KEY_RACING_RETURN_THROTTLE_PERCENT,
                     RacingReturnThrottlePercent.DEFAULT,
+                ),
+            ),
+            racingEnterDelayMilliseconds = RacingEnterDelayMilliseconds.normalize(
+                preferences.getInt(
+                    KEY_RACING_ENTER_DELAY_MILLISECONDS,
+                    RacingEnterDelayMilliseconds.DEFAULT,
                 ),
             ),
             racingReturnHoldSeconds = RacingReturnHoldSeconds.normalize(
@@ -146,6 +170,10 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
             .putInt(
                 KEY_RACING_RETURN_THROTTLE_PERCENT,
                 RacingReturnThrottlePercent.normalize(settings.racingReturnThrottlePercent),
+            )
+            .putInt(
+                KEY_RACING_ENTER_DELAY_MILLISECONDS,
+                RacingEnterDelayMilliseconds.normalize(settings.racingEnterDelayMilliseconds),
             )
             .putInt(
                 KEY_RACING_RETURN_HOLD_SECONDS,
@@ -224,6 +252,7 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
         const val KEY_SIX_GEAR_ON_LAUNCH_ENABLED = "six_gear_on_launch_enabled"
         const val KEY_CRUISING_SHIFT_OFFSET_RPM = "cruising_shift_offset_rpm"
         const val KEY_RACING_RETURN_THROTTLE_PERCENT = "racing_return_throttle_percent"
+        const val KEY_RACING_ENTER_DELAY_MILLISECONDS = "racing_enter_delay_milliseconds"
         const val KEY_RACING_RETURN_HOLD_SECONDS = "racing_return_hold_seconds"
         const val KEY_MANUAL_REDLINER_HOLD_SECONDS = "manual_redline_hold_seconds"
         const val KEY_MANUAL_AUTODOWNSHIFT_RPM = "manual_autodownshift_rpm"

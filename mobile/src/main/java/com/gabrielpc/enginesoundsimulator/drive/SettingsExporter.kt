@@ -183,6 +183,7 @@ internal object SettingsExporter {
                 },
             )
             put("racingReturnThrottlePercent", settings.racingReturnThrottlePercent)
+            put("racingEnterDelayMilliseconds", settings.racingEnterDelayMilliseconds)
             put("racingReturnHoldSeconds", settings.racingReturnHoldSeconds)
             put("manualRedlineHoldSeconds", settings.manualRedlineHoldSeconds)
             put("manualAutodownshiftRpm", settings.manualAutodownshiftRpm)

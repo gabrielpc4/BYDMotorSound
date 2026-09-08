@@ -6,6 +6,8 @@ import com.gabrielpc.enginesoundsimulator.AppPreferenceStores
 /** Per-car, per-listening-perspective mixer trims layered on top of global gains. */
 data class MixerCarSpecificGains(
     val overall: Float = 1.0f,
+    /** Trim for engine_int and engine_ext subsounds whose FMOD sound name contains "idle". */
+    val engineIdle: Float = 1.0f,
     val engineInterior: Float = 1.0f,
     val engineExterior: Float = 1.0f,
     val effectsHost: Float = 1.0f,
@@ -17,16 +19,17 @@ data class MixerCarSpecificGains(
     val supercharger: Float = 1.0f,
 ) {
     fun normalized(): MixerCarSpecificGains = copy(
-        overall = MixerGlobalGains.clamp(overall),
-        engineInterior = MixerGlobalGains.clamp(engineInterior),
-        engineExterior = MixerGlobalGains.clamp(engineExterior),
-        effectsHost = MixerGlobalGains.clamp(effectsHost),
-        transmission = MixerGlobalGains.clamp(transmission),
-        gearShift = MixerGlobalGains.clamp(gearShift),
-        turbo = MixerGlobalGains.clamp(turbo),
-        backfire = MixerGlobalGains.clamp(backfire),
-        limiter = MixerGlobalGains.clamp(limiter),
-        supercharger = MixerGlobalGains.clamp(supercharger),
+        overall = MixerGlobalGains.snapToStep(overall),
+        engineIdle = MixerGlobalGains.snapToStep(engineIdle),
+        engineInterior = MixerGlobalGains.snapToStep(engineInterior),
+        engineExterior = MixerGlobalGains.snapToStep(engineExterior),
+        effectsHost = MixerGlobalGains.snapToStep(effectsHost),
+        transmission = MixerGlobalGains.snapToStep(transmission),
+        gearShift = MixerGlobalGains.snapToStep(gearShift),
+        turbo = MixerGlobalGains.snapToStep(turbo),
+        backfire = MixerGlobalGains.snapToStep(backfire),
+        limiter = MixerGlobalGains.snapToStep(limiter),
+        supercharger = MixerGlobalGains.snapToStep(supercharger),
     )
 }
 
@@ -39,6 +42,7 @@ internal class MixerCarSpecificGainRepository(context: Context) {
     fun load(profile: FmodBankProfile, perspective: EngineSoundPerspective): MixerCarSpecificGains {
         return MixerCarSpecificGains(
             overall = read(profile, perspective, "overall"),
+            engineIdle = read(profile, perspective, "engine_idle"),
             engineInterior = read(profile, perspective, "engine_interior"),
             engineExterior = read(profile, perspective, "engine_exterior"),
             effectsHost = read(profile, perspective, "effects_host"),
@@ -59,6 +63,7 @@ internal class MixerCarSpecificGainRepository(context: Context) {
         val normalized = gains.normalized()
         val editor = preferences.edit()
         editor.putFloat(key(profile, perspective, "overall"), normalized.overall)
+        editor.putFloat(key(profile, perspective, "engine_idle"), normalized.engineIdle)
         editor.putFloat(key(profile, perspective, "engine_interior"), normalized.engineInterior)
         editor.putFloat(key(profile, perspective, "engine_exterior"), normalized.engineExterior)
         editor.putFloat(key(profile, perspective, "effects_host"), normalized.effectsHost)
@@ -68,6 +73,15 @@ internal class MixerCarSpecificGainRepository(context: Context) {
         editor.putFloat(key(profile, perspective, "backfire"), normalized.backfire)
         editor.putFloat(key(profile, perspective, "limiter"), normalized.limiter)
         editor.putFloat(key(profile, perspective, "supercharger"), normalized.supercharger)
+        editor.commit()
+    }
+
+    fun reset(profile: FmodBankProfile, perspective: EngineSoundPerspective) {
+        val prefix = "${profile.id}.${perspective.name}."
+        val editor = preferences.edit()
+        preferences.all.keys.filter { it.startsWith(prefix) }.forEach { key ->
+            editor.remove(key)
+        }
         editor.commit()
     }
 

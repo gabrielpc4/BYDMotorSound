@@ -122,6 +122,7 @@ internal object SettingsExporter {
 
     private fun mixerGlobalGainsToJson(gains: MixerGlobalGains): JSONObject {
         return JSONObject().apply {
+            put("overall", gains.overall.toDouble())
             put("engineInterior", gains.engineInterior.toDouble())
             put("engineExterior", gains.engineExterior.toDouble())
             put("effectsHost", gains.effectsHost.toDouble())
@@ -139,6 +140,7 @@ internal object SettingsExporter {
     private fun mixerCarSpecificGainsToJson(gains: MixerCarSpecificGains): JSONObject {
         return JSONObject().apply {
             put("overall", gains.overall.toDouble())
+            put("engineIdle", gains.engineIdle.toDouble())
             put("engineInterior", gains.engineInterior.toDouble())
             put("engineExterior", gains.engineExterior.toDouble())
             put("effectsHost", gains.effectsHost.toDouble())
@@ -170,6 +172,7 @@ internal object SettingsExporter {
         return JSONObject().apply {
             put("cruisingLogicEnabled", settings.cruisingLogicEnabled)
             put("sixGearOnLaunchEnabled", settings.sixGearOnLaunchEnabled)
+            put("allowManualOnLaunchEnabled", settings.allowManualOnLaunchEnabled)
             put(
                 "cruisingShiftOffsetsByTachMaxRpm",
                 JSONObject().apply {
@@ -184,6 +187,8 @@ internal object SettingsExporter {
             )
             put("racingReturnThrottlePercent", settings.racingReturnThrottlePercent)
             put("racingEnterDelayMilliseconds", settings.racingEnterDelayMilliseconds)
+            put("automaticUpshiftMilliseconds", settings.automaticUpshiftMilliseconds)
+            put("automaticDownshiftMilliseconds", settings.automaticDownshiftMilliseconds)
             put("racingReturnHoldSeconds", settings.racingReturnHoldSeconds)
             put("manualRedlineHoldSeconds", settings.manualRedlineHoldSeconds)
             put("manualAutodownshiftRpm", settings.manualAutodownshiftRpm)

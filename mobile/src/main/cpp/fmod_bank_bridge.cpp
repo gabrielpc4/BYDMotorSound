@@ -434,6 +434,17 @@ bool isSuperchargerSoundName(const std::string& name) {
     return false;
 }
 
+bool isIdleSoundName(const std::string& name) {
+    if (name.empty()) {
+        return false;
+    }
+    return lowercaseCopy(name.c_str()).find("idle") != std::string::npos;
+}
+
+bool isEngineIdleTrimEventName(const std::string& eventName) {
+    return eventName == "engine_int" || eventName == "engine_ext";
+}
+
 enum class EmbeddedSuperchargerState : std::uint8_t {
     Probing,
     Present,
@@ -985,8 +996,20 @@ public:
         hostEngineInteriorGain_ = engineInterior;
         hostEngineExteriorGain_ = engineExterior;
         hostEffectsGain_ = effects;
-        applyOverrideChannelVolumesLocked();
         applyEventOverridesLocked();
+    }
+
+    void setOverrideEffectsHostGain(float gain) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!active_) {
+            return;
+        }
+        const float clamped = std::max(0.0f, gain);
+        if (clamped == overrideEffectsHostGain_) {
+            return;
+        }
+        overrideEffectsHostGain_ = clamped;
+        applyOverrideChannelVolumesLocked();
     }
 
     void setEffectSoundOverrideGains(float shiftOverrideGain, float backfireOverrideGain) {
@@ -1036,6 +1059,23 @@ public:
         limiterGain_ = limiter;
         superchargerGain_ = supercharger;
         applyEventOverridesLocked();
+    }
+
+    void setEngineIdleGain(float gain) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!active_) {
+            return;
+        }
+        const float clamped = std::max(0.0f, gain);
+        const bool wasActive = !approximatelyEmbeddedGainUnity(engineIdleGain_);
+        const bool isActive = !approximatelyEmbeddedGainUnity(clamped);
+        if (engineIdleGain_ == clamped) {
+            return;
+        }
+        engineIdleGain_ = clamped;
+        if (wasActive || isActive) {
+            applyEmbeddedEngineChannelGainsLockedWithIdleScan(true);
+        }
     }
 
     void setBackfireAudioEnabled(bool enabled) {
@@ -1365,17 +1405,17 @@ private:
         const int index = upshift ? 0 : 1;
         if (core_->playSound(shiftSamples_[index], nullptr, true, &channel) != FMOD_OK || channel == nullptr) return;
         channel->setMode(FMOD_2D);
-        channel->setVolume(hostEffectsGain_ * shiftOverrideGain_);
+        channel->setVolume(overrideEffectsHostGain_ * shiftOverrideGain_);
         channel->setPaused(false);
         shiftChannel_ = channel;
     }
 
     void applyOverrideChannelVolumesLocked() {
         if (shiftChannel_ != nullptr) {
-            shiftChannel_->setVolume(hostEffectsGain_ * shiftOverrideGain_);
+            shiftChannel_->setVolume(overrideEffectsHostGain_ * shiftOverrideGain_);
         }
         if (alfaBackfireChannel_ != nullptr) {
-            alfaBackfireChannel_->setVolume(hostEffectsGain_ * backfireOverrideGain_);
+            alfaBackfireChannel_->setVolume(overrideEffectsHostGain_ * backfireOverrideGain_);
         }
     }
 
@@ -1405,7 +1445,7 @@ private:
         channel->setMode(FMOD_2D);
         // Core one-shots use the same effects host gain and per-category trim as their Studio
         // counterparts, while the sample itself remains an unprocessed Alfa recording.
-        channel->setVolume(hostEffectsGain_ * backfireOverrideGain_);
+        channel->setVolume(overrideEffectsHostGain_ * backfireOverrideGain_);
         channel->setPaused(false);
         alfaBackfireChannel_ = channel;
     }
@@ -1780,8 +1820,8 @@ private:
         }
     }
 
-    bool embeddedEngineChannelGainWorkNeededLocked() const {
-        return hasEmbeddedSupercharger_.load(std::memory_order_relaxed);
+    bool embeddedEngineChannelGainWorkNeededLocked(bool scanIdleChannels) const {
+        return hasEmbeddedSupercharger_.load(std::memory_order_relaxed) || scanIdleChannels;
     }
 
     static bool approximatelyEmbeddedGainUnity(float value) {
@@ -1801,6 +1841,9 @@ private:
         }
         if (superchargerSoloActiveLocked()) {
             return 0.0f;
+        }
+        if (isEngineIdleTrimEventName(eventName) && isIdleSoundName(soundName)) {
+            return engineIdleGain_;
         }
         return 1.0f;
     }
@@ -1849,7 +1892,8 @@ private:
 
     void applyEmbeddedEngineChannelGainsInGroupLocked(
         const std::string& eventName,
-        FMOD::ChannelGroup* group
+        FMOD::ChannelGroup* group,
+        bool scanIdleChannels
     ) {
         if (group == nullptr) {
             return;
@@ -1870,7 +1914,11 @@ private:
                     std::strncpy(soundName, "<unnamed sound>", sizeof(soundName) - 1);
                 }
                 const std::string soundNameString(soundName);
-                if (!isSuperchargerSoundName(soundNameString) && !superchargerSoloActiveLocked()) {
+                const bool isSupercharger = isSuperchargerSoundName(soundNameString);
+                const bool isIdle = scanIdleChannels &&
+                    isEngineIdleTrimEventName(eventName) &&
+                    isIdleSoundName(soundNameString);
+                if (!isSupercharger && !isIdle && !superchargerSoloActiveLocked()) {
                     continue;
                 }
                 applyEmbeddedChannelGainLocked(
@@ -1884,14 +1932,14 @@ private:
             for (int index = 0; index < childCount; ++index) {
                 FMOD::ChannelGroup* child = nullptr;
                 if (group->getGroup(index, &child) == FMOD_OK) {
-                    applyEmbeddedEngineChannelGainsInGroupLocked(eventName, child);
+                    applyEmbeddedEngineChannelGainsInGroupLocked(eventName, child, scanIdleChannels);
                 }
             }
         }
     }
 
-    void applyEmbeddedEngineChannelGainsLocked() {
-        if (!embeddedEngineChannelGainWorkNeededLocked()) {
+    void applyEmbeddedEngineChannelGainsLockedWithIdleScan(bool scanIdleChannels) {
+        if (!embeddedEngineChannelGainWorkNeededLocked(scanIdleChannels)) {
             return;
         }
         const std::string activeEngineEvent = perspectiveEventLocked("engine_int", "engine_ext");
@@ -1906,7 +1954,13 @@ private:
         if (iterator->second->instance->getChannelGroup(&root) != FMOD_OK || root == nullptr) {
             return;
         }
-        applyEmbeddedEngineChannelGainsInGroupLocked(activeEngineEvent, root);
+        applyEmbeddedEngineChannelGainsInGroupLocked(activeEngineEvent, root, scanIdleChannels);
+    }
+
+    void applyEmbeddedEngineChannelGainsLocked() {
+        applyEmbeddedEngineChannelGainsLockedWithIdleScan(
+            !approximatelyEmbeddedGainUnity(engineIdleGain_)
+        );
     }
 
     float eventCategoryGain(const std::string& name) const {
@@ -2025,6 +2079,7 @@ private:
         superchargerProbeWasAccelerating_ = false;
         superchargerProbeAccelSeconds_ = 0.0f;
         superchargerGain_ = 1.0f;
+        engineIdleGain_ = 1.0f;
         idleRpm_ = 1000.0f;
         limiterRpm_ = 7000.0f;
         limiterRunning_ = false;
@@ -2864,6 +2919,7 @@ private:
     float hostEngineInteriorGain_ = 1.0f;
     float hostEngineExteriorGain_ = 1.0f;
     float hostEffectsGain_ = 2.0f;
+    float overrideEffectsHostGain_ = 1.0f;
     std::string loadedProfileId_;
     float transmissionGain_ = 1.0f;
     float gearShiftGain_ = 1.0f;
@@ -2871,6 +2927,7 @@ private:
     float backfireGain_ = 1.0f;
     float limiterGain_ = 1.0f;
     float superchargerGain_ = 1.0f;
+    float engineIdleGain_ = 1.0f;
     float shiftOverrideGain_ = 1.0f;
     float backfireOverrideGain_ = 1.0f;
     std::atomic<bool> hasEmbeddedSupercharger_{false};
@@ -3148,6 +3205,13 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setHostGains(
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setOverrideEffectsHostGain(
+    JNIEnv*, jobject, jfloat gain
+) {
+    runtime.setOverrideEffectsHostGain(gain);
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setLoadedProfileId(
     JNIEnv* environment, jobject, jstring profileId
 ) {
@@ -3159,6 +3223,13 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setCategoryGa
     JNIEnv*, jobject, jfloat transmission, jfloat gearShift, jfloat turbo, jfloat backfire, jfloat limiter, jfloat supercharger
 ) {
     runtime.setCategoryGains(transmission, gearShift, turbo, backfire, limiter, supercharger);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setEngineIdleGain(
+    JNIEnv*, jobject, jfloat gain
+) {
+    runtime.setEngineIdleGain(gain);
 }
 
 extern "C" JNIEXPORT void JNICALL

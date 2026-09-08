@@ -33,6 +33,10 @@ internal object LaunchControl {
     const val ARM_BRAKE_THRESHOLD = 0.05
     const val RELEASE_BRAKE_THRESHOLD = 0.04
     const val STANDSTILL_SPEED_MPS = 0.08
+    /** Ignores one-frame brake noise before staging can arm. */
+    const val MIN_BRAKE_HOLD_BEFORE_ARM_SECONDS = 0.08
+    /** Prevents a one-frame brake release from launching before staging settles. */
+    const val MIN_ARMED_HOLD_BEFORE_LAUNCH_SECONDS = 0.15
     const val JITTER_AMPLITUDE_RPM = 42.0
     const val JITTER_HZ = 10.5
     const val ARMED_RAMP_SECONDS = 0.42
@@ -109,6 +113,8 @@ internal object LaunchControl {
         brake: Double,
         speedMps: Double,
         enabled: Boolean,
+        armedElapsedSeconds: Double = 0.0,
+        brakeHeldElapsedSeconds: Double = 0.0,
     ): LaunchControlPhase {
         if (!enabled) return LaunchControlPhase.INACTIVE
 
@@ -119,16 +125,20 @@ internal object LaunchControl {
         val brakeHeld = brake >= ARM_BRAKE_THRESHOLD
         val brakeReleased = brake < RELEASE_BRAKE_THRESHOLD
         val canArm = speedMps <= STANDSTILL_SPEED_MPS
+        val brakeStagingReady = brakeHeldElapsedSeconds >= MIN_BRAKE_HOLD_BEFORE_ARM_SECONDS
+        val stagedLongEnough = armedElapsedSeconds >= MIN_ARMED_HOLD_BEFORE_LAUNCH_SECONDS
         return when (phase) {
-            LaunchControlPhase.INACTIVE -> if (throttlePressed && brakeHeld && canArm) {
+            LaunchControlPhase.INACTIVE -> if (throttlePressed && brakeHeld && canArm && brakeStagingReady) {
                 LaunchControlPhase.ARMED
             } else {
                 LaunchControlPhase.INACTIVE
             }
 
             LaunchControlPhase.ARMED -> when {
-                brakeReleased -> LaunchControlPhase.LAUNCHED
+                brakeReleased && stagedLongEnough -> LaunchControlPhase.LAUNCHED
+                brakeReleased -> LaunchControlPhase.DISARMING
                 !throttlePressed -> LaunchControlPhase.DISARMING
+                !canArm -> LaunchControlPhase.DISARMING
                 else -> LaunchControlPhase.ARMED
             }
 

@@ -123,6 +123,8 @@ import com.gabrielpc.enginesoundsimulator.drive.CruisingShiftOffsetByTachMaxRpm
 import com.gabrielpc.enginesoundsimulator.drive.DriveSnapshot
 import com.gabrielpc.enginesoundsimulator.drive.BackfireSettings
 import com.gabrielpc.enginesoundsimulator.drive.MinimumAudioThrottle
+import com.gabrielpc.enginesoundsimulator.drive.AutomaticDownshiftMilliseconds
+import com.gabrielpc.enginesoundsimulator.drive.AutomaticUpshiftMilliseconds
 import com.gabrielpc.enginesoundsimulator.drive.ManualAutodownshiftRpm
 import com.gabrielpc.enginesoundsimulator.drive.ManualRedlineHoldSeconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingEnterDelayMilliseconds
@@ -200,6 +202,7 @@ internal fun MixerDashboardScreen(
     onManualDownshift: () -> Unit,
     onMixerGlobalGainsChange: (MixerGlobalGains) -> Unit,
     onMixerCarSpecificGainsChange: (MixerCarSpecificGains) -> Unit,
+    onResetMixerCarSpecificGains: () -> Unit,
     onEventMute: (String, Boolean) -> Unit,
     onEventSolo: (String, Boolean) -> Unit,
     soundPerspective: EngineSoundPerspective,
@@ -396,6 +399,10 @@ internal fun MixerDashboardScreen(
                     mixerSpecificGains = updated
                     onMixerCarSpecificGainsChange(updated)
                 },
+                onResetCarSpecificGains = {
+                    onResetMixerCarSpecificGains()
+                    mixerSpecificGains = MixerCarSpecificGains()
+                },
                 modifier = Modifier.fillMaxSize(),
             )
             MixerDriveControls(
@@ -491,6 +498,7 @@ private fun MixerControlsPanel(
     onToggleCategorySolo: (MixerEventCategory, Boolean) -> Unit,
     onMixerGainsChange: (MixerGlobalGains) -> Unit,
     onMixerSpecificGainsChange: (MixerCarSpecificGains) -> Unit,
+    onResetCarSpecificGains: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -500,6 +508,7 @@ private fun MixerControlsPanel(
     var gainScope by remember {
         mutableStateOf(gainScopeRepository.load())
     }
+    val combinedOverall = mixerGains.overall * mixerSpecificGains.overall
     val cardShape = skinShape(8.dp)
     val cardModifier = modifier
         .fillMaxHeight()
@@ -531,14 +540,32 @@ private fun MixerControlsPanel(
                     gainScope = selected
                     gainScopeRepository.save(selected)
                 },
+                onResetSpecificGains = onResetCarSpecificGains,
             )
+            if (gainScope == MixerGainScope.GLOBAL) {
+                MixerLayerGainSlider(
+                    label = "GLOBAL GAIN",
+                    layerValue = mixerGains.overall,
+                    globalValue = mixerGains.overall,
+                    specificValue = mixerSpecificGains.overall,
+                    overall = 1f,
+                    accentColor = Master,
+                    onValueChange = { value ->
+                        onMixerGainsChange(mixerGains.copy(overall = value))
+                    },
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    color = Master.copy(alpha = 0.45f),
+                )
+            }
             if (gainScope == MixerGainScope.SPECIFIC) {
                 MixerLayerGainSlider(
                     label = "OVERALL",
                     layerValue = mixerSpecificGains.overall,
-                    globalValue = mixerGains.engineInterior,
-                    specificValue = mixerSpecificGains.engineInterior,
-                    overall = mixerSpecificGains.overall,
+                    globalValue = mixerGains.overall,
+                    specificValue = mixerSpecificGains.overall,
+                    overall = 1f,
                     accentColor = Master,
                     onValueChange = {
                         onMixerSpecificGainsChange(mixerSpecificGains.copy(overall = it))
@@ -547,6 +574,17 @@ private fun MixerControlsPanel(
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 4.dp),
                     color = Master.copy(alpha = 0.45f),
+                )
+                MixerLayerGainSlider(
+                    label = "ENGINE IDLE",
+                    layerValue = mixerSpecificGains.engineIdle,
+                    globalValue = 1f,
+                    specificValue = mixerSpecificGains.engineIdle,
+                    overall = combinedOverall,
+                    accentColor = Master,
+                    onValueChange = { value ->
+                        onMixerSpecificGainsChange(mixerSpecificGains.copy(engineIdle = value))
+                    },
                 )
             }
             MixerLayerGainSlider(
@@ -559,7 +597,7 @@ private fun MixerControlsPanel(
                 layerValue = layerValueForScope(gainScope, mixerGains.engineInterior, mixerSpecificGains.engineInterior),
                 globalValue = mixerGains.engineInterior,
                 specificValue = mixerSpecificGains.engineInterior,
-                overall = mixerSpecificGains.overall,
+                overall = combinedOverall,
                 onValueChange = { value ->
                     if (gainScope == MixerGainScope.GLOBAL) {
                         onMixerGainsChange(mixerGains.copy(engineInterior = value))
@@ -578,7 +616,7 @@ private fun MixerControlsPanel(
                 layerValue = layerValueForScope(gainScope, mixerGains.engineExterior, mixerSpecificGains.engineExterior),
                 globalValue = mixerGains.engineExterior,
                 specificValue = mixerSpecificGains.engineExterior,
-                overall = mixerSpecificGains.overall,
+                overall = combinedOverall,
                 onValueChange = { value ->
                     if (gainScope == MixerGainScope.GLOBAL) {
                         onMixerGainsChange(mixerGains.copy(engineExterior = value))
@@ -592,7 +630,7 @@ private fun MixerControlsPanel(
                 layerValue = layerValueForScope(gainScope, mixerGains.effectsHost, mixerSpecificGains.effectsHost),
                 globalValue = mixerGains.effectsHost,
                 specificValue = mixerSpecificGains.effectsHost,
-                overall = mixerSpecificGains.overall,
+                overall = combinedOverall,
                 onValueChange = { value ->
                     if (gainScope == MixerGainScope.GLOBAL) {
                         onMixerGainsChange(mixerGains.copy(effectsHost = value))
@@ -615,7 +653,7 @@ private fun MixerControlsPanel(
                 layerValue = layerValueForScope(gainScope, mixerGains.transmission, mixerSpecificGains.transmission),
                 globalValue = mixerGains.transmission,
                 specificValue = mixerSpecificGains.transmission,
-                overall = mixerSpecificGains.overall,
+                overall = combinedOverall,
                 onValueChange = { value ->
                     if (gainScope == MixerGainScope.GLOBAL) {
                         onMixerGainsChange(mixerGains.copy(transmission = value))
@@ -634,7 +672,7 @@ private fun MixerControlsPanel(
                 layerValue = layerValueForScope(gainScope, mixerGains.gearShift, mixerSpecificGains.gearShift),
                 globalValue = mixerGains.gearShift,
                 specificValue = mixerSpecificGains.gearShift,
-                overall = mixerSpecificGains.overall,
+                overall = combinedOverall,
                 onValueChange = { value ->
                     if (gainScope == MixerGainScope.GLOBAL) {
                         onMixerGainsChange(mixerGains.copy(gearShift = value))
@@ -654,7 +692,7 @@ private fun MixerControlsPanel(
                     layerValue = layerValueForScope(gainScope, mixerGains.turbo, mixerSpecificGains.turbo),
                     globalValue = mixerGains.turbo,
                     specificValue = mixerSpecificGains.turbo,
-                    overall = mixerSpecificGains.overall,
+                    overall = combinedOverall,
                     onValueChange = { value ->
                         if (gainScope == MixerGainScope.GLOBAL) {
                             onMixerGainsChange(mixerGains.copy(turbo = value))
@@ -675,7 +713,7 @@ private fun MixerControlsPanel(
                     layerValue = layerValueForScope(gainScope, mixerGains.supercharger, mixerSpecificGains.supercharger),
                     globalValue = mixerGains.supercharger,
                     specificValue = mixerSpecificGains.supercharger,
-                    overall = mixerSpecificGains.overall,
+                    overall = combinedOverall,
                     onValueChange = { value ->
                         if (gainScope == MixerGainScope.GLOBAL) {
                             onMixerGainsChange(mixerGains.copy(supercharger = value))
@@ -695,7 +733,7 @@ private fun MixerControlsPanel(
                 layerValue = layerValueForScope(gainScope, mixerGains.backfire, mixerSpecificGains.backfire),
                 globalValue = mixerGains.backfire,
                 specificValue = mixerSpecificGains.backfire,
-                overall = mixerSpecificGains.overall,
+                overall = combinedOverall,
                 onValueChange = { value ->
                     if (gainScope == MixerGainScope.GLOBAL) {
                         onMixerGainsChange(mixerGains.copy(backfire = value))
@@ -714,7 +752,7 @@ private fun MixerControlsPanel(
                 layerValue = layerValueForScope(gainScope, mixerGains.limiter, mixerSpecificGains.limiter),
                 globalValue = mixerGains.limiter,
                 specificValue = mixerSpecificGains.limiter,
-                overall = mixerSpecificGains.overall,
+                overall = combinedOverall,
                 onValueChange = { value ->
                     if (gainScope == MixerGainScope.GLOBAL) {
                         onMixerGainsChange(mixerGains.copy(limiter = value))
@@ -770,6 +808,7 @@ private fun MixerGainScopeSelector(
     scope: MixerGainScope,
     listeningPerspective: EngineSoundPerspective,
     onScopeSelected: (MixerGainScope) -> Unit,
+    onResetSpecificGains: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -805,13 +844,31 @@ private fun MixerGainScopeSelector(
         }
 
         if (scope == MixerGainScope.SPECIFIC) {
-            Text(
-                text = "Per-car profile for ${listeningPerspective.displayName}",
-                color = Warning,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.8.sp,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Per-car profile for ${listeningPerspective.displayName}",
+                    color = Warning,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp,
+                )
+                Text(
+                    text = "RESET",
+                    color = Accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 0.8.sp,
+                    modifier = Modifier
+                        .clip(softFillShape(5.dp))
+                        .border(1.dp, Outline, softFillShape(5.dp))
+                        .clickable(onClick = onResetSpecificGains)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
         }
     }
 }
@@ -831,7 +888,7 @@ private fun MixerLayerGainSlider(
     onToggleCategorySolo: (MixerEventCategory, Boolean) -> Unit = { _, _ -> },
     onValueChange: (Float) -> Unit,
 ) {
-    val clampedLayerValue = MixerGlobalGains.clamp(layerValue)
+    val clampedLayerValue = MixerGlobalGains.snapToStep(layerValue)
     val effectiveValue = globalValue * specificValue * overall
     val sliderColors = SliderDefaults.colors(
         thumbColor = accentColor,
@@ -889,9 +946,10 @@ private fun MixerLayerGainSlider(
         Slider(
             value = clampedLayerValue,
             onValueChange = { value ->
-                onValueChange(MixerGlobalGains.clamp(value))
+                onValueChange(MixerGlobalGains.snapToStep(value))
             },
             valueRange = MixerGlobalGains.MIN..MixerGlobalGains.MAX,
+            steps = MixerGlobalGains.sliderSteps(),
             colors = sliderColors,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -911,12 +969,18 @@ internal fun SettingsScreen(
     onVirtualForwardGearCountChange: (Int) -> Unit,
     sixGearOnLaunchEnabled: Boolean,
     onSixGearOnLaunchEnabledChange: (Boolean) -> Unit,
+    allowManualOnLaunchEnabled: Boolean,
+    onAllowManualOnLaunchEnabledChange: (Boolean) -> Unit,
     minimumAudioThrottle: Float,
     onMinimumAudioThrottleChange: (Float) -> Unit,
     racingReturnThrottlePercent: Int,
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
     racingEnterDelayMilliseconds: Int,
     onRacingEnterDelayMillisecondsChange: (Int) -> Unit,
+    automaticUpshiftMilliseconds: Int,
+    onAutomaticUpshiftMillisecondsChange: (Int) -> Unit,
+    automaticDownshiftMilliseconds: Int,
+    onAutomaticDownshiftMillisecondsChange: (Int) -> Unit,
     racingReturnHoldSeconds: Int,
     onRacingReturnHoldSecondsChange: (Int) -> Unit,
     manualRedlineHoldSeconds: Int,
@@ -989,6 +1053,8 @@ internal fun SettingsScreen(
                 onGearCountChange = onVirtualForwardGearCountChange,
                 sixGearOnLaunchEnabled = sixGearOnLaunchEnabled,
                 onSixGearOnLaunchEnabledChange = onSixGearOnLaunchEnabledChange,
+                allowManualOnLaunchEnabled = allowManualOnLaunchEnabled,
+                onAllowManualOnLaunchEnabledChange = onAllowManualOnLaunchEnabledChange,
             )
             CruisingShiftOffsetsByTachMaxRpmControl(
                 offsets = cruisingShiftOffsetsByTachMaxRpm,
@@ -1001,6 +1067,10 @@ internal fun SettingsScreen(
                 onRacingReturnThrottlePercentChange = onRacingReturnThrottlePercentChange,
                 racingEnterDelayMilliseconds = racingEnterDelayMilliseconds,
                 onRacingEnterDelayMillisecondsChange = onRacingEnterDelayMillisecondsChange,
+                automaticUpshiftMilliseconds = automaticUpshiftMilliseconds,
+                onAutomaticUpshiftMillisecondsChange = onAutomaticUpshiftMillisecondsChange,
+                automaticDownshiftMilliseconds = automaticDownshiftMilliseconds,
+                onAutomaticDownshiftMillisecondsChange = onAutomaticDownshiftMillisecondsChange,
                 manualRedlineHoldSeconds = manualRedlineHoldSeconds,
                 onManualRedlineHoldSecondsChange = onManualRedlineHoldSecondsChange,
                 manualAutodownshiftRpm = manualAutodownshiftRpm,
@@ -1224,6 +1294,8 @@ private fun VirtualForwardGearCountControl(
     onGearCountChange: (Int) -> Unit,
     sixGearOnLaunchEnabled: Boolean,
     onSixGearOnLaunchEnabledChange: (Boolean) -> Unit,
+    allowManualOnLaunchEnabled: Boolean,
+    onAllowManualOnLaunchEnabledChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
     Column(
@@ -1269,11 +1341,20 @@ private fun VirtualForwardGearCountControl(
                 )
             }
 
-            SixGearOnLaunchSetting(
-                enabled = sixGearOnLaunchEnabled,
-                onEnabledChange = onSixGearOnLaunchEnabledChange,
+            Column(
                 modifier = Modifier.width(280.dp),
-            )
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                SixGearOnLaunchSetting(
+                    enabled = sixGearOnLaunchEnabled,
+                    onEnabledChange = onSixGearOnLaunchEnabledChange,
+                )
+
+                AllowManualOnLaunchSetting(
+                    enabled = allowManualOnLaunchEnabled,
+                    onEnabledChange = onAllowManualOnLaunchEnabledChange,
+                )
+            }
         }
 
         VirtualGearDistributionChart(
@@ -1349,6 +1430,37 @@ private fun SixGearOnLaunchSetting(
 
         Text(
             text = "Launch control temporarily uses the 6-gear ratio profile until throttle lift or brake.",
+            color = Muted,
+            fontSize = 11.sp,
+            lineHeight = 14.sp,
+        )
+    }
+}
+
+@Composable
+private fun AllowManualOnLaunchSetting(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("ALLOW MANUAL ON LAUNCH", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Black)
+            Switch(
+                checked = enabled,
+                onCheckedChange = onEnabledChange,
+            )
+        }
+
+        Text(
+            text = "When off, arming launch control switches to automatic shift mode.",
             color = Muted,
             fontSize = 11.sp,
             lineHeight = 14.sp,
@@ -1438,6 +1550,10 @@ private fun AutomaticTransmissionSettingsControl(
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
     racingEnterDelayMilliseconds: Int,
     onRacingEnterDelayMillisecondsChange: (Int) -> Unit,
+    automaticUpshiftMilliseconds: Int,
+    onAutomaticUpshiftMillisecondsChange: (Int) -> Unit,
+    automaticDownshiftMilliseconds: Int,
+    onAutomaticDownshiftMillisecondsChange: (Int) -> Unit,
     manualRedlineHoldSeconds: Int,
     onManualRedlineHoldSecondsChange: (Int) -> Unit,
     manualAutodownshiftRpm: Int,
@@ -1536,7 +1652,7 @@ private fun AutomaticTransmissionSettingsControl(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("RACING ENTER DELAY", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
+            Text("RACING KICKDOWN SMOOTHNESS", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
             Text(
                 text = RacingEnterDelayMilliseconds.format(racingEnterDelayMilliseconds),
                 color = OnSurface,
@@ -1545,7 +1661,7 @@ private fun AutomaticTransmissionSettingsControl(
             )
         }
         Text(
-            text = "When cruising switches to racing on a hard throttle, wait this long before the kickdown gear and RPM snap.",
+            text = "When cruising switches to racing on a hard throttle, kickdown starts immediately. Each downshift blends RPM over this duration — higher is smoother.",
             color = Muted,
             fontSize = 12.sp,
             lineHeight = 16.sp,
@@ -1561,6 +1677,42 @@ private fun AutomaticTransmissionSettingsControl(
             valueRange = RacingEnterDelayMilliseconds.MIN.toFloat()..RacingEnterDelayMilliseconds.MAX.toFloat(),
             steps = (RacingEnterDelayMilliseconds.MAX - RacingEnterDelayMilliseconds.MIN) / RacingEnterDelayMilliseconds.STEP,
         )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            AutomaticShiftTimingColumn(
+                title = "UPSHIFT BLEND",
+                description = "How long each automatic upshift blends RPM into the next gear.",
+                valueLabel = AutomaticUpshiftMilliseconds.format(automaticUpshiftMilliseconds),
+                value = automaticUpshiftMilliseconds.toFloat(),
+                valueRange = AutomaticUpshiftMilliseconds.MIN.toFloat()..AutomaticUpshiftMilliseconds.MAX.toFloat(),
+                steps = (AutomaticUpshiftMilliseconds.MAX - AutomaticUpshiftMilliseconds.MIN) / AutomaticUpshiftMilliseconds.STEP - 1,
+                onValueChange = { value ->
+                    val selected = AutomaticUpshiftMilliseconds.normalize(value.roundToInt())
+                    if (selected != automaticUpshiftMilliseconds) {
+                        onAutomaticUpshiftMillisecondsChange(selected)
+                    }
+                },
+                modifier = Modifier.weight(1f),
+            )
+            AutomaticShiftTimingColumn(
+                title = "DOWNSHIFT BLEND",
+                description = "How long each automatic downshift blends RPM into the next gear.",
+                valueLabel = AutomaticDownshiftMilliseconds.format(automaticDownshiftMilliseconds),
+                value = automaticDownshiftMilliseconds.toFloat(),
+                valueRange = AutomaticDownshiftMilliseconds.MIN.toFloat()..AutomaticDownshiftMilliseconds.MAX.toFloat(),
+                steps = (AutomaticDownshiftMilliseconds.MAX - AutomaticDownshiftMilliseconds.MIN) / AutomaticDownshiftMilliseconds.STEP - 1,
+                onValueChange = { value ->
+                    val selected = AutomaticDownshiftMilliseconds.normalize(value.roundToInt())
+                    if (selected != automaticDownshiftMilliseconds) {
+                        onAutomaticDownshiftMillisecondsChange(selected)
+                    }
+                },
+                modifier = Modifier.weight(1f),
+            )
+        }
         val manualRedlineStopIndex = ManualRedlineHoldSeconds.stopIndex(manualRedlineHoldSeconds).toFloat()
         val manualRedlineLastStopIndex = (ManualRedlineHoldSeconds.STOPS.size - 1).toFloat()
         Row(
@@ -1623,6 +1775,49 @@ private fun AutomaticTransmissionSettingsControl(
             },
             valueRange = ManualAutodownshiftRpm.MIN.toFloat()..ManualAutodownshiftRpm.MAX.toFloat(),
             steps = (ManualAutodownshiftRpm.MAX - ManualAutodownshiftRpm.MIN) / ManualAutodownshiftRpm.STEP - 1,
+        )
+    }
+}
+
+@Composable
+private fun AutomaticShiftTimingColumn(
+    title: String,
+    description: String,
+    valueLabel: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(title, color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
+            Text(
+                text = valueLabel,
+                color = OnSurface,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Black,
+            )
+        }
+        Text(
+            text = description,
+            color = Muted,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+        )
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            steps = steps.coerceAtLeast(0),
         )
     }
 }
@@ -2233,8 +2428,13 @@ internal fun CarGridSelectionDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(SurfaceRaised),
+                .padding(top = 24.dp, bottom = 48.dp),
         ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(SurfaceRaised),
+            ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -2357,6 +2557,7 @@ internal fun CarGridSelectionDialog(
                         }
                     }
                 }
+            }
             }
         }
     }

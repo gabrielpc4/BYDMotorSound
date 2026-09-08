@@ -169,10 +169,16 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import java.util.Locale
 
-/** Fixed dashboard layout values previously exposed through the calibration settings. */
+/** Fixed dashboard layout values for the BYD multimedia safe area. */
 private object DashboardLayoutDefaults {
     const val UI_SCALE = 0.8f
-    const val CANVAS_ASPECT_RATIO = 1920f / 990f
+    const val CANVAS_WIDTH_PX = 1920
+    const val CANVAS_HEIGHT_PX = 942
+    const val CANVAS_ASPECT_RATIO = CANVAS_WIDTH_PX.toFloat() / CANVAS_HEIGHT_PX
+
+    /** Emulator AVD panel size: 70% of [CANVAS_WIDTH_PX]×[CANVAS_HEIGHT_PX] (multimedia auto-scales ~30%). */
+    const val EMULATOR_PANEL_WIDTH_PX = 1344
+    const val EMULATOR_PANEL_HEIGHT_PX = 659
     /** Classic layout keeps the tach as a right-side overlay sized like the old 0.88 row weight. */
     const val TACHOMETER_OVERLAY_WIDTH_FRACTION = 0.88f / (1.12f + 0.88f)
     /** Car preview/header slot matches the old 1.12 row beside the tach. */
@@ -270,11 +276,14 @@ class MainActivity : ComponentActivity() {
                         onMediaShiftButton = controller::handleMediaShiftButton,
                         onVirtualForwardGearCountChange = controller::setVirtualForwardGearCount,
                         onSixGearOnLaunchEnabledChange = controller::setSixGearOnLaunchEnabled,
+                        onAllowManualOnLaunchEnabledChange = controller::setAllowManualOnLaunchEnabled,
                         onTachometerCruisingShiftRangeOverlayEnabledChange =
                             controller::setTachometerCruisingShiftRangeOverlayEnabled,
                         onCruisingShiftOffsetForTachMaxRpmChange = controller::setCruisingShiftOffsetForTachMaxRpm,
                         onRacingReturnThrottlePercentChange = controller::setRacingReturnThrottlePercent,
                         onRacingEnterDelayMillisecondsChange = controller::setRacingEnterDelayMilliseconds,
+                        onAutomaticUpshiftMillisecondsChange = controller::setAutomaticUpshiftMilliseconds,
+                        onAutomaticDownshiftMillisecondsChange = controller::setAutomaticDownshiftMilliseconds,
                         onRacingReturnHoldSecondsChange = controller::setRacingReturnHoldSeconds,
                         onManualRedlineHoldSecondsChange = controller::setManualRedlineHoldSeconds,
                         onManualAutodownshiftRpmChange = controller::setManualAutodownshiftRpm,
@@ -285,6 +294,7 @@ class MainActivity : ComponentActivity() {
                         onManualDownshift = controller::requestManualDownshift,
                         onMixerGlobalGainsChange = controller::setMixerGlobalGains,
                         onMixerCarSpecificGainsChange = controller::setMixerCarSpecificGains,
+                        onResetMixerCarSpecificGains = controller::resetMixerCarSpecificGainsForCurrentSelection,
                         onFmodUpdateRateChange = controller::setFmodUpdateRateHz,
                         onExteriorPureAudioChange = controller::setExteriorPureAudio,
                         onMixerDiagnosticsActive = controller::setMixerDiagnosticsActive,
@@ -398,10 +408,13 @@ private fun MotorSoundDashboard(
     onMediaShiftButton: (Int) -> Boolean,
     onVirtualForwardGearCountChange: (Int) -> Unit,
     onSixGearOnLaunchEnabledChange: (Boolean) -> Unit,
+    onAllowManualOnLaunchEnabledChange: (Boolean) -> Unit,
     onTachometerCruisingShiftRangeOverlayEnabledChange: (Boolean) -> Unit,
     onCruisingShiftOffsetForTachMaxRpmChange: (Int, Int) -> Unit,
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
     onRacingEnterDelayMillisecondsChange: (Int) -> Unit,
+    onAutomaticUpshiftMillisecondsChange: (Int) -> Unit,
+    onAutomaticDownshiftMillisecondsChange: (Int) -> Unit,
     onRacingReturnHoldSecondsChange: (Int) -> Unit,
     onManualRedlineHoldSecondsChange: (Int) -> Unit,
     onManualAutodownshiftRpmChange: (Int) -> Unit,
@@ -412,6 +425,7 @@ private fun MotorSoundDashboard(
     onManualDownshift: () -> Unit,
     onMixerGlobalGainsChange: (com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains) -> Unit,
     onMixerCarSpecificGainsChange: (com.gabrielpc.enginesoundsimulator.audio.MixerCarSpecificGains) -> Unit,
+    onResetMixerCarSpecificGains: () -> Unit,
     onFmodUpdateRateChange: (Int) -> Unit,
     onExteriorPureAudioChange: (Boolean) -> Unit,
     onMixerDiagnosticsActive: (Boolean) -> Unit,
@@ -488,11 +502,12 @@ private fun MotorSoundDashboard(
                 .windowInsetsPadding(WindowInsets.safeDrawing),
             contentAlignment = Alignment.TopCenter,
         ) {
-            val heightForFullWidth = maxWidth / DashboardLayoutDefaults.CANVAS_ASPECT_RATIO
+            val canvasAspectRatio = DashboardLayoutDefaults.CANVAS_ASPECT_RATIO
+            val heightForFullWidth = maxWidth / canvasAspectRatio
             val (dashboardWidth, dashboardHeight) = if (heightForFullWidth <= maxHeight) {
                 maxWidth to heightForFullWidth
             } else {
-                (maxHeight * DashboardLayoutDefaults.CANVAS_ASPECT_RATIO) to maxHeight
+                (maxHeight * canvasAspectRatio) to maxHeight
             }
 
             Box(
@@ -618,6 +633,7 @@ private fun MotorSoundDashboard(
                             onManualDownshift = onManualDownshift,
                             onMixerGlobalGainsChange = onMixerGlobalGainsChange,
                             onMixerCarSpecificGainsChange = onMixerCarSpecificGainsChange,
+                            onResetMixerCarSpecificGains = onResetMixerCarSpecificGains,
                             onEventMute = onEventMute,
                             onEventSolo = onEventSolo,
                             exteriorPureAudio = state.exteriorPureAudio,
@@ -638,12 +654,18 @@ private fun MotorSoundDashboard(
                             onVirtualForwardGearCountChange = onVirtualForwardGearCountChange,
                             sixGearOnLaunchEnabled = state.sixGearOnLaunchEnabled,
                             onSixGearOnLaunchEnabledChange = onSixGearOnLaunchEnabledChange,
+                            allowManualOnLaunchEnabled = state.allowManualOnLaunchEnabled,
+                            onAllowManualOnLaunchEnabledChange = onAllowManualOnLaunchEnabledChange,
                             minimumAudioThrottle = state.minimumAudioThrottle,
                             onMinimumAudioThrottleChange = onMinimumAudioThrottleChange,
                             racingReturnThrottlePercent = state.racingReturnThrottlePercent,
                             onRacingReturnThrottlePercentChange = onRacingReturnThrottlePercentChange,
                             racingEnterDelayMilliseconds = state.racingEnterDelayMilliseconds,
                             onRacingEnterDelayMillisecondsChange = onRacingEnterDelayMillisecondsChange,
+                            automaticUpshiftMilliseconds = state.automaticUpshiftMilliseconds,
+                            onAutomaticUpshiftMillisecondsChange = onAutomaticUpshiftMillisecondsChange,
+                            automaticDownshiftMilliseconds = state.automaticDownshiftMilliseconds,
+                            onAutomaticDownshiftMillisecondsChange = onAutomaticDownshiftMillisecondsChange,
                             racingReturnHoldSeconds = state.racingReturnHoldSeconds,
                             onRacingReturnHoldSecondsChange = onRacingReturnHoldSecondsChange,
                             manualRedlineHoldSeconds = state.manualRedlineHoldSeconds,

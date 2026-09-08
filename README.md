@@ -4,7 +4,8 @@ A private Android dashboard experiment for a BYD Seal DiLink head unit. It reads
 only when the vendor API permits them, or uses built-in simulator pedals, to drive a fictional
 combustion-engine tachometer and direct FMOD Studio-bank audio. It does not control the vehicle.
 
-The app is designed for the 1920 × 990 safe dashboard area observed on the rotating head unit.
+The app is designed for the 1920 × 942 px safe dashboard area on the BYD multimedia panel.
+The local BYD AVD uses 70% of that canvas (1344 × 659) so the emulator matches the head-unit scaling.
 Audio is intentionally delivered as fixed true stereo; the vehicle DSP distributes that route to
 the factory speakers.
 

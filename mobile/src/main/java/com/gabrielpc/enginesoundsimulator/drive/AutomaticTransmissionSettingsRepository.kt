@@ -21,12 +21,42 @@ internal object RacingReturnThrottlePercent {
     }
 }
 
-/** Delay before cruising→racing kickdown snaps gear and RPM. */
+/** Per-downshift RPM blend duration during cruising→racing kickdown. */
 internal object RacingEnterDelayMilliseconds {
     const val MIN = 0
-    const val MAX = 100
-    const val DEFAULT = 25
-    const val STEP = 5
+    const val MAX = 2_000
+    const val DEFAULT = 100
+    const val STEP = 100
+
+    fun normalize(value: Int): Int {
+        val stepped = ((value.toFloat() / STEP).roundToInt() * STEP)
+        return stepped.coerceIn(MIN, MAX)
+    }
+
+    fun format(value: Int): String {
+        val ms = normalize(value)
+        if (ms >= 1_000) {
+            return if (ms % 1_000 == 0) {
+                "${ms / 1_000}s"
+            } else {
+                String.format(java.util.Locale.US, "%.1fs", ms / 1_000.0)
+            }
+        }
+
+        return "$ms ms"
+    }
+
+    fun asKickdownDownshiftSeconds(milliseconds: Int): Double {
+        return normalize(milliseconds) / 1_000.0
+    }
+}
+
+/** Automatic upshift RPM blend duration (normal shifts, not kickdown). */
+internal object AutomaticUpshiftMilliseconds {
+    const val MIN = 50
+    const val MAX = 500
+    const val DEFAULT = 100
+    const val STEP = 10
 
     fun normalize(value: Int): Int {
         val stepped = ((value.toFloat() / STEP).roundToInt() * STEP)
@@ -35,6 +65,31 @@ internal object RacingEnterDelayMilliseconds {
 
     fun format(value: Int): String {
         return "${normalize(value)} ms"
+    }
+
+    fun asSeconds(milliseconds: Int): Double {
+        return normalize(milliseconds) / 1_000.0
+    }
+}
+
+/** Automatic downshift RPM blend duration (normal shifts, not kickdown). */
+internal object AutomaticDownshiftMilliseconds {
+    const val MIN = 50
+    const val MAX = 500
+    const val DEFAULT = 150
+    const val STEP = 10
+
+    fun normalize(value: Int): Int {
+        val stepped = ((value.toFloat() / STEP).roundToInt() * STEP)
+        return stepped.coerceIn(MIN, MAX)
+    }
+
+    fun format(value: Int): String {
+        return "${normalize(value)} ms"
+    }
+
+    fun asSeconds(milliseconds: Int): Double {
+        return normalize(milliseconds) / 1_000.0
     }
 }
 
@@ -105,9 +160,12 @@ internal object ManualAutodownshiftRpm {
 internal data class AutomaticTransmissionSettings(
     val cruisingLogicEnabled: Boolean = true,
     val sixGearOnLaunchEnabled: Boolean = false,
+    val allowManualOnLaunchEnabled: Boolean = false,
     val cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int> = CruisingShiftOffsetByTachMaxRpm.defaultOffsets(),
     val racingReturnThrottlePercent: Int = RacingReturnThrottlePercent.DEFAULT,
     val racingEnterDelayMilliseconds: Int = RacingEnterDelayMilliseconds.DEFAULT,
+    val automaticUpshiftMilliseconds: Int = AutomaticUpshiftMilliseconds.DEFAULT,
+    val automaticDownshiftMilliseconds: Int = AutomaticDownshiftMilliseconds.DEFAULT,
     val racingReturnHoldSeconds: Int = RacingReturnHoldSeconds.DEFAULT,
     val manualRedlineHoldSeconds: Int = ManualRedlineHoldSeconds.DEFAULT,
     val manualAutodownshiftRpm: Int = ManualAutodownshiftRpm.DEFAULT,
@@ -126,6 +184,7 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
         return AutomaticTransmissionSettings(
             cruisingLogicEnabled = preferences.getBoolean(KEY_CRUISING_LOGIC_ENABLED, true),
             sixGearOnLaunchEnabled = preferences.getBoolean(KEY_SIX_GEAR_ON_LAUNCH_ENABLED, false),
+            allowManualOnLaunchEnabled = preferences.getBoolean(KEY_ALLOW_MANUAL_ON_LAUNCH_ENABLED, false),
             cruisingShiftOffsetsByTachMaxRpm = loadCruisingShiftOffsetsByTachMaxRpm(),
             racingReturnThrottlePercent = RacingReturnThrottlePercent.normalize(
                 preferences.getInt(
@@ -137,6 +196,18 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
                 preferences.getInt(
                     KEY_RACING_ENTER_DELAY_MILLISECONDS,
                     RacingEnterDelayMilliseconds.DEFAULT,
+                ),
+            ),
+            automaticUpshiftMilliseconds = AutomaticUpshiftMilliseconds.normalize(
+                preferences.getInt(
+                    KEY_AUTOMATIC_UPSHIFT_MILLISECONDS,
+                    AutomaticUpshiftMilliseconds.DEFAULT,
+                ),
+            ),
+            automaticDownshiftMilliseconds = AutomaticDownshiftMilliseconds.normalize(
+                preferences.getInt(
+                    KEY_AUTOMATIC_DOWNSHIFT_MILLISECONDS,
+                    AutomaticDownshiftMilliseconds.DEFAULT,
                 ),
             ),
             racingReturnHoldSeconds = RacingReturnHoldSeconds.normalize(
@@ -160,6 +231,7 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
         val editor = preferences.edit()
             .putBoolean(KEY_CRUISING_LOGIC_ENABLED, settings.cruisingLogicEnabled)
             .putBoolean(KEY_SIX_GEAR_ON_LAUNCH_ENABLED, settings.sixGearOnLaunchEnabled)
+            .putBoolean(KEY_ALLOW_MANUAL_ON_LAUNCH_ENABLED, settings.allowManualOnLaunchEnabled)
         CruisingShiftOffsetByTachMaxRpm.TIERS.forEach { tier ->
             editor.putInt(
                 CruisingShiftOffsetByTachMaxRpm.preferenceKey(tier),
@@ -174,6 +246,14 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
             .putInt(
                 KEY_RACING_ENTER_DELAY_MILLISECONDS,
                 RacingEnterDelayMilliseconds.normalize(settings.racingEnterDelayMilliseconds),
+            )
+            .putInt(
+                KEY_AUTOMATIC_UPSHIFT_MILLISECONDS,
+                AutomaticUpshiftMilliseconds.normalize(settings.automaticUpshiftMilliseconds),
+            )
+            .putInt(
+                KEY_AUTOMATIC_DOWNSHIFT_MILLISECONDS,
+                AutomaticDownshiftMilliseconds.normalize(settings.automaticDownshiftMilliseconds),
             )
             .putInt(
                 KEY_RACING_RETURN_HOLD_SECONDS,
@@ -250,9 +330,12 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
     private companion object {
         const val KEY_CRUISING_LOGIC_ENABLED = "cruising_logic_enabled"
         const val KEY_SIX_GEAR_ON_LAUNCH_ENABLED = "six_gear_on_launch_enabled"
+        const val KEY_ALLOW_MANUAL_ON_LAUNCH_ENABLED = "allow_manual_on_launch_enabled"
         const val KEY_CRUISING_SHIFT_OFFSET_RPM = "cruising_shift_offset_rpm"
         const val KEY_RACING_RETURN_THROTTLE_PERCENT = "racing_return_throttle_percent"
         const val KEY_RACING_ENTER_DELAY_MILLISECONDS = "racing_enter_delay_milliseconds"
+        const val KEY_AUTOMATIC_UPSHIFT_MILLISECONDS = "automatic_upshift_milliseconds"
+        const val KEY_AUTOMATIC_DOWNSHIFT_MILLISECONDS = "automatic_downshift_milliseconds"
         const val KEY_RACING_RETURN_HOLD_SECONDS = "racing_return_hold_seconds"
         const val KEY_MANUAL_REDLINER_HOLD_SECONDS = "manual_redline_hold_seconds"
         const val KEY_MANUAL_AUTODOWNSHIFT_RPM = "manual_autodownshift_rpm"

@@ -26,6 +26,8 @@ import com.gabrielpc.enginesoundsimulator.diagnostics.DriveSessionCapture
 import com.gabrielpc.enginesoundsimulator.audio.MixerCarSpecificGains
 import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains
 import com.gabrielpc.enginesoundsimulator.audio.effectiveCategoryGains
+import com.gabrielpc.enginesoundsimulator.audio.effectiveEffectsHostForOverrides
+import com.gabrielpc.enginesoundsimulator.audio.effectiveEngineIdleGain
 import com.gabrielpc.enginesoundsimulator.audio.effectiveHostGains
 import com.gabrielpc.enginesoundsimulator.drive.effectiveEffectSoundOverrideGains
 import com.gabrielpc.enginesoundsimulator.AppPreferenceStores
@@ -108,6 +110,7 @@ data class DriveSnapshot(
     val minimumAudioThrottle: Float = MinimumAudioThrottle.DEFAULT,
     val cruisingLogicEnabled: Boolean = true,
     val sixGearOnLaunchEnabled: Boolean = false,
+    val allowManualOnLaunchEnabled: Boolean = false,
     val pedalAudioThrottleRampUpMilliseconds: Int = PedalAudioThrottleRampMilliseconds.DEFAULT,
     val pedalAudioThrottleRampDownMilliseconds: Int = PedalAudioThrottleRampMilliseconds.DEFAULT,
     val cruisingShiftOffsetTachMaxRpm: Int = CruisingShiftOffsetByTachMaxRpm.TIERS.first(),
@@ -115,6 +118,8 @@ data class DriveSnapshot(
     val cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int> = CruisingShiftOffsetByTachMaxRpm.defaultOffsets(),
     val racingReturnThrottlePercent: Int = RacingReturnThrottlePercent.DEFAULT,
     val racingEnterDelayMilliseconds: Int = RacingEnterDelayMilliseconds.DEFAULT,
+    val automaticUpshiftMilliseconds: Int = AutomaticUpshiftMilliseconds.DEFAULT,
+    val automaticDownshiftMilliseconds: Int = AutomaticDownshiftMilliseconds.DEFAULT,
     val racingReturnHoldSeconds: Int = RacingReturnHoldSeconds.DEFAULT,
     val manualRedlineHoldSeconds: Int = ManualRedlineHoldSeconds.DEFAULT,
     val manualAutodownshiftRpm: Int = ManualAutodownshiftRpm.DEFAULT,
@@ -451,6 +456,18 @@ class DriveController(context: Context) {
         }
     }
 
+    fun setAutomaticUpshiftMilliseconds(milliseconds: Int) {
+        updateAutomaticTransmissionSettings {
+            it.copy(automaticUpshiftMilliseconds = AutomaticUpshiftMilliseconds.normalize(milliseconds))
+        }
+    }
+
+    fun setAutomaticDownshiftMilliseconds(milliseconds: Int) {
+        updateAutomaticTransmissionSettings {
+            it.copy(automaticDownshiftMilliseconds = AutomaticDownshiftMilliseconds.normalize(milliseconds))
+        }
+    }
+
     fun setManualRedlineHoldSeconds(seconds: Int) {
         updateAutomaticTransmissionSettings {
             it.copy(manualRedlineHoldSeconds = ManualRedlineHoldSeconds.normalize(seconds))
@@ -472,6 +489,12 @@ class DriveController(context: Context) {
     fun setSixGearOnLaunchEnabled(enabled: Boolean) {
         updateAutomaticTransmissionSettings {
             it.copy(sixGearOnLaunchEnabled = enabled)
+        }
+    }
+
+    fun setAllowManualOnLaunchEnabled(enabled: Boolean) {
+        updateAutomaticTransmissionSettings {
+            it.copy(allowManualOnLaunchEnabled = enabled)
         }
     }
 
@@ -508,6 +531,15 @@ class DriveController(context: Context) {
         syncEffectiveMixGainsToAudioEngine()
     }
 
+    fun resetMixerCarSpecificGainsForCurrentSelection() {
+        val profile = selectedProfile.get()
+        val perspective = selectedPerspective.get()
+        mixerCarSpecificGainRepository.reset(profile, perspective)
+        val defaults = MixerCarSpecificGains()
+        mixerCarSpecificGains.set(defaults)
+        syncEffectiveMixGainsToAudioEngine()
+    }
+
     private fun resolveHasSupercharger(): Boolean {
         if (!RuntimeFeatureFlags.MIX_SUPERCHARGER) {
             return false
@@ -533,7 +565,19 @@ class DriveController(context: Context) {
         val host = effectiveHostGains(global, specific)
         val categories = effectiveCategoryGains(global, specific)
         audioEngine.setHostGains(host.engineInterior, host.engineExterior, host.effectsHost)
+        audioEngine.setOverrideEffectsHostGain(
+            effectiveEffectsHostForOverrides(
+                mixerGlobal = global,
+                mixerSpecific = specific,
+            ),
+        )
         audioEngine.setCategoryGains(categories)
+        audioEngine.setEngineIdleGain(
+            effectiveEngineIdleGain(
+                mixerGlobal = global,
+                mixerSpecific = specific,
+            ),
+        )
         syncEffectSoundOverrideGainsToAudioEngine()
     }
 
@@ -1425,6 +1469,7 @@ class DriveController(context: Context) {
                 virtualForwardGearCount = virtualForwardGearCount.get(),
                 cruisingLogicEnabled = automaticTransmissionSettings.get().cruisingLogicEnabled,
                 sixGearOnLaunchEnabled = automaticTransmissionSettings.get().sixGearOnLaunchEnabled,
+                allowManualOnLaunchEnabled = automaticTransmissionSettings.get().allowManualOnLaunchEnabled,
                 cruisingShiftOffsetTachMaxRpm = CruisingShiftOffsetByTachMaxRpm.resolveTier(drivetrain.tachometerMaximumRpm),
                 cruisingShiftOffsetRpm = CruisingShiftOffsetByTachMaxRpm.resolveOffset(
                     offsets = automaticTransmissionSettings.get().cruisingShiftOffsetsByTachMaxRpm,
@@ -1433,6 +1478,8 @@ class DriveController(context: Context) {
                 cruisingShiftOffsetsByTachMaxRpm = automaticTransmissionSettings.get().cruisingShiftOffsetsByTachMaxRpm,
                 racingReturnThrottlePercent = automaticTransmissionSettings.get().racingReturnThrottlePercent,
                 racingEnterDelayMilliseconds = automaticTransmissionSettings.get().racingEnterDelayMilliseconds,
+                automaticUpshiftMilliseconds = automaticTransmissionSettings.get().automaticUpshiftMilliseconds,
+                automaticDownshiftMilliseconds = automaticTransmissionSettings.get().automaticDownshiftMilliseconds,
                 racingReturnHoldSeconds = automaticTransmissionSettings.get().racingReturnHoldSeconds,
                 manualRedlineHoldSeconds = automaticTransmissionSettings.get().manualRedlineHoldSeconds,
                 manualAutodownshiftRpm = automaticTransmissionSettings.get().manualAutodownshiftRpm,

@@ -123,6 +123,9 @@ internal class DriveSessionCapture(context: Context) {
         if (sample.returnFinished) {
             out.appendLine(eventLine(elapsed, "RETURN_FINISHED", "gear=${sample.gear} rpm=${fmt(sample.rpm)}"))
         }
+        if (sample.launchPhase != previous.launchPhase) {
+            out.appendLine(eventLine(elapsed, "LAUNCH", "${previous.launchPhase}->${sample.launchPhase}"))
+        }
         if (sample.requestUpshift && !previous.requestUpshift) {
             out.appendLine(eventLine(elapsed, "RETURN_UPSHIFT", "target=${sample.targetGear}"))
         }
@@ -155,6 +158,7 @@ internal class DriveSessionCapture(context: Context) {
             fmt(sample.upshiftRpm),
             fmt(sample.vehicleKmh),
             fmt(sample.fmodKmh),
+            sample.launchPhase,
             if (sample.requestUpshift) "1" else "0",
             if (sample.returnFinished) "1" else "0",
         ).joinToString("\t")
@@ -184,6 +188,7 @@ internal class DriveSessionCapture(context: Context) {
         val upshiftRpm: Double,
         val vehicleKmh: Double,
         val fmodKmh: Double,
+        val launchPhase: String,
         val requestUpshift: Boolean,
         val returnFinished: Boolean,
     ) {
@@ -209,6 +214,7 @@ internal class DriveSessionCapture(context: Context) {
                     upshiftRpm = drive.effectiveAutomaticUpshiftRpm,
                     vehicleKmh = drive.realOrDocumentedRawSpeedKmh,
                     fmodKmh = drive.fmodDrivetrainSpeedKmh,
+                    launchPhase = drive.launchControlPhaseName,
                     requestUpshift = drive.cruisingReturnRequestUpshift,
                     returnFinished = drive.cruisingReturnFinishedThisStep,
                 )
@@ -223,7 +229,7 @@ internal class DriveSessionCapture(context: Context) {
         const val HEADER =
             "t_ms\tkind\tthrottle\tbrake\trpm\tgear\tshifting\tshiftDir\tmode\tarmed\treturn\t" +
                 "tgtGear\tcomputedGear\tchaseRpm\tliveTarget\tcoupledNow\tnextCoupled\tglideRps\t" +
-                "upshiftRpm\tvehKmh\tfmodKmh\treqUp\tfinished"
+                "upshiftRpm\tvehKmh\tfmodKmh\tlaunchPhase\treqUp\tfinished"
 
         val FILE_TIME = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).apply {
             timeZone = TimeZone.getDefault()

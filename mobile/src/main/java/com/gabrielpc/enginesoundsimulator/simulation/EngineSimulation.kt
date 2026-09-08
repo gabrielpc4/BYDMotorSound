@@ -85,6 +85,8 @@ data class DrivetrainState(
     val cruisingReturnRequestUpshift: Boolean = false,
     val cruisingReturnFinishedThisStep: Boolean = false,
     val coupledRpmCurrentGear: Double = 0.0,
+    /** Launch-control phase name for diagnostics capture; INACTIVE when staging is off. */
+    val launchControlPhaseName: String = LaunchControlPhase.INACTIVE.name,
 )
 
 /** Motion snapshot preserved when swapping bank physics without stopping the vehicle. */
@@ -277,6 +279,15 @@ class EngineSimulation {
         } else {
             null
         }
+        activeDrivetrain.updateLaunchControl(
+            rawThrottle = input.throttle.coerceIn(0.0, 1.0),
+            brake = input.brake.coerceIn(0.0, 1.0),
+            enabled = input.transmissionPosition == TransmissionPosition.DRIVE,
+            sixGearOnLaunchEnabled = automaticTransmissionConfig.sixGearOnLaunchEnabled,
+            allowManualOnLaunchEnabled = automaticTransmissionConfig.allowManualOnLaunchEnabled,
+            automaticShifting = !manualShiftEnabled,
+            deltaSeconds = dt,
+        )
         val simulatedMotionFrame = if (input.simulatedPedals) {
             bydSealSimulatedPedalsMotion.step(
                 throttle = input.throttle,
@@ -285,7 +296,7 @@ class EngineSimulation {
                 transmissionPosition = input.transmissionPosition,
                 deltaSeconds = dt,
                 initialDocumentedContinuousSpeedKmh = documentedModelSeedSpeedKmh,
-                launchControlEnabled = input.simulatedPedals,
+                launchStagingBlocksMotion = activeDrivetrain.isLaunchStagingBlockingMotion(),
             )
         } else {
             null
@@ -327,12 +338,6 @@ class EngineSimulation {
         val realOrDocumentedExtrapolatedPresentationSpeedKmh = realExtrapolatedPresentationSpeedKmh
             ?: documentedExtrapolatedPresentationSpeedKmh
         val drivetrainRawSpeedKmh = realOrDocumentedRawSpeedKmh
-        activeDrivetrain.updateLaunchControl(
-            rawThrottle = input.throttle.coerceIn(0.0, 1.0),
-            brake = input.brake.coerceIn(0.0, 1.0),
-            enabled = input.transmissionPosition == TransmissionPosition.DRIVE,
-            sixGearOnLaunchEnabled = automaticTransmissionConfig.sixGearOnLaunchEnabled,
-        )
         val fmodMapping = if (
             activeDrivetrain.isLaunchSixGearOverrideActive() &&
             launchEqualSpeedGearMapping != null
@@ -473,6 +478,7 @@ class EngineSimulation {
             cruisingReturnRequestUpshift = frame.cruisingReturnRequestUpshift,
             cruisingReturnFinishedThisStep = frame.cruisingReturnFinishedThisStep,
             coupledRpmCurrentGear = frame.coupledRpmCurrentGear,
+            launchControlPhaseName = frame.launchControlPhase.name,
         )
     }
 }

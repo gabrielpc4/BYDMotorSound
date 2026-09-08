@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 AVD_NAME="BYD_Multimedia_with_Hardware_Controls"
-# Main panel matches the app's 70% of 1920x1080 layout canvas (1344x756).
+# Main panel is 70% of the in-car 1920×942 canvas (1344×659) to match multimedia scaling.
 EMULATOR_BIN="/Users/gabrielcarvalho/Library/Android/sdk/emulator/emulator"
 ADB_BIN="/Users/gabrielcarvalho/Library/Android/sdk/platform-tools/adb"
 PACKAGE="com.gabrielpc.enginesoundsimulator"
@@ -93,7 +93,7 @@ if serial="$(running_avd_serial)"; then
 fi
 
 # Prefer the host Metal-backed renderer on this Mac. SwiftShader makes the QEMU process consume
-# several whole CPU cores while rendering the 1344x756 Compose dashboard. The explicit override
+# several whole CPU cores while rendering the 1344×659 Compose dashboard. The explicit override
 # keeps the old software path available if a host GPU driver ever regresses:
 #   BYD_EMULATOR_GPU=swiftshader ./run.sh
 GPU_MODE="${BYD_EMULATOR_GPU:-host}"

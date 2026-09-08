@@ -66,10 +66,16 @@ internal class NativeFmodBankBridge {
 
     external fun setHostGains(engineInterior: Float, engineExterior: Float, effects: Float)
 
+    /** EFFECTS trim for bundled override one-shots, excluding GLOBAL GAIN / OVERALL masters. */
+    external fun setOverrideEffectsHostGain(gain: Float)
+
     /** Identifies the loaded car bank so native code can apply per-car audio policies. */
     external fun setLoadedProfileId(profileId: String)
 
     external fun setCategoryGains(transmission: Float, gearShift: Float, turbo: Float, backfire: Float, limiter: Float, supercharger: Float)
+
+    /** Per-car trim for engine_int/engine_ext subsounds whose FMOD sound name contains "idle". */
+    external fun setEngineIdleGain(gain: Float)
 
     external fun setEffectSoundOverrideGains(shiftOverrideGain: Float, backfireOverrideGain: Float)
     external fun hasEmbeddedSupercharger(): Boolean

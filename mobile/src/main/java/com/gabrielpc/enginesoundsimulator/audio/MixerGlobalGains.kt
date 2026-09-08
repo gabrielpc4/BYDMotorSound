@@ -8,6 +8,7 @@ import kotlin.math.roundToInt
 
 /** App-wide mixer multipliers applied on top of each car's per-car mixer profile. */
 data class MixerGlobalGains(
+    val overall: Float = 1.0f,
     val engineInterior: Float = 1.0f,
     val engineExterior: Float = 1.0f,
     val effectsHost: Float = 1.0f,
@@ -21,29 +22,40 @@ data class MixerGlobalGains(
     val shiftOverrideGain: Float = 1.0f,
 ) {
     fun normalized(): MixerGlobalGains = copy(
-        engineInterior = clamp(engineInterior),
-        engineExterior = clamp(engineExterior),
-        effectsHost = clamp(effectsHost),
-        transmission = clamp(transmission),
-        gearShift = clamp(gearShift),
-        turbo = clamp(turbo),
-        backfire = clamp(backfire),
-        limiter = clamp(limiter),
-        supercharger = clamp(supercharger),
-        backfireOverrideGain = clamp(backfireOverrideGain),
-        shiftOverrideGain = clamp(shiftOverrideGain),
+        overall = snapToStep(overall),
+        engineInterior = snapToStep(engineInterior),
+        engineExterior = snapToStep(engineExterior),
+        effectsHost = snapToStep(effectsHost),
+        transmission = snapToStep(transmission),
+        gearShift = snapToStep(gearShift),
+        turbo = snapToStep(turbo),
+        backfire = snapToStep(backfire),
+        limiter = snapToStep(limiter),
+        supercharger = snapToStep(supercharger),
+        backfireOverrideGain = snapToStep(backfireOverrideGain),
+        shiftOverrideGain = snapToStep(shiftOverrideGain),
     )
 
     companion object {
         const val MIN = 0f
         const val MAX = 5f
+        const val STEP = 0.1f
 
         fun clamp(value: Float): Float {
             return value.coerceIn(MIN, MAX)
         }
 
+        fun snapToStep(value: Float): Float {
+            val stepped = (value / STEP).roundToInt() * STEP
+            return clamp(stepped)
+        }
+
+        fun sliderSteps(): Int {
+            return ((MAX - MIN) / STEP).roundToInt() - 1
+        }
+
         fun formatMultiplier(value: Float): String {
-            val clamped = clamp(value)
+            val clamped = snapToStep(value)
 
             if (abs(clamped) < 0.001f) {
                 return "0x"
@@ -69,6 +81,7 @@ internal class MixerGlobalGainRepository(context: Context) {
     fun load(): MixerGlobalGains {
         val legacyEngineHost = preferences.getFloat("engine_host", 1.0f)
         return MixerGlobalGains(
+            overall = read("overall"),
             engineInterior = read("engine_interior", legacyEngineHost),
             engineExterior = read("engine_exterior", legacyEngineHost),
             effectsHost = read("effects_host"),
@@ -86,6 +99,7 @@ internal class MixerGlobalGainRepository(context: Context) {
     fun save(gains: MixerGlobalGains) {
         val normalized = gains.normalized()
         preferences.edit()
+            .putFloat("overall", normalized.overall)
             .putFloat("engine_interior", normalized.engineInterior)
             .putFloat("engine_exterior", normalized.engineExterior)
             .putFloat("effects_host", normalized.effectsHost)

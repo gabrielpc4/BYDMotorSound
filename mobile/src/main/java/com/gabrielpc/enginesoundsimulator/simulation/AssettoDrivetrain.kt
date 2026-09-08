@@ -137,6 +137,8 @@ internal class AssettoDrivetrain(
     private var previousLaunchControlPhase = LaunchControlPhase.INACTIVE
     private var cruisingShiftOffsetRpm = 0
     private var racingReturnMaxThrottle = 0.30
+    private var kickdownStompMinDelta = 0.15
+    private var kickdownStompMinCurrentThrottle = 0.30
     private var manualRedlineHoldSeconds: Double? = 1.0
     private var manualAutodownshiftRpm = 2_000.0
     private var cruisingLogicEnabled = true
@@ -424,6 +426,8 @@ internal class AssettoDrivetrain(
             tachometerMaximumRpm = physics.engine.tachometerMaximumRpm,
         )
         racingReturnMaxThrottle = automaticTransmissionConfig.racingReturnMaxThrottle.coerceIn(0.0, 1.0)
+        kickdownStompMinDelta = automaticTransmissionConfig.kickdownStompMinDelta.coerceIn(0.0, 1.0)
+        kickdownStompMinCurrentThrottle = automaticTransmissionConfig.kickdownStompMinCurrentThrottle.coerceIn(0.0, 1.0)
         racingKickdownDownshiftSeconds = RacingEnterDelayMilliseconds.asKickdownDownshiftSeconds(
             automaticTransmissionConfig.racingEnterDelayMilliseconds,
         )
@@ -1491,11 +1495,14 @@ internal class AssettoDrivetrain(
             clearRacingStompPending()
         }
 
-        val racingThrottleRequested = rawGas > AutomaticTransmissionPolicy.RACING_ENTER_MIN_THROTTLE
+        val cruisingKickdownStomp = kickdownStompDetected(
+            previousThrottle = previousRawGasForManualStomp,
+            currentThrottle = rawGas,
+        )
 
         if (
             automaticTransmissionMode == AutomaticTransmissionMode.CRUISING &&
-            racingThrottleRequested &&
+            cruisingKickdownStomp &&
             launchControlPhase == LaunchControlPhase.INACTIVE
         ) {
             automaticTransmissionMode = AutomaticTransmissionMode.RACING
@@ -1579,7 +1586,7 @@ internal class AssettoDrivetrain(
             return
         }
 
-        val stompDetected = AutomaticTransmissionPolicy.manualKickdownStompDetected(
+        val stompDetected = kickdownStompDetected(
             previousThrottle = previousRawGasForManualStomp,
             currentThrottle = rawGas,
         )
@@ -1595,6 +1602,18 @@ internal class AssettoDrivetrain(
             manualKickdownSequenceActive = true
             racingStompPendingTargetGear = targetGear
         }
+    }
+
+    private fun kickdownStompDetected(
+        previousThrottle: Double,
+        currentThrottle: Double,
+    ): Boolean {
+        return AutomaticTransmissionPolicy.kickdownStompDetected(
+            previousThrottle = previousThrottle,
+            currentThrottle = currentThrottle,
+            minDelta = kickdownStompMinDelta,
+            minCurrentThrottle = kickdownStompMinCurrentThrottle,
+        )
     }
 
     private fun updateManualKickdownFollowUpClearance(

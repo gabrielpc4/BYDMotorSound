@@ -120,6 +120,8 @@ data class DriveSnapshot(
     val cruisingShiftOffsetRpm: Int = CruisingShiftOffsetByTachMaxRpm.defaultOffsets().getValue(7_000),
     val cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int> = CruisingShiftOffsetByTachMaxRpm.defaultOffsets(),
     val racingReturnThrottlePercent: Int = RacingReturnThrottlePercent.DEFAULT,
+    val kickdownStompDeltaPercent: Int = KickdownStompDeltaPercent.DEFAULT,
+    val kickdownStompMinThrottlePercent: Int = KickdownStompMinThrottlePercent.DEFAULT,
     val racingEnterDelayMilliseconds: Int = RacingEnterDelayMilliseconds.DEFAULT,
     val automaticUpshiftMilliseconds: Int = AutomaticUpshiftMilliseconds.DEFAULT,
     val automaticDownshiftMilliseconds: Int = AutomaticDownshiftMilliseconds.DEFAULT,
@@ -478,6 +480,18 @@ class DriveController(context: Context) {
     fun setRacingReturnThrottlePercent(percent: Int) {
         updateAutomaticTransmissionSettings {
             it.copy(racingReturnThrottlePercent = RacingReturnThrottlePercent.normalize(percent))
+        }
+    }
+
+    fun setKickdownStompDeltaPercent(percent: Int) {
+        updateAutomaticTransmissionSettings {
+            it.copy(kickdownStompDeltaPercent = KickdownStompDeltaPercent.normalize(percent))
+        }
+    }
+
+    fun setKickdownStompMinThrottlePercent(percent: Int) {
+        updateAutomaticTransmissionSettings {
+            it.copy(kickdownStompMinThrottlePercent = KickdownStompMinThrottlePercent.normalize(percent))
         }
     }
 
@@ -1535,6 +1549,8 @@ class DriveController(context: Context) {
                 ),
                 cruisingShiftOffsetsByTachMaxRpm = automaticTransmissionSettings.get().cruisingShiftOffsetsByTachMaxRpm,
                 racingReturnThrottlePercent = automaticTransmissionSettings.get().racingReturnThrottlePercent,
+                kickdownStompDeltaPercent = automaticTransmissionSettings.get().kickdownStompDeltaPercent,
+                kickdownStompMinThrottlePercent = automaticTransmissionSettings.get().kickdownStompMinThrottlePercent,
                 racingEnterDelayMilliseconds = automaticTransmissionSettings.get().racingEnterDelayMilliseconds,
                 automaticUpshiftMilliseconds = automaticTransmissionSettings.get().automaticUpshiftMilliseconds,
                 automaticDownshiftMilliseconds = automaticTransmissionSettings.get().automaticDownshiftMilliseconds,

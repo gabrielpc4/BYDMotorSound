@@ -21,6 +21,40 @@ internal object RacingReturnThrottlePercent {
     }
 }
 
+/** Minimum pedal increase between consecutive samples to count as a kickdown stomp. */
+internal object KickdownStompDeltaPercent {
+    const val MIN = 5
+    const val MAX = 40
+    const val DEFAULT = 15
+    const val STEP = 5
+
+    fun normalize(value: Int): Int {
+        val stepped = ((value.toFloat() / STEP).roundToInt() * STEP)
+        return stepped.coerceIn(MIN, MAX)
+    }
+
+    fun asFraction(percent: Int): Double {
+        return normalize(percent) / 100.0
+    }
+}
+
+/** Pedal level the stomp must reach; small end values (e.g. 20%) do not count as kickdown. */
+internal object KickdownStompMinThrottlePercent {
+    const val MIN = 15
+    const val MAX = 60
+    const val DEFAULT = 30
+    const val STEP = 5
+
+    fun normalize(value: Int): Int {
+        val stepped = ((value.toFloat() / STEP).roundToInt() * STEP)
+        return stepped.coerceIn(MIN, MAX)
+    }
+
+    fun asFraction(percent: Int): Double {
+        return normalize(percent) / 100.0
+    }
+}
+
 /** Per-downshift RPM blend duration during cruising→racing kickdown. */
 internal object RacingEnterDelayMilliseconds {
     const val MIN = 0
@@ -163,6 +197,8 @@ internal data class AutomaticTransmissionSettings(
     val manualTransmissionKickdownEnabled: Boolean = true,
     val cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int> = CruisingShiftOffsetByTachMaxRpm.defaultOffsets(),
     val racingReturnThrottlePercent: Int = RacingReturnThrottlePercent.DEFAULT,
+    val kickdownStompDeltaPercent: Int = KickdownStompDeltaPercent.DEFAULT,
+    val kickdownStompMinThrottlePercent: Int = KickdownStompMinThrottlePercent.DEFAULT,
     val racingEnterDelayMilliseconds: Int = RacingEnterDelayMilliseconds.DEFAULT,
     val automaticUpshiftMilliseconds: Int = AutomaticUpshiftMilliseconds.DEFAULT,
     val automaticDownshiftMilliseconds: Int = AutomaticDownshiftMilliseconds.DEFAULT,
@@ -193,6 +229,18 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
                 preferences.getInt(
                     KEY_RACING_RETURN_THROTTLE_PERCENT,
                     RacingReturnThrottlePercent.DEFAULT,
+                ),
+            ),
+            kickdownStompDeltaPercent = KickdownStompDeltaPercent.normalize(
+                preferences.getInt(
+                    KEY_KICKDOWN_STOMP_DELTA_PERCENT,
+                    KickdownStompDeltaPercent.DEFAULT,
+                ),
+            ),
+            kickdownStompMinThrottlePercent = KickdownStompMinThrottlePercent.normalize(
+                preferences.getInt(
+                    KEY_KICKDOWN_STOMP_MIN_THROTTLE_PERCENT,
+                    KickdownStompMinThrottlePercent.DEFAULT,
                 ),
             ),
             racingEnterDelayMilliseconds = RacingEnterDelayMilliseconds.normalize(
@@ -248,6 +296,14 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
             .putInt(
                 KEY_RACING_RETURN_THROTTLE_PERCENT,
                 RacingReturnThrottlePercent.normalize(settings.racingReturnThrottlePercent),
+            )
+            .putInt(
+                KEY_KICKDOWN_STOMP_DELTA_PERCENT,
+                KickdownStompDeltaPercent.normalize(settings.kickdownStompDeltaPercent),
+            )
+            .putInt(
+                KEY_KICKDOWN_STOMP_MIN_THROTTLE_PERCENT,
+                KickdownStompMinThrottlePercent.normalize(settings.kickdownStompMinThrottlePercent),
             )
             .putInt(
                 KEY_RACING_ENTER_DELAY_MILLISECONDS,
@@ -339,6 +395,8 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
         const val KEY_MANUAL_TRANSMISSION_KICKDOWN_ENABLED = "manual_transmission_kickdown_enabled"
         const val KEY_CRUISING_SHIFT_OFFSET_RPM = "cruising_shift_offset_rpm"
         const val KEY_RACING_RETURN_THROTTLE_PERCENT = "racing_return_throttle_percent"
+        const val KEY_KICKDOWN_STOMP_DELTA_PERCENT = "kickdown_stomp_delta_percent"
+        const val KEY_KICKDOWN_STOMP_MIN_THROTTLE_PERCENT = "kickdown_stomp_min_throttle_percent"
         const val KEY_RACING_ENTER_DELAY_MILLISECONDS = "racing_enter_delay_milliseconds"
         const val KEY_AUTOMATIC_UPSHIFT_MILLISECONDS = "automatic_upshift_milliseconds"
         const val KEY_AUTOMATIC_DOWNSHIFT_MILLISECONDS = "automatic_downshift_milliseconds"

@@ -133,6 +133,8 @@ import com.gabrielpc.enginesoundsimulator.drive.AutomaticUpshiftMilliseconds
 import com.gabrielpc.enginesoundsimulator.drive.ManualAutodownshiftRpm
 import com.gabrielpc.enginesoundsimulator.drive.ManualRedlineHoldSeconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingEnterDelayMilliseconds
+import com.gabrielpc.enginesoundsimulator.drive.KickdownStompDeltaPercent
+import com.gabrielpc.enginesoundsimulator.drive.KickdownStompMinThrottlePercent
 import com.gabrielpc.enginesoundsimulator.drive.RacingReturnHoldSeconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingReturnThrottlePercent
 import com.gabrielpc.enginesoundsimulator.drive.PedalAudioThrottleRampMilliseconds
@@ -982,6 +984,10 @@ internal fun SettingsScreen(
     onMinimumAudioThrottleChange: (Float) -> Unit,
     racingReturnThrottlePercent: Int,
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
+    kickdownStompDeltaPercent: Int,
+    onKickdownStompDeltaPercentChange: (Int) -> Unit,
+    kickdownStompMinThrottlePercent: Int,
+    onKickdownStompMinThrottlePercentChange: (Int) -> Unit,
     racingEnterDelayMilliseconds: Int,
     onRacingEnterDelayMillisecondsChange: (Int) -> Unit,
     automaticUpshiftMilliseconds: Int,
@@ -1075,6 +1081,10 @@ internal fun SettingsScreen(
                 onMinimumAudioThrottleChange = onMinimumAudioThrottleChange,
                 racingReturnThrottlePercent = racingReturnThrottlePercent,
                 onRacingReturnThrottlePercentChange = onRacingReturnThrottlePercentChange,
+                kickdownStompDeltaPercent = kickdownStompDeltaPercent,
+                onKickdownStompDeltaPercentChange = onKickdownStompDeltaPercentChange,
+                kickdownStompMinThrottlePercent = kickdownStompMinThrottlePercent,
+                onKickdownStompMinThrottlePercentChange = onKickdownStompMinThrottlePercentChange,
                 racingEnterDelayMilliseconds = racingEnterDelayMilliseconds,
                 onRacingEnterDelayMillisecondsChange = onRacingEnterDelayMillisecondsChange,
                 automaticUpshiftMilliseconds = automaticUpshiftMilliseconds,
@@ -1710,6 +1720,10 @@ private fun AutomaticTransmissionSettingsControl(
     onMinimumAudioThrottleChange: (Float) -> Unit,
     racingReturnThrottlePercent: Int,
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
+    kickdownStompDeltaPercent: Int,
+    onKickdownStompDeltaPercentChange: (Int) -> Unit,
+    kickdownStompMinThrottlePercent: Int,
+    onKickdownStompMinThrottlePercentChange: (Int) -> Unit,
     racingEnterDelayMilliseconds: Int,
     onRacingEnterDelayMillisecondsChange: (Int) -> Unit,
     automaticUpshiftMilliseconds: Int,
@@ -1827,7 +1841,7 @@ private fun AutomaticTransmissionSettingsControl(
             )
         }
         Text(
-            text = "When cruising switches to racing on a hard throttle, kickdown starts immediately. Each downshift blends RPM over this duration — higher is smoother.",
+            text = "When cruising switches to racing on a sharp throttle stomp, kickdown starts immediately. Each downshift blends RPM over this duration — higher is smoother.",
             color = Muted,
             fontSize = 12.sp,
             lineHeight = 16.sp,
@@ -1843,6 +1857,82 @@ private fun AutomaticTransmissionSettingsControl(
             valueRange = RacingEnterDelayMilliseconds.MIN.toFloat()..RacingEnterDelayMilliseconds.MAX.toFloat(),
             steps = (RacingEnterDelayMilliseconds.MAX - RacingEnterDelayMilliseconds.MIN) / RacingEnterDelayMilliseconds.STEP,
         )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("KICKDOWN STOMP DELTA", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    Text(
+                        text = "$kickdownStompDeltaPercent%",
+                        color = OnSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Black,
+                    )
+                }
+                Text(
+                    text = "Minimum pedal increase in one frame to count as a stomp. Small jumps (e.g. 0→15%) may meet this but still fail the min throttle check below.",
+                    color = Muted,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                )
+                Slider(
+                    value = kickdownStompDeltaPercent.toFloat(),
+                    onValueChange = { value ->
+                        val selectedPercent = KickdownStompDeltaPercent.normalize(value.roundToInt())
+                        if (selectedPercent != kickdownStompDeltaPercent) {
+                            onKickdownStompDeltaPercentChange(selectedPercent)
+                        }
+                    },
+                    valueRange = KickdownStompDeltaPercent.MIN.toFloat()..KickdownStompDeltaPercent.MAX.toFloat(),
+                    steps = (KickdownStompDeltaPercent.MAX - KickdownStompDeltaPercent.MIN) / KickdownStompDeltaPercent.STEP - 1,
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("KICKDOWN MIN THROTTLE", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    Text(
+                        text = "$kickdownStompMinThrottlePercent%",
+                        color = OnSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Black,
+                    )
+                }
+                Text(
+                    text = "Pedal level the stomp must reach. 0→40% triggers kickdown; 0→15% or 5→20% usually do not because the end pedal stays too low.",
+                    color = Muted,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                )
+                Slider(
+                    value = kickdownStompMinThrottlePercent.toFloat(),
+                    onValueChange = { value ->
+                        val selectedPercent = KickdownStompMinThrottlePercent.normalize(value.roundToInt())
+                        if (selectedPercent != kickdownStompMinThrottlePercent) {
+                            onKickdownStompMinThrottlePercentChange(selectedPercent)
+                        }
+                    },
+                    valueRange = KickdownStompMinThrottlePercent.MIN.toFloat()..KickdownStompMinThrottlePercent.MAX.toFloat(),
+                    steps = (KickdownStompMinThrottlePercent.MAX - KickdownStompMinThrottlePercent.MIN) / KickdownStompMinThrottlePercent.STEP - 1,
+                )
+            }
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),

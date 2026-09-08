@@ -12,9 +12,6 @@ enum class AutomaticTransmissionMode {
  * absolute auto_up/auto_down RPM values. Cruising then lowers those relocated triggers further.
  */
 internal object AutomaticTransmissionPolicy {
-    const val RACING_ENTER_MIN_THROTTLE = 0.40
-    /** Minimum pedal increase between consecutive samples to count as a manual kickdown stomp. */
-    const val MANUAL_KICKDOWN_MIN_THROTTLE_DELTA = 0.15
     /** Throttle below this after kickdown cancels the one-shot automatic upshift follow-up. */
     const val MANUAL_KICKDOWN_CANCEL_MAX_THROTTLE = 0.12
     /** Emergency upshift once after holding the limiter this long, unless already in top gear. */
@@ -64,8 +61,36 @@ internal object AutomaticTransmissionPolicy {
         )
     }
 
-    fun manualKickdownStompDetected(previousThrottle: Double, currentThrottle: Double): Boolean {
-        return (currentThrottle - previousThrottle) >= MANUAL_KICKDOWN_MIN_THROTTLE_DELTA
+    fun kickdownStompDetected(
+        previousThrottle: Double,
+        currentThrottle: Double,
+        minDelta: Double,
+        minCurrentThrottle: Double,
+    ): Boolean {
+        val delta = currentThrottle - previousThrottle
+        if (delta < minDelta) {
+            return false
+        }
+
+        if (currentThrottle < minCurrentThrottle) {
+            return false
+        }
+
+        return true
+    }
+
+    fun manualKickdownStompDetected(
+        previousThrottle: Double,
+        currentThrottle: Double,
+        minDelta: Double,
+        minCurrentThrottle: Double,
+    ): Boolean {
+        return kickdownStompDetected(
+            previousThrottle = previousThrottle,
+            currentThrottle = currentThrottle,
+            minDelta = minDelta,
+            minCurrentThrottle = minCurrentThrottle,
+        )
     }
 
     fun applyCruisingOffset(

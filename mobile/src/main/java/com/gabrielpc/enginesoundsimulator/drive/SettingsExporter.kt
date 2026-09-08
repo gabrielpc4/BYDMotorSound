@@ -220,6 +220,8 @@ internal object SettingsExporter {
                 },
             )
             put("racingReturnThrottlePercent", settings.racingReturnThrottlePercent)
+            put("kickdownStompDeltaPercent", settings.kickdownStompDeltaPercent)
+            put("kickdownStompMinThrottlePercent", settings.kickdownStompMinThrottlePercent)
             put("racingEnterDelayMilliseconds", settings.racingEnterDelayMilliseconds)
             put("automaticUpshiftMilliseconds", settings.automaticUpshiftMilliseconds)
             put("automaticDownshiftMilliseconds", settings.automaticDownshiftMilliseconds)

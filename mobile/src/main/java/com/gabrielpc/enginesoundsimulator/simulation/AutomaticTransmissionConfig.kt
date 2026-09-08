@@ -7,6 +7,8 @@ import com.gabrielpc.enginesoundsimulator.drive.ManualAutodownshiftRpm
 import com.gabrielpc.enginesoundsimulator.drive.ManualRedlineHoldSeconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingEnterDelayMilliseconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingReturnHoldSeconds
+import com.gabrielpc.enginesoundsimulator.drive.KickdownStompDeltaPercent
+import com.gabrielpc.enginesoundsimulator.drive.KickdownStompMinThrottlePercent
 import com.gabrielpc.enginesoundsimulator.drive.RacingReturnThrottlePercent
 
 internal data class AutomaticTransmissionConfig(
@@ -16,6 +18,12 @@ internal data class AutomaticTransmissionConfig(
     val cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int> = emptyMap(),
     val racingReturnMaxThrottle: Double = RacingReturnThrottlePercent.asFraction(
         RacingReturnThrottlePercent.DEFAULT,
+    ),
+    val kickdownStompMinDelta: Double = KickdownStompDeltaPercent.asFraction(
+        KickdownStompDeltaPercent.DEFAULT,
+    ),
+    val kickdownStompMinCurrentThrottle: Double = KickdownStompMinThrottlePercent.asFraction(
+        KickdownStompMinThrottlePercent.DEFAULT,
     ),
     val racingEnterDelayMilliseconds: Int = RacingEnterDelayMilliseconds.DEFAULT,
     val automaticUpshiftMilliseconds: Int = AutomaticUpshiftMilliseconds.DEFAULT,
@@ -33,6 +41,12 @@ internal data class AutomaticTransmissionConfig(
                 cruisingShiftOffsetsByTachMaxRpm = settings.cruisingShiftOffsetsByTachMaxRpm,
                 racingReturnMaxThrottle = RacingReturnThrottlePercent.asFraction(
                     settings.racingReturnThrottlePercent,
+                ),
+                kickdownStompMinDelta = KickdownStompDeltaPercent.asFraction(
+                    settings.kickdownStompDeltaPercent,
+                ),
+                kickdownStompMinCurrentThrottle = KickdownStompMinThrottlePercent.asFraction(
+                    settings.kickdownStompMinThrottlePercent,
                 ),
                 racingEnterDelayMilliseconds = RacingEnterDelayMilliseconds.normalize(
                     settings.racingEnterDelayMilliseconds,

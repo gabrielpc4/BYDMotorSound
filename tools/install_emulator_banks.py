@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Push FMOD bank archives to debug dashboard apps and trigger import."""
+"""Push FMOD bank archives to the unified debug dashboard and trigger import."""
 
 from __future__ import annotations
 
@@ -13,11 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PACKS_ROOT = ROOT / "fmod_bank_packs"
 INDEX_PATH = PACKS_ROOT / "index.json"
 MAIN_ACTIVITY = "com.gabrielpc.enginesoundsimulator.MainActivity"
-SHARED_DEPENDENCY_IDS = {"assetto-common", "assetto-common-strings"}
-APPS = {
-    "original_cars_pack": "com.gabrielpc.enginesoundsimulator.original",
-    "modded_car_packs": "com.gabrielpc.enginesoundsimulator.modded",
-}
+PACKAGE = "com.gabrielpc.enginesoundsimulator"
+GROUPS = ("original_cars_pack", "modded_car_packs")
 
 
 def run(command: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -42,11 +39,11 @@ def device_ready() -> bool:
     return result.returncode == 0 and result.stdout.strip() == "device"
 
 
-def installed_pack_count(package: str, group: str) -> int:
+def installed_pack_count(group: str) -> int:
     result = adb(
         "shell",
         "run-as",
-        package,
+        PACKAGE,
         "ls",
         f"files/fmod-banks/{group}",
         check=False,
@@ -56,16 +53,8 @@ def installed_pack_count(package: str, group: str) -> int:
     return sum(1 for line in result.stdout.splitlines() if line.strip())
 
 
-def expected_pack_count(index: dict[str, object], group: str) -> int:
-    return sum(
-        1
-        for pack in index["packs"]
-        if pack["active"] and pack["group"] == group
-    )
-
-
-def staged_pack_count(package: str, group: str) -> int:
-    remote = f"/sdcard/Android/data/{package}/files/fmod-bank-import/{group}"
+def staged_pack_count(group: str) -> int:
+    remote = f"/sdcard/Android/data/{PACKAGE}/files/fmod-bank-import/{group}"
     result = adb("shell", "ls", remote, check=False)
     if result.returncode != 0:
         return 0
@@ -76,9 +65,9 @@ def staged_pack_count(package: str, group: str) -> int:
     )
 
 
-def fix_staged_ownership(package: str) -> None:
-    remote_root = f"/sdcard/Android/data/{package}/files/fmod-bank-import"
-    uid = adb("shell", "stat", "-c", "%U", f"/data/data/{package}", check=False).stdout.strip()
+def fix_staged_ownership() -> None:
+    remote_root = f"/sdcard/Android/data/{PACKAGE}/files/fmod-bank-import"
+    uid = adb("shell", "stat", "-c", "%U", f"/data/data/{PACKAGE}", check=False).stdout.strip()
     if not uid:
         return
     adb("root", check=False)
@@ -92,11 +81,11 @@ def fix_staged_ownership(package: str) -> None:
     )
 
 
-def push_group(group: str, package: str, packs: list[dict[str, object]]) -> None:
-    remote_group = f"/sdcard/Android/data/{package}/files/fmod-bank-import/{group}"
+def push_group(group: str, packs: list[dict[str, object]]) -> None:
+    remote_group = f"/sdcard/Android/data/{PACKAGE}/files/fmod-bank-import/{group}"
     adb("shell", "mkdir", "-p", remote_group)
 
-    print(f"Pushing {len(packs)} {group} bank(s) to {package}...")
+    print(f"Pushing {len(packs)} {group} bank(s) to {PACKAGE}...")
     for index, pack in enumerate(packs, start=1):
         source = PACKS_ROOT / pack["asset"]
         if not source.is_file():
@@ -106,53 +95,36 @@ def push_group(group: str, package: str, packs: list[dict[str, object]]) -> None
         print(f"  [{index}/{len(packs)}] {source.name}", flush=True)
         adb("push", str(source), remote)
 
-    fix_staged_ownership(package)
+    fix_staged_ownership()
 
 
-def trigger_import(package: str) -> None:
+def trigger_import() -> None:
     adb(
         "shell",
         "am",
         "start",
         "-n",
-        f"{package}/{MAIN_ACTIVITY}",
+        f"{PACKAGE}/{MAIN_ACTIVITY}",
     )
 
 
-def wait_for_import(package: str, group: str, expected: int, dependency_expected: int = 0) -> None:
-    dependency_group = "original_cars_pack"
-    print(f"Waiting for {package} to import {group}...")
+def wait_for_import(expected_by_group: dict[str, int]) -> None:
+    print(f"Waiting for {PACKAGE} to import banks...")
     while True:
-        installed = installed_pack_count(package, group)
-        staged = staged_pack_count(package, group)
-        dependency_installed = installed_pack_count(package, dependency_group) if dependency_expected > 0 else 0
-        dependency_staged = staged_pack_count(package, dependency_group) if dependency_expected > 0 else 0
-        if dependency_expected > 0:
-            print(
-                f"  installed={installed}/{expected} staged={staged} "
-                f"shared={dependency_installed}/{dependency_expected} staged_shared={dependency_staged}",
-                flush=True,
-            )
-        else:
-            print(f"  installed={installed}/{expected} staged={staged}", flush=True)
-
-        primary_ready = installed >= expected and staged == 0
-        dependency_ready = dependency_expected == 0 or (
-            dependency_installed >= dependency_expected and dependency_staged == 0
-        )
-        if primary_ready and dependency_ready:
+        ready = True
+        parts: list[str] = []
+        for group, expected in expected_by_group.items():
+            installed = installed_pack_count(group)
+            staged = staged_pack_count(group)
+            parts.append(f"{group} installed={installed}/{expected} staged={staged}")
+            if not (installed >= expected and staged == 0):
+                if staged == 0 and installed >= max(1, expected - 2):
+                    continue
+                ready = False
+        print("  " + " ".join(parts), flush=True)
+        if ready:
             return
-        if staged == 0 and dependency_staged == 0 and installed >= max(1, expected - 2):
-            if dependency_expected == 0 or dependency_installed >= max(1, dependency_expected - 1):
-                return
         time.sleep(5)
-
-
-def dependency_packs(index: dict[str, object]) -> list[dict[str, object]]:
-    return [
-        pack for pack in index["packs"]
-        if pack["active"] and pack["id"] in SHARED_DEPENDENCY_IDS
-    ]
 
 
 def main() -> int:
@@ -165,41 +137,38 @@ def main() -> int:
         return 1
 
     index = json.loads(INDEX_PATH.read_text())
-    shared_dependencies = dependency_packs(index)
-    for group, package in APPS.items():
-        packs = [pack for pack in index["packs"] if pack["active"] and pack["group"] == group]
-        expected = len(packs)
-        dependency_expected = len(shared_dependencies) if group == "modded_car_packs" else 0
-        installed = installed_pack_count(package, group)
-        staged = staged_pack_count(package, group)
-        dependency_installed = (
-            installed_pack_count(package, "original_cars_pack") if dependency_expected > 0 else 0
-        )
-        dependency_staged = (
-            staged_pack_count(package, "original_cars_pack") if dependency_expected > 0 else 0
-        )
+    expected_by_group: dict[str, int] = {}
+    pending: list[tuple[str, list[dict[str, object]]]] = []
 
-        if (
-            installed >= expected
-            and staged == 0
-            and dependency_installed >= dependency_expected
-            and dependency_staged == 0
-        ):
-            print(f"{package}: {installed}/{expected} banks already installed.")
+    for group in GROUPS:
+        packs = [pack for pack in index["packs"] if pack["active"] and pack["group"] == group]
+        expected_by_group[group] = len(packs)
+        installed = installed_pack_count(group)
+        staged = staged_pack_count(group)
+
+        if installed >= len(packs) and staged == 0:
+            print(f"{PACKAGE}: {installed}/{len(packs)} {group} banks already installed.")
             continue
 
-        if staged > 0 or dependency_staged > 0:
-            print(f"{package}: found staged bank(s); resuming import.")
+        if staged > 0:
+            print(f"{PACKAGE}: found staged {group} bank(s); resuming import.")
         else:
-            push_group(group, package, packs)
-            if dependency_expected > 0:
-                push_group("original_cars_pack", package, shared_dependencies)
+            pending.append((group, packs))
 
-        trigger_import(package)
-        wait_for_import(package, group, expected, dependency_expected)
-        print(f"{package}: import finished with {installed_pack_count(package, group)} installed banks.")
+    for group, packs in pending:
+        push_group(group, packs)
 
-    trigger_import(APPS["original_cars_pack"])
+    if pending or any(staged_pack_count(group) > 0 for group in GROUPS):
+        trigger_import()
+        wait_for_import(expected_by_group)
+        for group in GROUPS:
+            print(
+                f"{PACKAGE}: {group} import finished with "
+                f"{installed_pack_count(group)} installed banks."
+            )
+    else:
+        trigger_import()
+
     print("Emulator bank install complete.")
     return 0
 

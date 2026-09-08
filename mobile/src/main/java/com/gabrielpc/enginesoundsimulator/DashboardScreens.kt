@@ -2098,6 +2098,28 @@ internal fun CarGridSelectionDialog(
                         fontWeight = FontWeight.Black,
                         letterSpacing = 1.2.sp,
                     )
+                    if (showGroupFilters) {
+                        CarPickerGroupChip(
+                            label = "MODDED",
+                            selected = selectedGroup == FmodBankProfiles.moddedCarsPackId,
+                            onClick = {
+                                selectedGroup = FmodBankProfiles.moddedCarsPackId
+                                pickerPreferences.edit()
+                                    .putString("selected", FmodBankProfiles.moddedCarsPackId)
+                                    .apply()
+                            },
+                        )
+                        CarPickerGroupChip(
+                            label = "ORIGINAL",
+                            selected = selectedGroup == FmodBankProfiles.originalCarsPackId,
+                            onClick = {
+                                selectedGroup = FmodBankProfiles.originalCarsPackId
+                                pickerPreferences.edit()
+                                    .putString("selected", FmodBankProfiles.originalCarsPackId)
+                                    .apply()
+                            },
+                        )
+                    }
                     CarPickerSearchField(
                         query = searchQuery,
                         onQueryChange = { searchQuery = it },
@@ -2109,39 +2131,6 @@ internal fun CarGridSelectionDialog(
                             contentDescription = "Close car picker",
                             tint = OnSurface,
                         )
-                    }
-                }
-                if (showGroupFilters) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp)
-                            .padding(top = 10.dp),
-                    ) {
-                        listOf(
-                            FmodBankProfiles.moddedCarsPackId to "MODDED CARS",
-                            FmodBankProfiles.originalCarsPackId to "ORIGINAL CARS",
-                        ).forEach { (group, label) ->
-                            MaterialSurface(
-                                color = if (selectedGroup == group) Accent.copy(alpha = 0.24f) else Surface,
-                                shape = skinShape(6.dp),
-                                border = BorderStroke(1.dp, if (selectedGroup == group) Accent else Outline),
-                                modifier = Modifier.clickable {
-                                    selectedGroup = group
-                                    pickerPreferences.edit().putString("selected", group).apply()
-                                },
-                            ) {
-                                Text(
-                                    label,
-                                    color = if (selectedGroup == group) Accent else Muted,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                )
-                            }
-                        }
                     }
                 }
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -2218,6 +2207,28 @@ internal fun CarGridSelectionDialog(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CarPickerGroupChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    MaterialSurface(
+        color = if (selected) Accent.copy(alpha = 0.24f) else Surface,
+        shape = skinShape(6.dp),
+        border = BorderStroke(1.dp, if (selected) Accent else Outline),
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
+        Text(
+            text = label,
+            color = if (selected) Accent else Muted,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+        )
     }
 }
 

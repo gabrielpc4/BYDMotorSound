@@ -27,32 +27,34 @@ packages first:
 python3 tools/build_fmod_bank_packs.py
 ```
 
-### Standalone Original / Modded apps (bundled banks)
+### Unified dashboard
 
-Each APK contains its full catalog. No file-manager import is required.
-
-```sh
-./gradlew :mobile:assembleOriginalRelease :mobile:assembleModdedRelease --no-daemon
-```
-
-- Original: `com.gabrielpc.enginesoundsimulator.original`
-- Modded: `com.gabrielpc.enginesoundsimulator.modded`
-
-To build the same app IDs without embedded banks (external import workflow):
-
-```sh
-./gradlew :mobile:assembleOriginalRelease :mobile:assembleModdedRelease -PbankDelivery=external --no-daemon
-```
-
-### Separate-catalog dashboard (legacy two-group UI)
+One app, both catalogs. The car picker switches Original / Modded next to search.
 
 ```sh
 ./gradlew :mobile:assembleSeparateRelease --no-daemon
-python3 tools/export_file_manager_car_packs.py --groups all
 ```
 
-Install `manual_car_pack_bundles/DASHBOARD_APK` through the vehicle's enabled USB APK route, then
-copy each `AUDIO_PACKS/*/BATCH_*` folder to the path in its `COPY_TO_BYD_INTERNAL_STORAGE.txt`.
+- Dashboard: `com.gabrielpc.enginesoundsimulator`
+
+### Bank installer APKs
+
+Two companion APKs write banks into the unified dashboard through its Content Provider
+(`content://com.gabrielpc.enginesoundsimulator.fmodbanks`). Install the dashboard first, then
+each installer and press Install.
+
+```sh
+./gradlew :audio-installer:assembleOriginalRelease :audio-installer:assembleModdedRelease --no-daemon
+```
+
+- Original banks: `com.gabrielpc.enginesoundsinstaller.original`
+- Modded banks: `com.gabrielpc.enginesoundsinstaller.modded`
+
+File-manager import remains available as an alternative:
+
+```sh
+python3 tools/export_file_manager_car_packs.py --groups all
+```
 
 ## Install (emulator / test device)
 

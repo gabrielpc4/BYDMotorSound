@@ -7,8 +7,7 @@ AVD_NAME="BYD_Multimedia_with_Hardware_Controls"
 # Main panel matches the app's 70% of 1920x1080 layout canvas (1344x756).
 EMULATOR_BIN="/Users/gabrielcarvalho/Library/Android/sdk/emulator/emulator"
 ADB_BIN="/Users/gabrielcarvalho/Library/Android/sdk/platform-tools/adb"
-PACKAGE_ORIGINAL="com.gabrielpc.enginesoundsimulator.original"
-PACKAGE_MODDED="com.gabrielpc.enginesoundsimulator.modded"
+PACKAGE="com.gabrielpc.enginesoundsimulator"
 MAIN_ACTIVITY="com.gabrielpc.enginesoundsimulator.MainActivity"
 
 if [[ ! -x "$EMULATOR_BIN" ]]; then
@@ -17,33 +16,26 @@ if [[ ! -x "$EMULATOR_BIN" ]]; then
 fi
 
 latest_debug_apk() {
-  local flavor="$1"
-  ls -t "$ROOT/mobile/build/outputs/apk/$flavor/debug/"*.apk(N) 2>/dev/null | head -1
+  ls -t "$ROOT/mobile/build/outputs/apk/separate/debug/"*.apk(N) 2>/dev/null | head -1
 }
 
 build_debug_apk() {
-  local flavor="$1"
-  case "$flavor" in
-    original) (cd "$ROOT" && ./gradlew :mobile:assembleOriginalDebug --quiet) ;;
-    modded) (cd "$ROOT" && ./gradlew :mobile:assembleModdedDebug --quiet) ;;
-    *) echo "Unknown flavor: $flavor" >&2; return 1 ;;
-  esac
+  (cd "$ROOT" && ./gradlew :mobile:assembleSeparateDebug --quiet)
 }
 
 resolve_debug_apk() {
-  local flavor="$1"
   local apk
-  apk="$(latest_debug_apk "$flavor")"
+  apk="$(latest_debug_apk)"
   if [[ -n "$apk" && -f "$apk" ]]; then
     print -r "$apk"
     return 0
   fi
 
-  echo "No ${flavor}Debug APK found. Building..." >&2
-  build_debug_apk "$flavor"
-  apk="$(latest_debug_apk "$flavor")"
+  echo "No separateDebug APK found. Building..." >&2
+  build_debug_apk
+  apk="$(latest_debug_apk)"
   if [[ -z "$apk" || ! -f "$apk" ]]; then
-    echo "Could not build ${flavor}Debug APK." >&2
+    echo "Could not build separateDebug APK." >&2
     return 1
   fi
   print -r "$apk"
@@ -57,30 +49,27 @@ wait_for_boot() {
 }
 
 install_debug_apk() {
-  local package="$1"
-  local flavor="$2"
   local apk
-  apk="$(resolve_debug_apk "$flavor")"
+  apk="$(resolve_debug_apk)"
 
-  echo "Installing ${flavor} app from $(basename "$apk")..."
+  echo "Installing unified dashboard from $(basename "$apk")..."
   "$ADB_BIN" install --bypass-low-target-sdk-block -r "$apk" >/dev/null
-  if ! "$ADB_BIN" shell pm path "$package" >/dev/null 2>&1; then
-    echo "Install reported success but $package is missing." >&2
+  if ! "$ADB_BIN" shell pm path "$PACKAGE" >/dev/null 2>&1; then
+    echo "Install reported success but $PACKAGE is missing." >&2
     return 1
   fi
 }
 
 ensure_debug_apps() {
   wait_for_boot
-  install_debug_apk "$PACKAGE_ORIGINAL" original
-  install_debug_apk "$PACKAGE_MODDED" modded
+  install_debug_apk
   # Debug APKs omit embedded banks; opt in when packs changed or the AVD was reset:
   #   BYD_INSTALL_BANKS=1 ./run.sh
   if [[ "${BYD_INSTALL_BANKS:-0}" == "1" ]]; then
     python3 "$ROOT/tools/install_emulator_banks.py"
   fi
-  "$ADB_BIN" shell am start -n "$PACKAGE_ORIGINAL/$MAIN_ACTIVITY" >/dev/null
-  echo "Dashboard apps installed and launched."
+  "$ADB_BIN" shell am start -n "$PACKAGE/$MAIN_ACTIVITY" >/dev/null
+  echo "Unified dashboard installed and launched."
 }
 
 running_avd_serial() {

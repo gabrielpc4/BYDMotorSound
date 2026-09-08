@@ -11,11 +11,10 @@ The current catalog contains 105 original cars sourced from
 original installation bank but belongs to the Modded catalog. Two shared original banks are
 runtime dependencies, not selectable cars.
 
-Original and Modded are separate standalone apps, each containing its full catalog and shared banks.
-Only the selected car's banks are extracted and loaded; the picker reads small bundled previews.
-The external-bank delivery mode remains available as a build option with the same app identities,
-and the `separate` variant retains the original two-group dashboard. See
-[FMOD bank installation](fmod-bank-installation.md) for builds, storage, and mode switching.
+The product dashboard is one app (`com.gabrielpc.enginesoundsimulator`) with both catalogs. The
+car picker switches Original / Modded. Banks arrive from two companion installer APKs that write
+through the dashboard Content Provider into `files/fmod-banks/`, or from file-manager import.
+See [FMOD bank installation](fmod-bank-installation.md) for builds, storage, and installer order.
 
 ## Source of truth
 
@@ -51,15 +50,16 @@ continuous presentation speed instead of resetting the dashboard to zero.
 ## Build and release
 
 The local FMOD 2.03.14 SDK is supplied through `fmod.sdk.dir`. Build the bank packages first, then
-assemble the two signed standalone dashboards. The dashboard build number is
+assemble the unified dashboard and the two bank installers. The dashboard build number is
 incremented on an APK build. Generated packages, bundles, and APKs are ignored by Git.
 
 ```sh
 python3 tools/build_fmod_bank_packs.py
-./gradlew :mobile:assembleOriginalRelease :mobile:assembleModdedRelease --no-daemon
+./gradlew :mobile:assembleSeparateRelease --no-daemon
+./gradlew :audio-installer:assembleOriginalRelease :audio-installer:assembleModdedRelease --no-daemon
 ```
 
-Install the desired Original or Modded APK through the vehicle's enabled USB APK route.
+Install the dashboard APK first, then each installer, and press Install on the head unit.
 
 The mixer is diagnostic; temporary mute/solo
 controls reset when the car changes or the app starts. Per-car transmission, gear-shift, and turbo

@@ -1,52 +1,42 @@
 # FMOD bank installation
 
-## Standalone apps
+## Unified dashboard
 
-The `original` and `modded` dashboard variants each contain their complete car catalog and the two
-shared FMOD dependencies. Install one APK to use that catalog offline; both apps can coexist:
+The product app is the `separate` variant. It exposes both catalogs and switches them in the car
+picker. Banks do not ship inside this APK.
 
-| Variant | Application ID | Cars |
+| Piece | Application ID | Role |
 | --- | --- | --- |
-| Original | `com.gabrielpc.enginesoundsimulator.original` | 105 original cars |
-| Modded | `com.gabrielpc.enginesoundsimulator.modded` | 36 modded-catalog cars, including the Skyline R34 |
+| Dashboard | `com.gabrielpc.enginesoundsimulator` | UI, FMOD playback, private bank store |
+| Original installer | `com.gabrielpc.enginesoundsinstaller.original` | Publishes original cars plus shared banks |
+| Modded installer | `com.gabrielpc.enginesoundsinstaller.modded` | Publishes modded cars plus shared banks |
 
 ```sh
 python3 tools/build_fmod_bank_packs.py
-./gradlew :mobile:assembleOriginalRelease :mobile:assembleModdedRelease --no-daemon
+./gradlew :mobile:assembleSeparateRelease --no-daemon
+./gradlew :audio-installer:assembleOriginalRelease :audio-installer:assembleModdedRelease --no-daemon
 ```
 
-The signed APKs are in `mobile/build/outputs/apk/original/release/` and
-`mobile/build/outputs/apk/modded/release/`. Payload preparation checks that the selected catalog
-exactly matches the current archives, verifies every payload checksum, and checks each physics
-profile ID before packaging. The app reads the catalog and selected car's small physics metadata
-at startup. The audio worker unpacks and verifies only that car and the shared dependencies into
-`no_backup/embedded-audio/fmod-banks/`, then opens those three banks in FMOD. Other cars remain
-inside the APK until selected. Previews are separate small assets and never trigger bank extraction.
-Verified extracted banks are reused; an APK update replaces a cached pack when its manifest changes.
-The APK remains on disk alongside the extracted banks for cars used so far, so allow additional
-storage beyond the APK's size. Interrupted preparation leaves no published partial bank.
+The dashboard APK is in `mobile/build/outputs/apk/separate/release/`. The installers are
+`engine-sounds-audio-installer-originalRelease.apk` and
+`engine-sounds-audio-installer-moddedRelease.apk`.
 
-Each app filters every selection path to its catalog. The picker opens with that catalog selected;
-a saved car outside it is replaced by its first available car (Alfa Romeo 4C for Original, Aston Martin
-DBS for Modded). Shared banks are dependencies and never appear as cars.
+Install the dashboard first. Each installer streams its `.bydbank` archives through
 
-## Switching to external banks
+`content://com.gabrielpc.enginesoundsimulator.fmodbanks`
 
-Build the same app identity with `-PbankDelivery=external` to omit embedded assets in a later update:
+into the dashboard's private store (`files/fmod-banks/`). That is the same checksum and atomic
+rename path as file-manager import. A later dashboard update keeps those files. The standalone
+`.original` / `.modded` dashboard flavors are not this path: their Content Provider authorities
+do not match the installers.
 
-```sh
-./gradlew :mobile:assembleOriginalRelease :mobile:assembleModdedRelease -PbankDelivery=external --no-daemon
-```
+The picker shows every car whose pack and both shared dependencies are already published.
+Shared banks are dependencies and never appear as cars.
 
-Keep the same signing certificate and increase the version code. These variants retain their
-catalog filters, but discover banks through the existing verified external importer. Stage bank
-archives beneath `Android/data/<application-id>/files/fmod-bank-import/`, using the application ID
-above. Previously extracted embedded banks live separately and are not treated as externally
-installed packs. Deliver the external packs when switching modes; a car becomes available once its
-own pack and both shared dependencies have been imported.
+## Switching to file-manager import
 
-The `separate` variant retains the original dashboard identity and exposes both externally installed
-groups. Build it with `:mobile:assembleSeparateRelease`; the file-manager exporter selects this APK.
+Stage archives beneath `Android/data/com.gabrielpc.enginesoundsimulator/files/fmod-bank-import/`.
+A car becomes available once its own pack and both shared dependencies are in the private store.
 
 ## Package groups
 
@@ -111,9 +101,7 @@ and doors are excluded. The mixer shows the resulting FMOD hierarchy without cha
 routing.
 ## Installer APKs
 
-Build `assembleModdedRelease` and `assembleOriginalRelease` to produce two large installers:
-`engine-sounds-audio-installer-moddedRelease.apk` and
-`engine-sounds-audio-installer-originalRelease.apk`. Install the dashboard first, then install
-the desired companion and press its single install button. The modded and original installers have
-different package IDs, so both can be installed together; each carries only its own group plus the
-shared dependencies. `DELETE ALL` remains available in either installer.
+The original installer now embeds the full original catalog (not a single test car) plus the
+shared `assetto-common` banks. The modded installer embeds the modded catalog and the same
+shared banks. Both can be installed together. Press Install after the dashboard is present.
+`DELETE ALL` in either installer clears the dashboard store.

@@ -2,24 +2,51 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+import groovy.json.JsonSlurper
 import org.gradle.api.tasks.Sync
 
 val generatedModdedPackAssets = file("build/generated/packAssets/modded")
 val generatedOriginalPackAssets = file("build/generated/packAssets/original")
+val fmodBankPacks = rootProject.file("fmod_bank_packs")
 val prepareModdedPackAssets = tasks.register<Sync>("prepareModdedPackAssets") {
-    from(rootProject.file("fmod_bank_packs")) {
+    from(fmodBankPacks) {
         include("modded-*.bydbank", "assetto-common*.bydbank", "index.json")
         into("packs")
     }
     into(generatedModdedPackAssets)
 }
-val prepareOriginalPackAssets = tasks.register<Sync>("prepareOriginalPackAssets") {
-    from(rootProject.file("fmod_bank_packs")) {
-        include("alfa-romeo-4c.bydbank", "assetto-common.bydbank", "assetto-common-strings.bydbank")
-        into("packs")
+val prepareOriginalPackAssets = tasks.register("prepareOriginalPackAssets") {
+    val output = generatedOriginalPackAssets
+    inputs.dir(fmodBankPacks)
+    outputs.dir(output)
+    doLast {
+        val indexFile = fmodBankPacks.resolve("index.json")
+        require(indexFile.isFile) {
+            "Missing $indexFile. Run python3 tools/build_fmod_bank_packs.py first."
+        }
+        @Suppress("UNCHECKED_CAST")
+        val index = JsonSlurper().parse(indexFile) as Map<String, Any>
+        @Suppress("UNCHECKED_CAST")
+        val packs = index["packs"] as List<Map<String, Any>>
+        val selected = packs.filter { pack ->
+            val active = pack["active"] as Boolean
+            val group = pack["group"] as String
+            val dependency = pack["dependency"] as? Boolean ?: false
+            active && (group == "original_cars_pack" || dependency)
+        }
+        val destination = output.resolve("packs")
+        if (destination.exists()) {
+            destination.deleteRecursively()
+        }
+        destination.mkdirs()
+        indexFile.copyTo(destination.resolve("index.json"), overwrite = true)
+        selected.forEach { pack ->
+            val asset = pack["asset"] as String
+            val source = fmodBankPacks.resolve(asset)
+            require(source.isFile) { "Missing original bank archive: $source" }
+            source.copyTo(destination.resolve(asset), overwrite = true)
+        }
     }
-    from(file("src/original/pack-index.json")) { rename { "index.json" }; into("packs") }
-    into(generatedOriginalPackAssets)
 }
 tasks.named("preBuild").configure { dependsOn(prepareModdedPackAssets, prepareOriginalPackAssets) }
 

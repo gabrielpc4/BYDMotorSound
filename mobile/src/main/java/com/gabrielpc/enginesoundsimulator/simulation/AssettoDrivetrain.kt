@@ -1163,7 +1163,7 @@ internal class AssettoDrivetrain(
         val liveTargetRpm = cruisingBandTargetRpm(coupledRpmForGear(computedTargetGear))
         val topGear = effectiveVirtualGearProfile().virtualForwardGearCount
         val nextGearCoupledRpm = if (gear < topGear) {
-            coupledRpmForGear(gear + 1)
+            cruisingBandTargetRpm(coupledRpmForGear(gear + 1))
         } else {
             null
         }
@@ -1191,7 +1191,13 @@ internal class AssettoDrivetrain(
             computedTargetGear = computedTargetGear,
             nextGearCoupledRpm = nextGearCoupledRpm,
         )
-        rpm = step.rpm
+        rpm = if (shifting) {
+            val shiftTargetRpm = cruisingBandTargetRpm(coupledRpmForGear(shiftTarget))
+            val progress = (shiftElapsed / shiftDuration.coerceAtLeast(1e-9)).coerceIn(0.0, 1.0)
+            shiftStartRpm + (shiftTargetRpm - shiftStartRpm) * progress
+        } else {
+            step.rpm
+        }
 
         if (physics.engine.limiterRpm > 0.0) {
             rpm = rpm.coerceAtMost(physics.engine.limiterRpm)

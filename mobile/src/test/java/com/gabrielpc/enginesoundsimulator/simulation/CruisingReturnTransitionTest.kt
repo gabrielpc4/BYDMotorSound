@@ -217,6 +217,46 @@ class CruisingReturnTransitionTest {
     }
 
     @Test
+    fun doesNotClimbAfterUpshiftLandsBelowChaseTarget() {
+        val transition = CruisingReturnTransition()
+        var rpm = 5_413.0
+        var gear = 9
+        transition.begin(
+            currentRpm = rpm,
+            currentGear = gear,
+            computedTargetGear = 10,
+            initialLiveTargetRpm = 5_393.0,
+        )
+
+        repeat(4) {
+            val step = transition.step(
+                dt = DT,
+                currentRpm = rpm,
+                currentGear = gear,
+                shifting = true,
+                liveTargetRpm = 5_394.0,
+                computedTargetGear = 10,
+                nextGearCoupledRpm = 5_393.0,
+            )
+            rpm = step.rpm
+        }
+
+        gear = 10
+        val afterShift = transition.step(
+            dt = DT,
+            currentRpm = 5_112.0,
+            currentGear = gear,
+            shifting = false,
+            liveTargetRpm = 5_394.0,
+            computedTargetGear = 10,
+            nextGearCoupledRpm = null,
+        )
+
+        assertTrue(afterShift.rpm <= 5_112.0)
+        assertTrue(afterShift.rpm < 5_200.0)
+    }
+
+    @Test
     fun secondBeginDoesNotRestartTheGlide() {
         val transition = CruisingReturnTransition()
         transition.begin(

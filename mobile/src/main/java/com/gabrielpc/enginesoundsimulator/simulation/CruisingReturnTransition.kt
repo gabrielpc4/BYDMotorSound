@@ -99,19 +99,26 @@ internal class CruisingReturnTransition {
             chaseRpm = min(liveTargetRpm, chaseRpm + maxStep)
         }
 
-        val error = chaseRpm - currentRpm
-        val rpm = if (abs(error) <= CruisingReturn.RPM_TOLERANCE) {
-            chaseRpm
+        val glideRpm = if (shifting) {
+            currentRpm
         } else {
-            currentRpm + sign(error) * min(abs(error), maxStep)
+            val error = chaseRpm - currentRpm
+            val stepped = if (abs(error) <= CruisingReturn.RPM_TOLERANCE) {
+                chaseRpm
+            } else {
+                currentRpm + sign(error) * min(abs(error), maxStep)
+            }
+            // Return is always a descent from racing RPM. Never pull the needle back up toward a
+            // chase target that moved above the current value after an upshift lands.
+            min(stepped, currentRpm)
         }
 
-        val onLiveTarget = abs(rpm - liveTargetRpm) <= CruisingReturn.RPM_TOLERANCE
+        val onLiveTarget = abs(glideRpm - liveTargetRpm) <= CruisingReturn.RPM_TOLERANCE
         val reachedNextGear = nextGearCoupledRpm != null &&
-            rpm <= nextGearCoupledRpm + CruisingReturn.RPM_TOLERANCE
+            glideRpm <= nextGearCoupledRpm + CruisingReturn.RPM_TOLERANCE
         val requestUpshift = !shifting &&
             currentGear < targetGear &&
-            (reachedNextGear || onLiveTarget)
+            reachedNextGear
         val finished = !shifting && currentGear >= targetGear && onLiveTarget
 
         lastDebug = CruisingReturnDebug(
@@ -131,7 +138,7 @@ internal class CruisingReturnTransition {
         }
 
         return CruisingReturnStep(
-            rpm = rpm,
+            rpm = glideRpm,
             requestUpshift = requestUpshift,
             finished = finished,
         )

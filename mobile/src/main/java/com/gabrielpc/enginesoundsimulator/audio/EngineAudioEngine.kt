@@ -48,8 +48,6 @@ class EngineAudioEngine(context: Context) {
     private val controlThread = AtomicReference<Thread?>(null)
     private val snapshotThread = AtomicReference<Thread?>(null)
     private val nativeSources = AtomicReference<List<FmodSourceState>>(emptyList())
-    private val mixerAudibilityById = AtomicReference<Map<String, Double>>(emptyMap())
-    private val mixerStructureSerial = AtomicLong(0)
     private val masterOutputLinear = AtomicReference(0f)
     private val mixerDiagnosticsActive = AtomicBoolean(false)
     private val fmodUpdateRateHz = AtomicInteger(FmodUpdateRate.DEFAULT_HZ)
@@ -66,7 +64,6 @@ class EngineAudioEngine(context: Context) {
     private val effectSoundOverrideGains = AtomicReference(com.gabrielpc.enginesoundsimulator.drive.EffectSoundOverrideGains())
     private val categoryGains = AtomicReference(AudioMixGains())
     private val engineIdleGain = AtomicReference(1.0f)
-    private val stepextGain = AtomicReference(1.0f)
     private val nativeEventMutes = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
     private val nativeEventSolos = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
     /** Incremented only when the UI changes an override; the worker sends the batch once. */
@@ -122,10 +119,6 @@ class EngineAudioEngine(context: Context) {
 
     fun sourceSnapshots(): List<FmodSourceState> = nativeSources.get()
 
-    fun mixerAudibilityById(): Map<String, Double> = mixerAudibilityById.get()
-
-    fun mixerStructureSerial(): Long = mixerStructureSerial.get()
-
     fun masterOutputLinear(): Float = masterOutputLinear.get()
 
     fun setFmodUpdateRateHz(rateHz: Int) {
@@ -135,12 +128,7 @@ class EngineAudioEngine(context: Context) {
     fun fmodUpdateRateHz(): Int = fmodUpdateRateHz.get()
 
     fun setMixerDiagnosticsActive(active: Boolean) {
-        val wasActive = mixerDiagnosticsActive.getAndSet(active)
-        if (!active && wasActive) {
-            nativeSources.set(emptyList())
-            mixerAudibilityById.set(emptyMap())
-            mixerStructureSerial.set(0L)
-        }
+        mixerDiagnosticsActive.set(active)
     }
 
     fun isMixerDiagnosticsActive(): Boolean = mixerDiagnosticsActive.get()
@@ -171,10 +159,6 @@ class EngineAudioEngine(context: Context) {
 
     fun setEngineIdleGain(gain: Float) {
         engineIdleGain.set(gain.coerceAtLeast(0f))
-    }
-
-    fun setStepextGain(gain: Float) {
-        stepextGain.set(gain.coerceAtLeast(0f))
     }
 
     fun setEffectSoundOverrideGains(shiftOverrideGain: Float, backfireOverrideGain: Float) {
@@ -491,7 +475,6 @@ class EngineAudioEngine(context: Context) {
         var consumedTractionPulse = tractionPulseSerial.get()
         var sentCategoryGains: AudioMixGains? = null
         var sentEngineIdleGain: Float? = null
-        var sentStepextGain: Float? = null
         var sentEffectSoundOverrideGains: com.gabrielpc.enginesoundsimulator.drive.EffectSoundOverrideGains? = null
         var sentHostEngineInteriorGain: Float? = null
         var sentHostEngineExteriorGain: Float? = null
@@ -650,11 +633,6 @@ class EngineAudioEngine(context: Context) {
                 if (configuredEngineIdleGain != sentEngineIdleGain) {
                     bridge.setEngineIdleGain(configuredEngineIdleGain)
                     sentEngineIdleGain = configuredEngineIdleGain
-                }
-                val configuredStepextGain = stepextGain.get()
-                if (configuredStepextGain != sentStepextGain) {
-                    bridge.setStepextGain(configuredStepextGain)
-                    sentStepextGain = configuredStepextGain
                 }
                 val configuredOverrideGains = effectSoundOverrideGains.get()
                 if (configuredOverrideGains != sentEffectSoundOverrideGains) {
@@ -855,47 +833,6 @@ class EngineAudioEngine(context: Context) {
 
     private fun isCurrent(runId: Long): Boolean = running.get() && generation.get() == runId
 
-    private fun publishMixerSourcesIfChanged(next: List<FmodSourceState>) {
-        publishMixerAudibilityIfChanged(next)
-
-        val previous = nativeSources.get()
-        if (mixerSourcesStructureChanged(previous, next)) {
-            nativeSources.set(next)
-            mixerStructureSerial.incrementAndGet()
-        }
-    }
-
-    private fun publishMixerAudibilityIfChanged(next: List<FmodSourceState>) {
-        val nextMap = next.associate { source ->
-            source.id to source.audibility
-        }
-        val previous = mixerAudibilityById.get()
-        if (mixerAudibilityMapsEquivalent(previous, nextMap)) {
-            return
-        }
-        mixerAudibilityById.set(nextMap)
-    }
-
-    private fun mixerAudibilityMapsEquivalent(
-        previous: Map<String, Double>,
-        next: Map<String, Double>,
-    ): Boolean {
-        if (previous.size != next.size) {
-            return false
-        }
-
-        for ((sourceId, audibility) in next) {
-            val previousAudibility = previous[sourceId] ?: return false
-            val previousPercent = (previousAudibility.coerceIn(0.0, 1.0) * 100.0).toInt()
-            val nextPercent = (audibility.coerceIn(0.0, 1.0) * 100.0).toInt()
-            if (previousPercent != nextPercent) {
-                return false
-            }
-        }
-
-        return true
-    }
-
     private fun startSnapshotThread(runId: Long, profileId: String, bridge: NativeFmodBankBridge) {
         val thread = Thread({ mixerSnapshotLoop(runId, profileId, bridge) }, "fmod-mixer-snapshot").apply {
             isDaemon = true
@@ -922,7 +859,7 @@ class EngineAudioEngine(context: Context) {
                 val measurePerformance = DebugTelemetry.performanceEnabled()
                 val snapshotWallStartedNanos = if (measurePerformance) System.nanoTime() else 0L
                 val snapshotCpuStartedNanos = if (measurePerformance) Debug.threadCpuTimeNanos() else 0L
-                publishMixerSourcesIfChanged(parseNativeVoiceSnapshots(bridge.voiceSnapshots()))
+                nativeSources.set(parseNativeVoiceSnapshots(bridge.voiceSnapshots()))
                 if (measurePerformance) {
                     DebugTelemetry.recordMixerSnapshotPerformance(
                         cpuNanos = Debug.threadCpuTimeNanos() - snapshotCpuStartedNanos,
@@ -1017,7 +954,7 @@ class EngineAudioEngine(context: Context) {
 
     private companion object {
         const val TAG = "EngineAudioEngine"
-        const val SNAPSHOT_PERIOD_NANOS = 16_666_667L
+        const val SNAPSHOT_PERIOD_NANOS = 50_000_000L
         const val DIAGNOSTIC_DRAIN_PERIOD_NANOS = 40_000_000L
         const val CONTROL_JOIN_TIMEOUT_MS = 1_000L
         const val SNAPSHOT_JOIN_TIMEOUT_MS = 500L

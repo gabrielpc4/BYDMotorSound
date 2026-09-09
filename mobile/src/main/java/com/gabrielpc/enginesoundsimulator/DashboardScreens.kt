@@ -198,7 +198,6 @@ private val MIXER_PEDALS_OVERLAY_HEIGHT = 240.dp
 @Composable
 internal fun MixerDashboardScreen(
     state: DriveSnapshot,
-    sourceAudibilityById: Map<String, Double>,
     onThrottle: (Double) -> Unit,
     onBrake: (Double) -> Unit,
     onSimulatedRegen: (Double) -> Unit,
@@ -219,37 +218,38 @@ internal fun MixerDashboardScreen(
     onExteriorPureAudioChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var knownSources by remember(soundPerspective, state.selectedCarId) { mutableStateOf(emptyMap<String, FmodSourceState>()) }
     var previousActive by remember(soundPerspective, state.selectedCarId) { mutableStateOf(emptySet<String>()) }
     var initialized by remember(soundPerspective, state.selectedCarId) { mutableStateOf(false) }
     var highlightedIds by remember(soundPerspective, state.selectedCarId) { mutableStateOf(emptySet<String>()) }
-    var stepextAvailable by remember(soundPerspective, state.selectedCarId) { mutableStateOf(false) }
     // FMOD swaps sound names inside one authored event as RPM changes. Keep
     // M/S on that event identity so a control never disappears with a source.
     var mutedEvents by remember(soundPerspective, state.selectedCarId) { mutableStateOf(emptyMap<String, Boolean>()) }
     var soloedEvents by remember(soundPerspective, state.selectedCarId) { mutableStateOf(emptyMap<String, Boolean>()) }
-    val activeSources = remember(state.fmodSources, state.mixerStructureSerial) {
-        state.fmodSources
-    }
-    val activeIds = remember(activeSources) {
-        activeSources.mapTo(mutableSetOf(), FmodSourceState::id)
-    }
+    val activeIds = state.fmodSources.filter { it.isActive }.mapTo(mutableSetOf(), FmodSourceState::id)
+    val enteredIds = activeIds - previousActive
 
-    LaunchedEffect(state.mixerStructureSerial) {
-        if (state.fmodSources.any { source ->
-                source.soundName.contains("stepext", ignoreCase = true)
-            }) {
-            stepextAvailable = true
+    LaunchedEffect(state.fmodSources) {
+        val currentSources = state.fmodSources
+            .filter(FmodSourceState::isActive)
+            .associateBy(FmodSourceState::id)
+        val inactiveKnownSources = knownSources.mapValues { (_, source) ->
+            source.copy(
+                audibility = 0.0,
+                voiceCount = 0,
+                isVirtual = false,
+                isActive = false,
+            )
         }
-        val currentIds = state.fmodSources.mapTo(mutableSetOf(), FmodSourceState::id)
-        val enteredIds = currentIds - previousActive
+        // Once FMOD has exposed a source, keep its diagnostic card so its
+        // disappearance is visible as SILENT instead of looking like a reset.
+        knownSources = inactiveKnownSources + currentSources
         val shouldHighlight = initialized
-        previousActive = currentIds
+        previousActive = activeIds
         initialized = true
         if (shouldHighlight && enteredIds.isNotEmpty()) {
             val highlightable = enteredIds.filter { id ->
-                activeSources.firstOrNull { it.id == id }?.let {
-                    it.eventName != "engine_int" && it.eventName != "engine_ext"
-                } == true
+                state.fmodSources.firstOrNull { it.id == id }?.let { it.eventName != "engine_int" && it.eventName != "engine_ext" } == true
             }.toSet()
             highlightedIds = highlightedIds + highlightable
         }
@@ -262,8 +262,10 @@ internal fun MixerDashboardScreen(
         }
     }
 
-    val sections = remember(activeSources, state.mixerStructureSerial) {
-        activeSources
+    val sections = remember(knownSources) {
+        // Dormant sources that FMOD has never exposed are omitted. Sources that
+        // were previously live remain as SILENT diagnostics instead of READY.
+        knownSources.values
             .groupBy(FmodSourceState::section)
             .toSortedMap(compareBy<FmodEventSection> {
                 // Keep the many engine-region cards out of the way of the
@@ -344,8 +346,6 @@ internal fun MixerDashboardScreen(
                                 row.forEach { source ->
                                     FmodSourceMeter(
                                         source = source,
-                                        liveAudibility = sourceAudibilityById[source.id]?.toFloat()
-                                            ?: source.audibility.toFloat(),
                                         highlight = source.id in highlightedIds,
                                         modifier = Modifier.weight(1f),
                                     )
@@ -370,7 +370,6 @@ internal fun MixerDashboardScreen(
                 carShiftOverrideGain = state.shiftOverrideGain,
                 hasTurbo = state.hasTurbo,
                 hasSupercharger = state.hasSupercharger,
-                stepextAvailable = stepextAvailable,
                 mixerGains = mixerGains,
                 mixerSpecificGains = mixerSpecificGains,
                 mutedEvents = mutedEvents,
@@ -498,7 +497,6 @@ private fun MixerControlsPanel(
     carShiftOverrideGain: Float,
     hasTurbo: Boolean,
     hasSupercharger: Boolean,
-    stepextAvailable: Boolean,
     mixerGains: MixerGlobalGains,
     mixerSpecificGains: MixerCarSpecificGains,
     mutedEvents: Map<String, Boolean>,
@@ -595,19 +593,6 @@ private fun MixerControlsPanel(
                         onMixerSpecificGainsChange(mixerSpecificGains.copy(engineIdle = value))
                     },
                 )
-                if (stepextAvailable) {
-                    MixerLayerGainSlider(
-                        label = "STEP EXT",
-                        layerValue = mixerSpecificGains.stepext,
-                        globalValue = 1f,
-                        specificValue = mixerSpecificGains.stepext,
-                        overall = combinedOverall,
-                        accentColor = Master,
-                        onValueChange = { value ->
-                            onMixerSpecificGainsChange(mixerSpecificGains.copy(stepext = value))
-                        },
-                    )
-                }
             }
             MixerLayerGainSlider(
                 label = "ENGINE INTERIOR",
@@ -3062,12 +3047,10 @@ private data class LoadedCarPreview(
 @Composable
 private fun FmodSourceMeter(
     source: FmodSourceState,
-    liveAudibility: Float,
     highlight: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val level = liveAudibility.coerceIn(0f, 1f)
-    val audibilityPercent = (level * 100f).toInt()
+    val level = source.audibility.toFloat().coerceIn(0f, 1f)
     val fillColor = outputMeterFillColor(level, LocalDashboardSkin.current)
     val meterLabelPaint = remember {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -3160,7 +3143,7 @@ private fun FmodSourceMeter(
                 meterLabelPaint.color = fillColor.toArgb()
                 drawIntoCanvas { canvas ->
                     canvas.nativeCanvas.drawText(
-                        "$audibilityPercent%",
+                        "${source.audibilityPercent}%",
                         size.width - 8f,
                         size.height * 0.70f,
                         meterLabelPaint,

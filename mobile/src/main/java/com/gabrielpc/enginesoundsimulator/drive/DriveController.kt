@@ -28,7 +28,6 @@ import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains
 import com.gabrielpc.enginesoundsimulator.audio.effectiveCategoryGains
 import com.gabrielpc.enginesoundsimulator.audio.effectiveEffectsHostForOverrides
 import com.gabrielpc.enginesoundsimulator.audio.effectiveEngineIdleGain
-import com.gabrielpc.enginesoundsimulator.audio.effectiveStepextGain
 import com.gabrielpc.enginesoundsimulator.audio.effectiveHostGains
 import com.gabrielpc.enginesoundsimulator.drive.effectiveEffectSoundOverrideGains
 import com.gabrielpc.enginesoundsimulator.AppPreferenceStores
@@ -88,8 +87,6 @@ data class DriveSnapshot(
     val selectedCarIndex: Int,
     val availableCarCount: Int,
     val fmodSources: List<FmodSourceState> = emptyList(),
-    /** Bumps when the mixer source card layout changes; audibility updates separately at 60 Hz. */
-    val mixerStructureSerial: Long = 0L,
     /** Final FMOD mix level used for the dashboard output meter (linear 0..1). */
     val masterOutputLinear: Float = 0f,
     /** Host-level engine trim applied before category routing. */
@@ -277,12 +274,6 @@ class DriveController(context: Context) {
         audioEngine.setMixerDiagnosticsActive(active)
     }
 
-    fun isMixerDiagnosticsActive(): Boolean = audioEngine.isMixerDiagnosticsActive()
-
-    fun mixerAudibilityById(): Map<String, Double> = audioEngine.mixerAudibilityById()
-
-    fun mixerStructureSerial(): Long = audioEngine.mixerStructureSerial()
-
     fun snapshot(): DriveSnapshot {
         val base = latest
         val selected = selectedProfile.get()
@@ -294,11 +285,6 @@ class DriveController(context: Context) {
                 audioEngine.sourceSnapshots()
             } else {
                 emptyList()
-            },
-            mixerStructureSerial = if (uiActive.get() && audioEngine.isMixerDiagnosticsActive()) {
-                audioEngine.mixerStructureSerial()
-            } else {
-                0L
             },
             masterOutputLinear = if (audioEngine.isAudioActive() && !audioMuted.get()) {
                 audioEngine.masterOutputLinear()
@@ -639,12 +625,6 @@ class DriveController(context: Context) {
         audioEngine.setCategoryGains(categories)
         audioEngine.setEngineIdleGain(
             effectiveEngineIdleGain(
-                mixerGlobal = global,
-                mixerSpecific = specific,
-            ),
-        )
-        audioEngine.setStepextGain(
-            effectiveStepextGain(
                 mixerGlobal = global,
                 mixerSpecific = specific,
             ),

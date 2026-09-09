@@ -23,28 +23,6 @@ data class FmodSourceState(
 
     val section: FmodEventSection
         get() = FmodEventSection.forEvent(eventName)
-
-    /** True when the source should appear in the live mixer cards. */
-    val isAudibleInMixer: Boolean
-        get() {
-            if (!isActive) {
-                return false
-            }
-
-            if (isVirtual) {
-                return false
-            }
-
-            if (audibility <= SILENT_AUDIBILITY_THRESHOLD) {
-                return false
-            }
-
-            return true
-        }
-
-    companion object {
-        const val SILENT_AUDIBILITY_THRESHOLD = 0.002
-    }
 }
 
 enum class FmodEventSection(val displayName: String, val order: Int) {
@@ -89,60 +67,6 @@ enum class MixerEventCategory(val eventNames: List<String>) {
     fun isSoloed(soloedEvents: Map<String, Boolean>): Boolean {
         return eventNames.any { soloedEvents[it] == true }
     }
-}
-
-internal fun mixerSourcesStructureChanged(previous: List<FmodSourceState>, next: List<FmodSourceState>): Boolean {
-    if (previous.size != next.size) {
-        return true
-    }
-
-    for (index in previous.indices) {
-        val left = previous[index]
-        val right = next[index]
-
-        if (left.id != right.id) {
-            return true
-        }
-
-        if (left.eventName != right.eventName) {
-            return true
-        }
-
-        if (left.soundName != right.soundName) {
-            return true
-        }
-
-        if (left.voiceCount != right.voiceCount) {
-            return true
-        }
-    }
-
-    return false
-}
-
-internal fun mixerSourcesDisplayChanged(previous: List<FmodSourceState>, next: List<FmodSourceState>): Boolean {
-    if (previous.size != next.size) {
-        return true
-    }
-
-    for (index in previous.indices) {
-        val left = previous[index]
-        val right = next[index]
-
-        if (left.id != right.id) {
-            return true
-        }
-
-        if (left.audibilityPercent != right.audibilityPercent) {
-            return true
-        }
-
-        if (left.voiceCount != right.voiceCount) {
-            return true
-        }
-    }
-
-    return false
 }
 
 internal fun parseNativeVoiceSnapshots(rows: Array<String>): List<FmodSourceState> = rows.mapNotNull { row ->

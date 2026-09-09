@@ -8,8 +8,6 @@ data class MixerCarSpecificGains(
     val overall: Float = 1.0f,
     /** Trim for engine_int and engine_ext subsounds whose FMOD sound name contains "idle". */
     val engineIdle: Float = 1.0f,
-    /** Trim for embedded stepext backfire subsounds such as corvette2stepext. */
-    val stepext: Float = 1.0f,
     val engineInterior: Float = 1.0f,
     val engineExterior: Float = 1.0f,
     val effectsHost: Float = 1.0f,
@@ -23,7 +21,6 @@ data class MixerCarSpecificGains(
     fun normalized(): MixerCarSpecificGains = copy(
         overall = MixerGlobalGains.snapToStep(overall),
         engineIdle = MixerGlobalGains.snapToStep(engineIdle),
-        stepext = MixerGlobalGains.snapToStep(stepext),
         engineInterior = MixerGlobalGains.snapToStep(engineInterior),
         engineExterior = MixerGlobalGains.snapToStep(engineExterior),
         effectsHost = MixerGlobalGains.snapToStep(effectsHost),
@@ -46,7 +43,6 @@ internal class MixerCarSpecificGainRepository(context: Context) {
         return MixerCarSpecificGains(
             overall = read(profile, perspective, "overall"),
             engineIdle = read(profile, perspective, "engine_idle"),
-            stepext = read(profile, perspective, "stepext"),
             engineInterior = read(profile, perspective, "engine_interior"),
             engineExterior = read(profile, perspective, "engine_exterior"),
             effectsHost = read(profile, perspective, "effects_host"),
@@ -68,7 +64,6 @@ internal class MixerCarSpecificGainRepository(context: Context) {
         val editor = preferences.edit()
         editor.putFloat(key(profile, perspective, "overall"), normalized.overall)
         editor.putFloat(key(profile, perspective, "engine_idle"), normalized.engineIdle)
-        editor.putFloat(key(profile, perspective, "stepext"), normalized.stepext)
         editor.putFloat(key(profile, perspective, "engine_interior"), normalized.engineInterior)
         editor.putFloat(key(profile, perspective, "engine_exterior"), normalized.engineExterior)
         editor.putFloat(key(profile, perspective, "effects_host"), normalized.effectsHost)

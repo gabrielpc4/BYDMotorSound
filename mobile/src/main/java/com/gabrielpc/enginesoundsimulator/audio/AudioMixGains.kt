@@ -39,14 +39,6 @@ internal fun effectiveEngineIdleGain(
     return mixerSpecific.engineIdle * master
 }
 
-internal fun effectiveStepextGain(
-    mixerGlobal: MixerGlobalGains,
-    mixerSpecific: MixerCarSpecificGains,
-): Float {
-    val master = mixerGlobal.overall * mixerSpecific.overall
-    return mixerSpecific.stepext * master
-}
-
 internal fun effectiveEffectsHostForOverrides(
     mixerGlobal: MixerGlobalGains,
     mixerSpecific: MixerCarSpecificGains,

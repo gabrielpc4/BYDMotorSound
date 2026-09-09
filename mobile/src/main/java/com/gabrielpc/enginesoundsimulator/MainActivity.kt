@@ -201,7 +201,6 @@ class MainActivity : ComponentActivity() {
 
     private val choreographer by lazy(LazyThreadSafetyMode.NONE) { Choreographer.getInstance() }
     private var driveState by mutableStateOf<DriveSnapshot?>(null)
-    private var mixerSourceAudibility by mutableStateOf<Map<String, Double>>(emptyMap())
     private var uiMonitoringActive by mutableStateOf(false)
     private var driveCaptureActive by mutableStateOf(false)
     private var driveCapturePath by mutableStateOf<String?>(null)
@@ -211,12 +210,6 @@ class MainActivity : ComponentActivity() {
         override fun doFrame(frameTimeNanos: Long) {
             if (!uiMonitoringActive) {
                 return
-            }
-
-            if (controller.isMixerDiagnosticsActive()) {
-                mixerSourceAudibility = controller.mixerAudibilityById()
-            } else if (mixerSourceAudibility.isNotEmpty()) {
-                mixerSourceAudibility = emptyMap()
             }
 
             driveState = controller.snapshot()
@@ -261,7 +254,6 @@ class MainActivity : ComponentActivity() {
                         Box(modifier = Modifier.fillMaxSize()) {
                         MotorSoundDashboard(
                             state = state,
-                            mixerSourceAudibility = mixerSourceAudibility,
                             uiMonitoringActive = uiMonitoringActive,
                             onToggleDashboardTheme = themeController::toggle,
                         onThrottle = controller::setSimulatedPedalThrottle,
@@ -402,7 +394,6 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun MotorSoundDashboard(
     state: DriveSnapshot,
-    mixerSourceAudibility: Map<String, Double>,
     uiMonitoringActive: Boolean,
     onToggleDashboardTheme: () -> Unit,
     onThrottle: (Double) -> Unit,
@@ -643,7 +634,6 @@ private fun MotorSoundDashboard(
                         }
                         DashboardMainScreen.MIXER -> MixerDashboardScreen(
                             state = state,
-                            sourceAudibilityById = mixerSourceAudibility,
                             onThrottle = onThrottle,
                             onBrake = onBrake,
                             onSimulatedRegen = onSimulatedRegen,

@@ -151,7 +151,6 @@ internal object SettingsExporter {
         return JSONObject().apply {
             put("overall", gains.overall.toDouble())
             put("engineIdle", gains.engineIdle.toDouble())
-            put("stepext", gains.stepext.toDouble())
             put("engineInterior", gains.engineInterior.toDouble())
             put("engineExterior", gains.engineExterior.toDouble())
             put("effectsHost", gains.effectsHost.toDouble())

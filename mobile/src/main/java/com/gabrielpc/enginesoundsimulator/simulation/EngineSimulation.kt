@@ -251,10 +251,6 @@ class EngineSimulation {
         }
 
         virtualGearSpeedBoundaries = normalized
-        if (gearProfileSelection.isAdaptive()) {
-            return
-        }
-
         physics?.let { activePhysics ->
             rebuildGearMapping(activePhysics)
             drivetrain?.switchGearProfilePreservingRoadSpeed(virtualGearProfile!!)
@@ -276,10 +272,9 @@ class EngineSimulation {
                     automaticTransmissionMode = drivetrain?.frame()?.automaticTransmissionMode
                         ?: AutomaticTransmissionMode.CRUISING,
                 )
-                buildVirtualGearProfile(
+                buildAdaptiveVirtualGearProfile(
                     physics = activePhysics,
                     virtualGearCount = count,
-                    useDefaultBoundaries = true,
                 )
             }
             is GearProfileSelection.Virtual -> {
@@ -320,6 +315,19 @@ class EngineSimulation {
         )
     }
 
+    private fun buildAdaptiveVirtualGearProfile(
+        physics: AssettoPhysics,
+        virtualGearCount: Int,
+    ): VirtualGearProfile {
+        val preset = GearProfileSelection.coercePreset(virtualGearCount)
+        val boundaries = virtualGearSpeedBoundaries.boundariesFor(preset).map { it.toDouble() }
+        return buildVirtualGearProfile(
+            physics = physics,
+            virtualGearCount = preset,
+            physicalBoundarySpeedsKmh = boundaries,
+        )
+    }
+
     private fun syncAdaptiveGearProfileIfNeeded(frame: AssettoDrivetrainFrame) {
         if (gearProfileSelection !is GearProfileSelection.AdaptiveCruising6Racing10) {
             appliedAdaptiveGearCount = null
@@ -341,10 +349,9 @@ class EngineSimulation {
             return
         }
 
-        val profile = buildVirtualGearProfile(
+        val profile = buildAdaptiveVirtualGearProfile(
             physics = activePhysics,
             virtualGearCount = desiredCount,
-            useDefaultBoundaries = true,
         )
         virtualGearProfile = profile
         equalSpeedGearMapping = EqualSpeedGearMapping.from(activePhysics, profile)

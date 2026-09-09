@@ -1609,7 +1609,7 @@ private fun VirtualGearSpeedBoundariesSettingsControl(
             Text(
                 text = when {
                     gearProfileSelection.isAdaptive() ->
-                        "Adaptive 6/10 uses default speed bands: 6 gears in cruising, 10 in racing or manual shift. Bands cannot be edited here."
+                        "Adaptive 6/10 mirrors the saved 6-gear profile in cruising and the 10-gear profile in racing or manual shift, including custom speed bands. Select 6 or 10 on the dashboard to edit those presets."
                     activePreset != null ->
                         "Drag dividers to set how each gear maps to road speed for the $activePreset-gear preset selected on the dashboard."
                     else ->

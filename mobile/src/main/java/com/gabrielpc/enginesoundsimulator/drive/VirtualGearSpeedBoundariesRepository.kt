@@ -53,7 +53,15 @@ internal class VirtualGearSpeedBoundariesRepository(context: Context) {
         val gearCount = VirtualGearSpeedBoundaries.coerceVirtualPreset(preset)
         val encoded = preferences.getString(keyForPreset(gearCount), null)
             ?: return VirtualGearSpeedBoundaries.defaultBoundariesKmh(gearCount)
-        return decodeBoundaries(encoded, gearCount)
+        val decoded = decodeBoundaries(encoded, gearCount)
+        if (
+            gearCount == 6 &&
+            decoded == VirtualGearSpeedBoundaries.equalSplitBoundariesKmh(6)
+        ) {
+            return VirtualGearSpeedBoundaries.defaultBoundariesKmh(6)
+        }
+
+        return decoded
     }
 
     private fun encodeBoundaries(boundaries: List<Int>): String {

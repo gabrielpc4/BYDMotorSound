@@ -20,6 +20,15 @@ object VirtualGearSpeedBoundaries {
             "Custom speed bands are only defined for presets $PRESETS"
         }
 
+        if (gearCount == 6) {
+            return DEFAULT_CRUISING_6_BOUNDARIES_KMH
+        }
+
+        return equalSplitBoundariesKmh(gearCount)
+    }
+
+    /** Legacy equal-width bands still used as defaults for 10 and 15 forward gears. */
+    internal fun equalSplitBoundariesKmh(gearCount: Int): List<Int> {
         return List(gearCount + 1) { index ->
             when (index) {
                 0 -> 0
@@ -28,6 +37,16 @@ object VirtualGearSpeedBoundaries {
             }
         }
     }
+
+    private val DEFAULT_CRUISING_6_BOUNDARIES_KMH = listOf(
+        0,
+        61,
+        91,
+        111,
+        141,
+        161,
+        TOP_SPEED_KMH,
+    )
 
     fun normalizeBoundaries(boundaries: List<Int>, gearCount: Int): List<Int> {
         require(gearCount in PRESETS) {

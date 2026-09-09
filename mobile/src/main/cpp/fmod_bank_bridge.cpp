@@ -975,6 +975,56 @@ public:
             ";exteriorPure=" + (exteriorPureAudio_ ? "1" : "0");
     }
 
+    std::string playAcousticLatencyChirp() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!calibrationMode_ || core_ == nullptr || masterChannelGroup_ == nullptr) {
+            return "FMOD acoustic diagnostic output is not ready.";
+        }
+        if (acousticChirpSound_ == nullptr) {
+            constexpr int sampleCount = kFmodOutputRate / 10;
+            constexpr double startFrequency = 1200.0;
+            constexpr double endFrequency = 6000.0;
+            constexpr double amplitude = 0.18;
+            std::vector<float> samples(sampleCount);
+            double phase = 0.0;
+            for (int index = 0; index < sampleCount; ++index) {
+                const double progress = static_cast<double>(index) / static_cast<double>(sampleCount - 1);
+                const double frequency = startFrequency * std::pow(endFrequency / startFrequency, progress);
+                phase += 2.0 * M_PI * frequency / static_cast<double>(kFmodOutputRate);
+                const double envelope = std::sin(M_PI * progress);
+                samples[index] = static_cast<float>(amplitude * envelope * envelope * std::sin(phase));
+            }
+            FMOD_CREATESOUNDEXINFO settings{};
+            settings.cbsize = sizeof(FMOD_CREATESOUNDEXINFO);
+            settings.length = static_cast<unsigned int>(samples.size() * sizeof(float));
+            settings.numchannels = 1;
+            settings.defaultfrequency = kFmodOutputRate;
+            settings.format = FMOD_SOUND_FORMAT_PCMFLOAT;
+            const FMOD_RESULT createResult = core_->createSound(
+                reinterpret_cast<const char*>(samples.data()),
+                FMOD_OPENMEMORY | FMOD_OPENRAW,
+                &settings,
+                &acousticChirpSound_
+            );
+            if (createResult != FMOD_OK) {
+                acousticChirpSound_ = nullptr;
+                return resultText(createResult, "create acoustic latency chirp");
+            }
+        }
+        if (acousticChirpChannel_ != nullptr) {
+            acousticChirpChannel_->stop();
+            acousticChirpChannel_ = nullptr;
+        }
+        const FMOD_RESULT playResult = core_->playSound(
+            acousticChirpSound_,
+            masterChannelGroup_,
+            false,
+            &acousticChirpChannel_
+        );
+
+        return playResult == FMOD_OK ? std::string{} : resultText(playResult, "play acoustic latency chirp");
+    }
+
     void unloadCalibrationCar() {
         std::lock_guard<std::mutex> lock(mutex_);
         unloadCalibrationCarLocked();
@@ -2445,6 +2495,10 @@ private:
     }
 
     void unloadCalibrationCarLocked() {
+        if (acousticChirpChannel_ != nullptr) {
+            acousticChirpChannel_->stop();
+            acousticChirpChannel_ = nullptr;
+        }
         releaseEventSlotsLocked();
         if (bank_ != nullptr) {
             bank_->unloadSampleData();
@@ -2477,6 +2531,14 @@ private:
     }
 
     void closeLocked() {
+        if (acousticChirpChannel_ != nullptr) {
+            acousticChirpChannel_->stop();
+            acousticChirpChannel_ = nullptr;
+        }
+        if (acousticChirpSound_ != nullptr) {
+            acousticChirpSound_->release();
+            acousticChirpSound_ = nullptr;
+        }
         if (alfaBackfireChannel_ != nullptr) {
             alfaBackfireChannel_->stop();
             alfaBackfireChannel_ = nullptr;
@@ -3312,6 +3374,8 @@ private:
     FMOD::DSP* masterLimiterDsp_ = nullptr;
     FMOD::DSP* outputGateDsp_ = nullptr;
     FMOD::DSP* outputMeterDsp_ = nullptr;
+    FMOD::Sound* acousticChirpSound_ = nullptr;
+    FMOD::Channel* acousticChirpChannel_ = nullptr;
     FMOD_DSP_DESCRIPTION distanceFilter_{};
     FMOD_DSP_DESCRIPTION gain_{};
     FMOD_DSP_DESCRIPTION outputGateDescription_{};
@@ -3596,6 +3660,14 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_calibrationSo
     jobject
 ) {
     return environment->NewStringUTF(runtime.calibrationSourceSummary().c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_playAcousticLatencyChirp(
+    JNIEnv* environment,
+    jobject
+) {
+    return resultString(environment, runtime.playAcousticLatencyChirp());
 }
 
 extern "C" JNIEXPORT void JNICALL

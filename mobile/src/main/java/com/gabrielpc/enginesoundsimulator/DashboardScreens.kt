@@ -119,6 +119,11 @@ import com.gabrielpc.enginesoundsimulator.audio.MixerGainScope
 import com.gabrielpc.enginesoundsimulator.audio.MixerGainScopeRepository
 import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains
 import com.gabrielpc.enginesoundsimulator.audio.AppVolumeSettings
+import com.gabrielpc.enginesoundsimulator.audio.AcousticDiagnosticProgress
+import com.gabrielpc.enginesoundsimulator.audio.AcousticDiagnosticStatus
+import com.gabrielpc.enginesoundsimulator.audio.AcousticDiagnosticSummary
+import com.gabrielpc.enginesoundsimulator.audio.AcousticAdjustmentState
+import com.gabrielpc.enginesoundsimulator.audio.AcousticAdjustmentValidity
 import com.gabrielpc.enginesoundsimulator.audio.LoudnessCalibrationProgress
 import com.gabrielpc.enginesoundsimulator.audio.LoudnessCalibrationStatus
 import com.gabrielpc.enginesoundsimulator.audio.LoudnessNormalizationSummary
@@ -384,6 +389,7 @@ internal fun MixerDashboardScreen(
                 mixerSpecificGains = mixerSpecificGains,
                 appVolumeSettings = state.appVolumeSettings,
                 loudnessNormalization = state.currentLoudnessNormalization,
+                acousticAdjustment = state.currentAcousticAdjustment,
                 mutedEvents = mutedEvents,
                 soloedEvents = soloedEvents,
                 onToggleCategoryMute = { category, muted ->
@@ -514,6 +520,7 @@ private fun MixerControlsPanel(
     mixerSpecificGains: MixerCarSpecificGains,
     appVolumeSettings: AppVolumeSettings,
     loudnessNormalization: LoudnessNormalizationState,
+    acousticAdjustment: AcousticAdjustmentState,
     mutedEvents: Map<String, Boolean>,
     soloedEvents: Map<String, Boolean>,
     onToggleCategoryMute: (MixerEventCategory, Boolean) -> Unit,
@@ -568,6 +575,7 @@ private fun MixerControlsPanel(
                 AppVolumeSlider(
                     settings = appVolumeSettings,
                     loudnessNormalization = loudnessNormalization,
+                    acousticAdjustment = acousticAdjustment,
                     onPercentChange = onAppVolumePercentChange,
                 )
                 HorizontalDivider(
@@ -880,6 +888,7 @@ private fun MixerGainScopeSelector(
 private fun AppVolumeSlider(
     settings: AppVolumeSettings,
     loudnessNormalization: LoudnessNormalizationState,
+    acousticAdjustment: AcousticAdjustmentState,
     onPercentChange: (Int) -> Unit,
 ) {
     val percent = settings.normalized().percent
@@ -929,17 +938,41 @@ private fun AppVolumeSlider(
                 }
                 LoudnessNormalizationValidity.STALE -> "LOUDNESS NORMALIZATION STALE • UNITY"
                 LoudnessNormalizationValidity.MISSING -> "ENGINE LOUDNESS UNCALIBRATED • UNITY"
+                LoudnessNormalizationValidity.EXCLUDED -> "ORIGINAL CAR • AUTOMATIC NORMALIZATION DISABLED"
             },
             color = when (loudnessNormalization.validity) {
                 LoudnessNormalizationValidity.VALID -> AccentSoft
                 LoudnessNormalizationValidity.STALE -> Warning
                 LoudnessNormalizationValidity.MISSING -> Muted
+                LoudnessNormalizationValidity.EXCLUDED -> Muted
             },
             fontSize = 9.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.5.sp,
             modifier = Modifier.padding(top = 4.dp),
         )
+        if (acousticAdjustment.validity != AcousticAdjustmentValidity.EXCLUDED) {
+            Text(
+                text = when (acousticAdjustment.validity) {
+                    AcousticAdjustmentValidity.VALID -> {
+                        "IPHONE ACOUSTIC ADJUSTMENT ${String.format(Locale.US, "%+.1f dB", acousticAdjustment.adjustmentDb)}"
+                    }
+                    AcousticAdjustmentValidity.STALE -> "IPHONE ACOUSTIC ADJUSTMENT STALE • UNITY"
+                    AcousticAdjustmentValidity.FAILED -> "IPHONE ACOUSTIC MEASUREMENT FAILED • UNITY"
+                    AcousticAdjustmentValidity.MISSING -> "IPHONE ACOUSTIC ADJUSTMENT MISSING • UNITY"
+                    AcousticAdjustmentValidity.EXCLUDED -> ""
+                },
+                color = when (acousticAdjustment.validity) {
+                    AcousticAdjustmentValidity.VALID -> AccentSoft
+                    AcousticAdjustmentValidity.STALE, AcousticAdjustmentValidity.FAILED -> Warning
+                    AcousticAdjustmentValidity.MISSING, AcousticAdjustmentValidity.EXCLUDED -> Muted
+                },
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.5.sp,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
     }
 }
 
@@ -1035,6 +1068,14 @@ internal fun SettingsScreen(
     onCalibrateAllCars: () -> Unit,
     onResumeLoudnessCalibration: () -> Unit,
     onCancelLoudnessCalibration: () -> Unit,
+    acousticDiagnosticSummary: AcousticDiagnosticSummary,
+    acousticDiagnosticProgress: AcousticDiagnosticProgress,
+    iphoneMeterLinked: Boolean,
+    iphoneMeterSelected: Boolean,
+    onAssociateIphoneMeter: () -> Unit,
+    onStartAcousticDiagnostic: (String?) -> Unit,
+    onResumeAcousticDiagnostic: () -> Unit,
+    onCancelAcousticDiagnostic: () -> Unit,
     fmodUpdateRateHz: Int,
     onFmodUpdateRateChange: (Int) -> Unit,
     backfireSettings: BackfireSettings,
@@ -1089,6 +1130,8 @@ internal fun SettingsScreen(
     var selectedTab by remember { mutableStateOf(SettingsSection.SPEED_AUDIO) }
     var showResetConfirmation by remember { mutableStateOf(false) }
     var showCalibrationConfirmation by remember { mutableStateOf(false) }
+    var showAcousticConfirmation by remember { mutableStateOf(false) }
+    var iphonePairingCode by remember { mutableStateOf("") }
     Column(
         modifier = Modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -1236,6 +1279,18 @@ internal fun SettingsScreen(
                 onCalibrateAllCars = { showCalibrationConfirmation = true },
                 onResume = onResumeLoudnessCalibration,
                 onCancel = onCancelLoudnessCalibration,
+                acousticSummary = acousticDiagnosticSummary,
+                acousticProgress = acousticDiagnosticProgress,
+                iphoneMeterLinked = iphoneMeterLinked,
+                iphoneMeterSelected = iphoneMeterSelected,
+                iphonePairingCode = iphonePairingCode,
+                onIphonePairingCodeChange = { value ->
+                    iphonePairingCode = value.filter(Char::isDigit).take(6)
+                },
+                onAssociateIphoneMeter = onAssociateIphoneMeter,
+                onMeasureWithIphone = { showAcousticConfirmation = true },
+                onResumeAcousticDiagnostic = onResumeAcousticDiagnostic,
+                onCancelAcousticDiagnostic = onCancelAcousticDiagnostic,
                 modifier = Modifier.weight(1f),
             )
             SettingsSection.BANK_IMPORT -> BankImportDiagnosticsPanel(
@@ -1283,11 +1338,11 @@ internal fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showCalibrationConfirmation = false },
             title = {
-                Text("Calibrate all cars?", color = OnSurface, fontWeight = FontWeight.Black)
+                Text("Calibrate all modded cars?", color = OnSurface, fontWeight = FontWeight.Black)
             },
             text = {
                 Text(
-                    "This will silently measure all ${loudnessNormalizationSummary.totalCount} car/perspective pairs. " +
+                    "This will silently measure ${loudnessNormalizationSummary.totalCount} modded car/perspective pairs. " +
                         "Allow at least ${minutes}m ${seconds}s plus bank loading time.",
                     color = Muted,
                 )
@@ -1304,6 +1359,40 @@ internal fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showCalibrationConfirmation = false }) {
+                    Text("CANCEL", color = Muted, fontWeight = FontWeight.Black)
+                }
+            },
+            containerColor = Surface,
+        )
+    }
+
+    if (showAcousticConfirmation) {
+        val eligiblePairs = loudnessNormalizationSummary.validCount
+        val estimatedSeconds = eligiblePairs * 10
+        AlertDialog(
+            onDismissRequest = { showAcousticConfirmation = false },
+            title = { Text("Calibrate modded cars with iPhone?", color = OnSurface, fontWeight = FontWeight.Black) },
+            text = {
+                Text(
+                    "Only modded cars will be measured. The resulting per-car adjustment is applied automatically. " +
+                        "Place the iPhone at driver head height. Keep the car stopped, close doors and windows, " +
+                        "and turn climate control off. The engine sweep will be audible for about " +
+                        "${estimatedSeconds / 60}m ${estimatedSeconds % 60}s plus bank loading.",
+                    color = Muted,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showAcousticConfirmation = false
+                        onStartAcousticDiagnostic(iphonePairingCode.takeIf { it.length == 6 })
+                    },
+                ) {
+                    Text("CALIBRATE", color = Accent, fontWeight = FontWeight.Black)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAcousticConfirmation = false }) {
                     Text("CANCEL", color = Muted, fontWeight = FontWeight.Black)
                 }
             },
@@ -1327,6 +1416,16 @@ private fun LoudnessNormalizationSettingsPanel(
     onCalibrateAllCars: () -> Unit,
     onResume: () -> Unit,
     onCancel: () -> Unit,
+    acousticSummary: AcousticDiagnosticSummary,
+    acousticProgress: AcousticDiagnosticProgress,
+    iphoneMeterLinked: Boolean,
+    iphoneMeterSelected: Boolean,
+    iphonePairingCode: String,
+    onIphonePairingCodeChange: (String) -> Unit,
+    onAssociateIphoneMeter: () -> Unit,
+    onMeasureWithIphone: () -> Unit,
+    onResumeAcousticDiagnostic: () -> Unit,
+    onCancelAcousticDiagnostic: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -1337,7 +1436,7 @@ private fun LoudnessNormalizationSettingsPanel(
     ) {
         Text("ENGINE LOUDNESS NORMALIZATION", color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Black)
         Text(
-            "Measures each installed engine in CABIN and EXTERIOR PURE, then matches perceived engine loudness without changing Android media volume.",
+            "Measures each installed modded engine in CABIN and EXTERIOR PURE, then matches perceived engine loudness without changing Android media volume. Original cars are excluded.",
             color = Muted,
             fontSize = 13.sp,
             lineHeight = 17.sp,
@@ -1407,7 +1506,7 @@ private fun LoudnessNormalizationSettingsPanel(
                 enabled = !progress.isRunning && summary.totalCount > 0,
                 modifier = Modifier.weight(1f),
             ) {
-                Text("CALIBRATE ALL CARS", fontWeight = FontWeight.Black)
+                Text("CALIBRATE MODDED CARS", fontWeight = FontWeight.Black)
             }
             if (progress.canResume) {
                 OutlinedButton(onClick = onResume, modifier = Modifier.weight(1f)) {
@@ -1418,6 +1517,171 @@ private fun LoudnessNormalizationSettingsPanel(
                 OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
                     Text("CANCEL", color = Danger, fontWeight = FontWeight.Black)
                 }
+            }
+        }
+        HorizontalDivider(color = Outline)
+        AcousticDiagnosticSettingsPanel(
+            summary = acousticSummary,
+            progress = acousticProgress,
+            iphoneMeterLinked = iphoneMeterLinked,
+            iphoneMeterSelected = iphoneMeterSelected,
+            pairingCode = iphonePairingCode,
+            onPairingCodeChange = onIphonePairingCodeChange,
+            onAssociate = onAssociateIphoneMeter,
+            onMeasure = onMeasureWithIphone,
+            onResume = onResumeAcousticDiagnostic,
+            onCancel = onCancelAcousticDiagnostic,
+        )
+    }
+}
+
+@Composable
+private fun AcousticDiagnosticSettingsPanel(
+    summary: AcousticDiagnosticSummary,
+    progress: AcousticDiagnosticProgress,
+    iphoneMeterLinked: Boolean,
+    iphoneMeterSelected: Boolean,
+    pairingCode: String,
+    onPairingCodeChange: (String) -> Unit,
+    onAssociate: () -> Unit,
+    onMeasure: () -> Unit,
+    onResume: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    Text("IPHONE ACOUSTIC CALIBRATION", color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Black)
+    Text(
+        "Measures only already-normalized modded cars through the vehicle speakers, then applies a bounded per-car acoustic adjustment. Bluetooth carries timing and metrics only; no audio is transferred or stored.",
+        color = Muted,
+        fontSize = 13.sp,
+        lineHeight = 17.sp,
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Outline, skinShape(8.dp))
+            .padding(18.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+    ) {
+        LoudnessCount("COVERAGE", "${summary.validCount} / ${summary.totalCount}", Success)
+        LoudnessCount("FAILED", summary.failedCount.toString(), Warning)
+        LoudnessCount("STALE / MISSING", "${summary.staleCount} / ${summary.missingCount}", Muted)
+        LoudnessCount("WITHIN ±1.5 dB", summary.withinToleranceCount.toString(), AccentSoft)
+        LoudnessCount(
+            "ADJUSTED SPREAD",
+            summary.spreadDb?.let { String.format(Locale.US, "%.1f dB", it) } ?: "—",
+            AccentSoft,
+        )
+    }
+    if (summary.validCount > 0) {
+        Text(
+            listOfNotNull(
+                "Median: 0.0 dB(A) RELATIVE",
+                summary.spreadDb?.let { "Adjusted spread: ${String.format(Locale.US, "%.1f dB", it)}" },
+                summary.medianPresenceBalanceDb?.let {
+                    "Presence balance: ${String.format(Locale.US, "%.1f dB", it)}"
+                },
+                summary.loudestCar?.let {
+                    "Loudest measured: $it (${String.format(Locale.US, "%+.1f dB(A) RELATIVE", requireNotNull(summary.loudestDeltaDb))})"
+                },
+                summary.quietestCar?.let {
+                    "Quietest measured: $it (${String.format(Locale.US, "%+.1f dB(A) RELATIVE", requireNotNull(summary.quietestDeltaDb))})"
+                },
+                summary.mostMuffledCar?.let {
+                    "Most muffled: $it (${String.format(Locale.US, "%.1f dB presence", requireNotNull(summary.mostMuffledPresenceBalanceDb))})"
+                },
+            ).joinToString("  •  "),
+            color = OnSurface,
+            fontSize = 12.sp,
+        )
+    }
+    if (progress.status != AcousticDiagnosticStatus.IDLE) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, Outline, skinShape(8.dp))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                when (progress.status) {
+                    AcousticDiagnosticStatus.CONNECTING -> "CONNECTING TO IPHONE"
+                    AcousticDiagnosticStatus.PAIRING -> "PAIRING IPHONE"
+                    AcousticDiagnosticStatus.PREPARING -> "MEASURING ACOUSTIC LATENCY"
+                    AcousticDiagnosticStatus.RUNNING -> "ACOUSTIC MEASUREMENT"
+                    AcousticDiagnosticStatus.INTERRUPTED -> "INTERRUPTED — READY TO RESUME"
+                    AcousticDiagnosticStatus.COMPLETED -> "ACOUSTIC CALIBRATION COMPLETE"
+                    AcousticDiagnosticStatus.CANCELLED -> "ACOUSTIC CALIBRATION CANCELLED"
+                    AcousticDiagnosticStatus.FAILED -> "ACOUSTIC CALIBRATION FAILED"
+                    AcousticDiagnosticStatus.IDLE -> ""
+                },
+                color = if (progress.status == AcousticDiagnosticStatus.FAILED) Danger else Accent,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Black,
+            )
+            if (progress.totalCount > 0) {
+                Text(
+                    "${progress.completedCount} / ${progress.totalCount} processed · " +
+                        "${progress.skippedCount} skipped · ${progress.failedCount} failed",
+                    color = OnSurface,
+                    fontSize = 13.sp,
+                )
+                LinearProgressIndicator(
+                    progress = { progress.fraction },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Accent,
+                    trackColor = MeterTrack,
+                )
+            }
+            progress.lastError?.let { Text(it, color = Warning, fontSize = 12.sp) }
+        }
+    }
+    if (!iphoneMeterLinked) {
+        Text("Enter the six-digit code shown on the iPhone.", color = Muted, fontSize = 12.sp)
+        BasicTextField(
+            value = pairingCode,
+            onValueChange = onPairingCodeChange,
+            singleLine = true,
+            textStyle = TextStyle(
+                color = OnSurface,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 5.sp,
+            ),
+            cursorBrush = SolidColor(Accent),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, Outline, skinShape(8.dp))
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            decorationBox = { field ->
+                if (pairingCode.isEmpty()) Text("000000", color = Muted, fontSize = 22.sp, letterSpacing = 5.sp)
+                field()
+            },
+        )
+    }
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedButton(
+            onClick = onAssociate,
+            enabled = !progress.isRunning,
+            modifier = Modifier.weight(1f),
+        ) {
+            Text(if (iphoneMeterLinked) "CHOOSE IPHONE" else "PAIR IPHONE", color = AccentSoft)
+        }
+        Button(
+            onClick = onMeasure,
+            enabled = summary.totalCount > 0 && !progress.isRunning &&
+                (iphoneMeterLinked || (iphoneMeterSelected && pairingCode.length == 6)),
+            modifier = Modifier.weight(1f),
+        ) {
+            Text("CALIBRATE WITH IPHONE", fontWeight = FontWeight.Black)
+        }
+        if (progress.canResume) {
+            OutlinedButton(onClick = onResume, modifier = Modifier.weight(1f)) {
+                Text("RESUME", color = Accent, fontWeight = FontWeight.Black)
+            }
+        }
+        if (progress.isRunning) {
+            OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
+                Text("CANCEL", color = Danger, fontWeight = FontWeight.Black)
             }
         }
     }
@@ -1515,6 +1779,75 @@ private fun LoudnessCount(label: String, value: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Black)
         Text(value, color = color, fontSize = 15.sp, fontWeight = FontWeight.Black)
+    }
+}
+
+@Composable
+internal fun AcousticDiagnosticModal(
+    progress: AcousticDiagnosticProgress,
+    onCancel: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false,
+        ),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.82f))
+                .padding(40.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            MaterialSurface(
+                modifier = Modifier.fillMaxWidth(0.68f).sizeIn(maxWidth = 760.dp),
+                shape = skinShape(14.dp),
+                color = Surface,
+                border = BorderStroke(1.dp, Outline),
+                shadowElevation = 18.dp,
+            ) {
+                Column(
+                    modifier = Modifier.padding(28.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Text("CALIBRATING WITH IPHONE", color = Accent, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                    Text(
+                        "Audible engine sweeps are playing through the vehicle speakers. Keep the iPhone at driver head height and the cabin unchanged.",
+                        color = Muted,
+                        fontSize = 13.sp,
+                    )
+                    Text(
+                        progress.activeCarName ?: progress.meterName ?: "Connecting…",
+                        color = OnSurface,
+                        fontSize = 18.sp,
+                    )
+                    progress.perspective?.let {
+                        Text(
+                            if (it == EngineSoundPerspective.EXTERIOR) "EXTERIOR • PURE" else "CABIN",
+                            color = AccentSoft,
+                            fontWeight = FontWeight.Black,
+                        )
+                    }
+                    Text(
+                        "${progress.completedCount} / ${progress.totalCount} processed · ${progress.skippedCount} skipped",
+                        color = OnSurface,
+                        fontSize = 13.sp,
+                    )
+                    LinearProgressIndicator(
+                        progress = { progress.fraction },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Accent,
+                        trackColor = MeterTrack,
+                    )
+                    OutlinedButton(onClick = onCancel, modifier = Modifier.align(Alignment.End)) {
+                        Text("EMERGENCY STOP", color = Danger, fontWeight = FontWeight.Black)
+                    }
+                }
+            }
+        }
     }
 }
 

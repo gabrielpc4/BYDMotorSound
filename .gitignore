@@ -1,6 +1,7 @@
 # Android Studio and local machine state
 *.iml
 .idea/
+**/xcuserdata/
 .gradle/
 .kotlin/
 local.properties

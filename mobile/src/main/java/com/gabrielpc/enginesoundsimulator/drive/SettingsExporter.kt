@@ -18,6 +18,10 @@ import com.gabrielpc.enginesoundsimulator.audio.AppVolumeRepository
 import com.gabrielpc.enginesoundsimulator.audio.LOUDNESS_CALIBRATION_ALGORITHM_VERSION
 import com.gabrielpc.enginesoundsimulator.audio.LoudnessCalibrationKey
 import com.gabrielpc.enginesoundsimulator.audio.LoudnessNormalizationRepository
+import com.gabrielpc.enginesoundsimulator.audio.LoudnessCalibrationRecordValidity
+import com.gabrielpc.enginesoundsimulator.audio.ACOUSTIC_DIAGNOSTIC_ALGORITHM_VERSION
+import com.gabrielpc.enginesoundsimulator.audio.AcousticDiagnosticRepository
+import com.gabrielpc.enginesoundsimulator.audio.IphoneAcousticMeterRepository
 import org.json.JSONArray
 import org.json.JSONObject
 import com.gabrielpc.enginesoundsimulator.simulation.VirtualGearProfile
@@ -28,13 +32,16 @@ import java.util.Locale
 
 /** Writes a JSON snapshot of every persisted app preference to internal app storage. */
 internal object SettingsExporter {
-    private const val EXPORT_VERSION = 2
+    private const val EXPORT_VERSION = 4
     private const val EXPORT_DIR = "settings_exports"
 
     fun export(context: Context): String {
         val appContext = context.applicationContext
         val bankResolver = FmodBankResolver(appContext)
         val installedProfiles = FmodBankProfiles.all.filter(bankResolver::isInstalled)
+        val calibrationProfiles = installedProfiles.filter {
+            it.packGroup == FmodBankProfiles.moddedCarsPackId
+        }
 
         val selectedCarRepository = SelectedCarRepository(appContext)
         val shiftModeRepository = ShiftModeRepository(appContext)
@@ -54,8 +61,10 @@ internal object SettingsExporter {
         val carFavoritesRepository = CarFavoritesRepository(appContext)
         val appVolumeRepository = AppVolumeRepository(appContext)
         val loudnessNormalizationRepository = LoudnessNormalizationRepository(appContext)
+        val acousticDiagnosticRepository = AcousticDiagnosticRepository(appContext)
+        val iphoneAcousticMeterRepository = IphoneAcousticMeterRepository(appContext)
         val calibrationFingerprints = buildMap {
-            installedProfiles.forEach { profile ->
+            calibrationProfiles.forEach { profile ->
                 val fingerprint = bankResolver.calibrationFingerprint(profile)
                 EngineSoundPerspective.entries.forEach { perspective ->
                     put(LoudnessCalibrationKey(profile.id, profile.packGroup, perspective), fingerprint)
@@ -141,6 +150,7 @@ internal object SettingsExporter {
                     "records",
                     JSONArray().apply {
                         loudnessNormalizationRepository.records()
+                            .filter { it.packGroup == FmodBankProfiles.moddedCarsPackId }
                             .sortedWith(compareBy({ it.profileId }, { it.packGroup }, { it.perspective.name }))
                             .forEach { record ->
                                 put(
@@ -153,6 +163,100 @@ internal object SettingsExporter {
                                         .put("measuredIntegratedLufs", record.measuredIntegratedLufs)
                                         .put("measuredMaxTruePeak", record.measuredMaxTruePeak)
                                         .put("normalizationDb", record.normalizationDb)
+                                        .put("measuredAtEpochMs", record.measuredAtEpochMs),
+                                )
+                            }
+                    },
+                )
+            },
+        )
+        val profileNames = buildMap {
+            calibrationProfiles.forEach { profile ->
+                EngineSoundPerspective.entries.forEach { perspective ->
+                    put(
+                        LoudnessCalibrationKey(profile.id, profile.packGroup, perspective),
+                        "${profile.displayName} ${perspective.name}",
+                    )
+                }
+            }
+        }
+        val normalizationRecords = loudnessNormalizationRepository.records().associateBy { it.key }
+        val acousticTargets = buildMap {
+            calibrationFingerprints.forEach { (key, fingerprint) ->
+                val record = normalizationRecords[key]
+                if (LoudnessCalibrationRecordValidity.isValid(record, fingerprint)) {
+                    put(key, fingerprint to requireNotNull(record).normalizationDb)
+                }
+            }
+        }
+        val acousticSummary = acousticDiagnosticRepository.summary(
+            profileNames = profileNames,
+            currentTargets = acousticTargets,
+            scopePackGroup = FmodBankProfiles.moddedCarsPackId,
+        )
+        val meterLink = iphoneAcousticMeterRepository.loadLink()
+        root.put(
+            "iphoneAcousticDiagnostic",
+            JSONObject().apply {
+                put("algorithmVersion", ACOUSTIC_DIAGNOSTIC_ALGORITHM_VERSION)
+                put("latestCompletedSessionId", acousticDiagnosticRepository.latestCompletedSessionId() ?: JSONObject.NULL)
+                put("meterInstanceId", meterLink?.meterInstanceId ?: JSONObject.NULL)
+                put("meterModel", meterLink?.meterName ?: JSONObject.NULL)
+                put("validCount", acousticSummary.validCount)
+                put("failedCount", acousticSummary.failedCount)
+                put("staleCount", acousticSummary.staleCount)
+                put("missingCount", acousticSummary.missingCount)
+                put("totalCount", acousticSummary.totalCount)
+                put("medianDbARelative", if (acousticSummary.validCount > 0) 0.0 else JSONObject.NULL)
+                put("catalogReferenceDbFsA", acousticSummary.catalogReferenceWeightedDb ?: JSONObject.NULL)
+                put("spreadDb", acousticSummary.spreadDb ?: JSONObject.NULL)
+                put("medianPresenceBalanceDb", acousticSummary.medianPresenceBalanceDb ?: JSONObject.NULL)
+                put("withinToleranceCount", acousticSummary.withinToleranceCount)
+                put("loudestCar", acousticSummary.loudestCar ?: JSONObject.NULL)
+                put("loudestDeltaDb", acousticSummary.loudestDeltaDb ?: JSONObject.NULL)
+                put("quietestCar", acousticSummary.quietestCar ?: JSONObject.NULL)
+                put("quietestDeltaDb", acousticSummary.quietestDeltaDb ?: JSONObject.NULL)
+                put("mostMuffledCar", acousticSummary.mostMuffledCar ?: JSONObject.NULL)
+                put(
+                    "mostMuffledPresenceBalanceDb",
+                    acousticSummary.mostMuffledPresenceBalanceDb ?: JSONObject.NULL,
+                )
+                put(
+                    "records",
+                    JSONArray().apply {
+                        acousticDiagnosticRepository.records()
+                            .filter { it.packGroup == FmodBankProfiles.moddedCarsPackId }
+                            .sortedWith(compareBy({ it.profileId }, { it.packGroup }, { it.perspective.name }))
+                            .forEach { record ->
+                                put(
+                                    JSONObject()
+                                        .put("sessionId", record.sessionId)
+                                        .put("profileId", record.profileId)
+                                        .put("packGroup", record.packGroup)
+                                        .put("perspective", record.perspective.name)
+                                        .put("algorithmVersion", record.algorithmVersion)
+                                        .put("bankFingerprint", record.bankFingerprint)
+                                        .put("normalizationDb", record.normalizationDb)
+                                        .put("meterInstanceId", record.meterInstanceId)
+                                        .put("meterModel", record.meterModel)
+                                        .put("dbARelative", record.deltaFromMedianDb)
+                                        .put("acousticAdjustmentDb", record.acousticAdjustmentDb)
+                                        .put("correctedWeightedDb", record.correctedWeightedDb)
+                                        .put("snrDb", record.snrDb)
+                                        .put("peakDbFs", record.peakDbFs)
+                                        .put("presenceBalanceDb", record.presenceBalanceDb)
+                                        .put("ambientBeforeDb", record.ambientBeforeDb)
+                                        .put("ambientAfterDb", record.ambientAfterDb)
+                                        .put("clockUncertaintyMs", record.clockUncertaintyMs)
+                                        .put("acousticLatencyMs", record.acousticLatencyMs)
+                                        .put("androidMediaVolumeIndex", record.androidMediaVolumeIndex)
+                                        .put("androidMediaVolumeMax", record.androidMediaVolumeMax)
+                                        .put("sampleCount", record.sampleCount)
+                                        .put("sampleRateHz", record.sampleRateHz)
+                                        .put("channelCount", record.channelCount)
+                                        .put("channelBalanceDb", record.channelBalanceDb ?: JSONObject.NULL)
+                                        .put("valid", record.valid)
+                                        .put("failureReason", record.failureReason ?: JSONObject.NULL)
                                         .put("measuredAtEpochMs", record.measuredAtEpochMs),
                                 )
                             }

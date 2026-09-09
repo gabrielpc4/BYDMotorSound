@@ -61,6 +61,7 @@ enum class LoudnessNormalizationValidity {
     VALID,
     STALE,
     MISSING,
+    EXCLUDED,
 }
 
 data class LoudnessNormalizationState(
@@ -172,12 +173,19 @@ internal object LoudnessCalibrationFingerprint {
     }
 }
 
+/** Applies each catalog, acoustic, user, and per-car component exactly once at the FMOD master. */
 internal fun composeMasterOutputGain(
     appVolumeLinear: Float,
     normalizationLinear: Float,
     carSpecificOverallLinear: Float,
+    acousticAdjustmentLinear: Float = 1f,
 ): Float {
-    val components = listOf(appVolumeLinear, normalizationLinear, carSpecificOverallLinear)
+    val components = listOf(
+        appVolumeLinear,
+        normalizationLinear,
+        acousticAdjustmentLinear,
+        carSpecificOverallLinear,
+    )
     if (components.any { !it.isFinite() }) return 0f
 
     return components.fold(1f) { result, value -> result * value.coerceAtLeast(0f) }
@@ -331,6 +339,22 @@ internal class LoudnessNormalizationRepository(context: Context) {
     }
 
     @Synchronized
+    fun removePackGroup(packGroup: String) {
+        val editor = preferences.edit()
+        records().filter { it.packGroup == packGroup }.forEach { editor.remove(recordKey(it.key)) }
+        checkpoint()?.let { active ->
+            val filtered = active.completedFingerprints.filterKeys { it.packGroup != packGroup }
+            if (filtered != active.completedFingerprints) {
+                editor.putString(
+                    KEY_CHECKPOINT,
+                    checkpointToJson(active.copy(completedFingerprints = filtered)).toString(),
+                )
+            }
+        }
+        editor.commit()
+    }
+
+    @Synchronized
     fun clearAll() {
         preferences.edit().clear().commit()
     }
@@ -354,9 +378,13 @@ internal class LoudnessNormalizationRepository(context: Context) {
     }
 
     private fun saveCheckpoint(checkpoint: LoudnessCalibrationCheckpoint) {
-        val json = JSONObject()
-        json.put("startedAtEpochMs", checkpoint.startedAtEpochMs)
-        json.put(
+        preferences.edit().putString(KEY_CHECKPOINT, checkpointToJson(checkpoint).toString()).commit()
+    }
+
+    private fun checkpointToJson(checkpoint: LoudnessCalibrationCheckpoint): JSONObject =
+        JSONObject()
+            .put("startedAtEpochMs", checkpoint.startedAtEpochMs)
+            .put(
             "completed",
             JSONArray().apply {
                 checkpoint.completedFingerprints.entries.sortedBy { it.key.persisted }.forEach { (key, fingerprint) ->
@@ -364,8 +392,6 @@ internal class LoudnessNormalizationRepository(context: Context) {
                 }
             },
         )
-        preferences.edit().putString(KEY_CHECKPOINT, json.toString()).commit()
-    }
 
     private fun recordKey(key: LoudnessCalibrationKey): String = RECORD_PREFIX + key.persisted
 

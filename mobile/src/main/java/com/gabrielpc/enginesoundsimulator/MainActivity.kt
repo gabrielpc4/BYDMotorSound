@@ -1,12 +1,28 @@
 package com.gabrielpc.enginesoundsimulator
 
+import android.Manifest
+import android.app.Activity
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.le.ScanFilter
+import android.bluetooth.le.ScanResult
+import android.companion.AssociationRequest
+import android.companion.AssociationInfo
+import android.companion.BluetoothLeDeviceFilter
+import android.companion.CompanionDeviceManager
 import android.graphics.BitmapFactory
 import android.graphics.Paint
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.ParcelUuid
 import android.view.Choreographer
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
@@ -126,6 +142,7 @@ import com.gabrielpc.enginesoundsimulator.audio.FmodBankProfiles
 import com.gabrielpc.enginesoundsimulator.audio.CarSubtitleCatalog
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankResolver
 import com.gabrielpc.enginesoundsimulator.audio.MediaShiftButtonCoordinator
+import com.gabrielpc.enginesoundsimulator.audio.IphoneAcousticMeterProtocol
 import com.gabrielpc.enginesoundsimulator.audio.BackfirePreviewPlayer
 import com.gabrielpc.enginesoundsimulator.simulation.AutomaticTransmissionMode
 import com.gabrielpc.enginesoundsimulator.simulation.DrivetrainState
@@ -205,6 +222,38 @@ class MainActivity : ComponentActivity() {
     private var driveCaptureActive by mutableStateOf(false)
     private var driveCapturePath by mutableStateOf<String?>(null)
     private val backfirePreviewPlayer by lazy(LazyThreadSafetyMode.NONE) { BackfirePreviewPlayer(this) }
+    private var legacyIphoneScanRequested = false
+    private val companionChooserLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
+        val address = if (Build.VERSION.SDK_INT >= 33) {
+            result.data
+                ?.getParcelableExtra(CompanionDeviceManager.EXTRA_ASSOCIATION, AssociationInfo::class.java)
+                ?.deviceMacAddress
+                ?.toString()
+        } else {
+            @Suppress("DEPRECATION")
+            when (val device = result.data?.getParcelableExtra<android.os.Parcelable>(CompanionDeviceManager.EXTRA_DEVICE)) {
+                is ScanResult -> device.device.address
+                is BluetoothDevice -> device.address
+                else -> null
+            }
+        }
+        address?.let(controller::selectIphoneAcousticMeter)
+    }
+    private val bluetoothPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { grants ->
+        if (grants.values.all { it }) {
+            if (legacyIphoneScanRequested) {
+                legacyIphoneScanRequested = false
+                controller.selectIphoneAcousticMeter("")
+            } else {
+                beginIphoneMeterAssociation()
+            }
+        }
+    }
 
     private val refreshUi = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
@@ -279,6 +328,7 @@ class MainActivity : ComponentActivity() {
                                 onCruisingLogicChange = controller::setCruisingLogicEnabled,
                                 onResetAllPreferences = {
                                     controller.resetAllPreferences()
+                                    clearIphoneCompanionAssociations()
                                     themeController.resetToDefault()
                                 },
                                 onExportSettings = controller::exportAllPreferences,
@@ -345,6 +395,16 @@ class MainActivity : ComponentActivity() {
                                     controller.startLoudnessCalibration(resume = true)
                                 },
                                 onCancelLoudnessCalibration = controller::cancelLoudnessCalibration,
+                                onAssociateIphoneMeter = ::associateIphoneMeter,
+                                onStartAcousticDiagnostic = { code ->
+                                    backfirePreviewPlayer.release()
+                                    controller.startAcousticDiagnostic(code, resume = false)
+                                },
+                                onResumeAcousticDiagnostic = {
+                                    backfirePreviewPlayer.release()
+                                    controller.startAcousticDiagnostic(null, resume = true)
+                                },
+                                onCancelAcousticDiagnostic = controller::cancelAcousticDiagnostic,
                                 onDismissUserMessage = controller::dismissUserMessage,
                             )
                             DriveCaptureOverlay(
@@ -367,6 +427,12 @@ class MainActivity : ComponentActivity() {
                                 LoudnessCalibrationModal(
                                     progress = state.loudnessCalibrationProgress,
                                     onCancel = controller::cancelLoudnessCalibration,
+                                )
+                            }
+                            if (state.acousticDiagnosticProgress.isRunning) {
+                                AcousticDiagnosticModal(
+                                    progress = state.acousticDiagnosticProgress,
+                                    onCancel = controller::cancelAcousticDiagnostic,
                                 )
                             }
                         }
@@ -416,6 +482,86 @@ class MainActivity : ComponentActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (!hasFocus) releaseManualControls()
+    }
+
+    private fun associateIphoneMeter() {
+        if (Build.VERSION.SDK_INT < 26 &&
+            checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) {
+            legacyIphoneScanRequested = true
+            bluetoothPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 31) {
+            val permissions = arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+            if (permissions.any { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }) {
+                bluetoothPermissionLauncher.launch(permissions)
+                return
+            }
+        }
+        beginIphoneMeterAssociation()
+    }
+
+    private fun beginIphoneMeterAssociation() {
+        if (Build.VERSION.SDK_INT < 26) {
+            controller.selectIphoneAcousticMeter("")
+            return
+        }
+        val manager = getSystemService(CompanionDeviceManager::class.java)
+        if (manager == null) {
+            selectIphoneMeterFallbackScan()
+            return
+        }
+        val filter = BluetoothLeDeviceFilter.Builder()
+            .setScanFilter(
+                ScanFilter.Builder()
+                    .setServiceUuid(ParcelUuid(IphoneAcousticMeterProtocol.SERVICE_UUID))
+                    .build(),
+            )
+            .build()
+        val request = AssociationRequest.Builder()
+            .addDeviceFilter(filter)
+            .setSingleDevice(true)
+            .build()
+        manager.associate(
+            request,
+            object : CompanionDeviceManager.Callback() {
+                override fun onDeviceFound(chooserLauncher: android.content.IntentSender) {
+                    companionChooserLauncher.launch(IntentSenderRequest.Builder(chooserLauncher).build())
+                }
+
+                override fun onFailure(error: CharSequence?) {
+                    selectIphoneMeterFallbackScan()
+                }
+            },
+            Handler(Looper.getMainLooper()),
+        )
+    }
+
+    private fun selectIphoneMeterFallbackScan() {
+        // Some BYD builds omit the companion chooser. An empty address explicitly selects the
+        // permission-backed service UUID scan used by the worker.
+        if (Build.VERSION.SDK_INT <= 30 &&
+            checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) {
+            legacyIphoneScanRequested = true
+            bluetoothPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
+        } else {
+            controller.selectIphoneAcousticMeter("")
+        }
+    }
+
+    private fun clearIphoneCompanionAssociations() {
+        if (Build.VERSION.SDK_INT < 26) return
+        val manager = getSystemService(CompanionDeviceManager::class.java) ?: return
+        runCatching {
+            if (Build.VERSION.SDK_INT >= 33) {
+                manager.myAssociations.forEach { association -> manager.disassociate(association.id) }
+            } else {
+                @Suppress("DEPRECATION")
+                manager.associations.forEach { address -> manager.disassociate(address) }
+            }
+        }
     }
 
     private fun releaseManualControls() {
@@ -493,6 +639,10 @@ private fun MotorSoundDashboard(
     onCalibrateAllCars: () -> Unit,
     onResumeLoudnessCalibration: () -> Unit,
     onCancelLoudnessCalibration: () -> Unit,
+    onAssociateIphoneMeter: () -> Unit,
+    onStartAcousticDiagnostic: (String?) -> Unit,
+    onResumeAcousticDiagnostic: () -> Unit,
+    onCancelAcousticDiagnostic: () -> Unit,
     onDismissUserMessage: () -> Unit,
 ) {
     var mainScreen by remember {
@@ -707,6 +857,14 @@ private fun MotorSoundDashboard(
                             onCalibrateAllCars = onCalibrateAllCars,
                             onResumeLoudnessCalibration = onResumeLoudnessCalibration,
                             onCancelLoudnessCalibration = onCancelLoudnessCalibration,
+                            acousticDiagnosticSummary = state.acousticDiagnosticSummary,
+                            acousticDiagnosticProgress = state.acousticDiagnosticProgress,
+                            iphoneMeterLinked = state.iphoneMeterLinked,
+                            iphoneMeterSelected = state.iphoneMeterSelected,
+                            onAssociateIphoneMeter = onAssociateIphoneMeter,
+                            onStartAcousticDiagnostic = onStartAcousticDiagnostic,
+                            onResumeAcousticDiagnostic = onResumeAcousticDiagnostic,
+                            onCancelAcousticDiagnostic = onCancelAcousticDiagnostic,
                             fmodUpdateRateHz = state.fmodUpdateRateHz,
                             onFmodUpdateRateChange = onFmodUpdateRateChange,
                             backfireSettings = state.backfireSettings,

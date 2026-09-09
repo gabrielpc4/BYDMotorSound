@@ -1,0 +1,320 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 54;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1B1991F69C591F15319D62D8 /* MeterViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD5B463142DEA69780F47E88 /* MeterViewModel.swift */; };
+		28F6D5AC481AB4E561F6EE36 /* MeterProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = B459ED5BB064BFBB1DA04653 /* MeterProtocol.swift */; };
+		6B966554D50DC5F61C172872 /* EngineLoudnessMeterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E12538681D13AEB28FC8C39 /* EngineLoudnessMeterApp.swift */; };
+		861A44ABEE0D3E739BF148DC /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F4DCC440BBB2D92BCF5E6A2 /* KeychainStore.swift */; };
+		A422F98F62C7F93EF0014966 /* MeterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 154CA6B0530B7F5D3C345B9D /* MeterView.swift */; };
+		ACED1D2D5B9ECE71E6B73AB8 /* AudioMeasurementEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3402A011DF6962CAFFD4F9D /* AudioMeasurementEngine.swift */; };
+		B1FF101943DB501F2CBD623D /* MeterPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = C32DEECAF615D6C5A63A0229 /* MeterPeripheral.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		154CA6B0530B7F5D3C345B9D /* MeterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeterView.swift; sourceTree = "<group>"; };
+		6F23950A3D117F42ABE2D167 /* EngineLoudnessMeter.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = EngineLoudnessMeter.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7E12538681D13AEB28FC8C39 /* EngineLoudnessMeterApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineLoudnessMeterApp.swift; sourceTree = "<group>"; };
+		8F4DCC440BBB2D92BCF5E6A2 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		B459ED5BB064BFBB1DA04653 /* MeterProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeterProtocol.swift; sourceTree = "<group>"; };
+		BD5B463142DEA69780F47E88 /* MeterViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeterViewModel.swift; sourceTree = "<group>"; };
+		C32DEECAF615D6C5A63A0229 /* MeterPeripheral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeterPeripheral.swift; sourceTree = "<group>"; };
+		D91A7CA4809FA43A3B013A83 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		E3402A011DF6962CAFFD4F9D /* AudioMeasurementEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMeasurementEngine.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		A80E8045086BE3F102FEEB02 = {
+			isa = PBXGroup;
+			children = (
+				FCF0099FD5BB160F15939F0D /* EngineLoudnessMeter */,
+				B826520FB7956AF993C8E581 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B826520FB7956AF993C8E581 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				6F23950A3D117F42ABE2D167 /* EngineLoudnessMeter.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		FCF0099FD5BB160F15939F0D /* EngineLoudnessMeter */ = {
+			isa = PBXGroup;
+			children = (
+				E3402A011DF6962CAFFD4F9D /* AudioMeasurementEngine.swift */,
+				7E12538681D13AEB28FC8C39 /* EngineLoudnessMeterApp.swift */,
+				D91A7CA4809FA43A3B013A83 /* Info.plist */,
+				8F4DCC440BBB2D92BCF5E6A2 /* KeychainStore.swift */,
+				C32DEECAF615D6C5A63A0229 /* MeterPeripheral.swift */,
+				B459ED5BB064BFBB1DA04653 /* MeterProtocol.swift */,
+				154CA6B0530B7F5D3C345B9D /* MeterView.swift */,
+				BD5B463142DEA69780F47E88 /* MeterViewModel.swift */,
+			);
+			path = EngineLoudnessMeter;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		EB46AF0509A7332282178C62 /* EngineLoudnessMeter */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 020D8BE83EB16C09C943046C /* Build configuration list for PBXNativeTarget "EngineLoudnessMeter" */;
+			buildPhases = (
+				8659F00E4481FDE08C197E78 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = EngineLoudnessMeter;
+			productName = EngineLoudnessMeter;
+			productReference = 6F23950A3D117F42ABE2D167 /* EngineLoudnessMeter.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1D8C488C25CCA8D77BF22E85 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					EB46AF0509A7332282178C62 = {
+						DevelopmentTeam = KFA62LZ5XJ;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 72A81A0E71305F7181FB475F /* Build configuration list for PBXProject "EngineLoudnessMeter" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = A80E8045086BE3F102FEEB02;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				EB46AF0509A7332282178C62 /* EngineLoudnessMeter */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8659F00E4481FDE08C197E78 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ACED1D2D5B9ECE71E6B73AB8 /* AudioMeasurementEngine.swift in Sources */,
+				6B966554D50DC5F61C172872 /* EngineLoudnessMeterApp.swift in Sources */,
+				861A44ABEE0D3E739BF148DC /* KeychainStore.swift in Sources */,
+				B1FF101943DB501F2CBD623D /* MeterPeripheral.swift in Sources */,
+				28F6D5AC481AB4E561F6EE36 /* MeterProtocol.swift in Sources */,
+				A422F98F62C7F93EF0014966 /* MeterView.swift in Sources */,
+				1B1991F69C591F15319D62D8 /* MeterViewModel.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		14BD39B81D78225E519D904B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = KFA62LZ5XJ;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.10;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		15411B2F5BE3C30E265F6DB8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = EngineLoudnessMeter/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gabrielpc.EngineLoudnessMeter;
+				PRODUCT_NAME = "Engine Loudness Meter";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		5E22158B04A9CFE4C316F774 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = KFA62LZ5XJ;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.10;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		BD85B77C5B249D580DA7A6AA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = EngineLoudnessMeter/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gabrielpc.EngineLoudnessMeter;
+				PRODUCT_NAME = "Engine Loudness Meter";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		020D8BE83EB16C09C943046C /* Build configuration list for PBXNativeTarget "EngineLoudnessMeter" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				15411B2F5BE3C30E265F6DB8 /* Debug */,
+				BD85B77C5B249D580DA7A6AA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		72A81A0E71305F7181FB475F /* Build configuration list for PBXProject "EngineLoudnessMeter" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				14BD39B81D78225E519D904B /* Debug */,
+				5E22158B04A9CFE4C316F774 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 1D8C488C25CCA8D77BF22E85 /* Project object */;
+}

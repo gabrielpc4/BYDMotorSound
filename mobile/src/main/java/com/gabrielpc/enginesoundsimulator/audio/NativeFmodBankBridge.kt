@@ -46,6 +46,9 @@ internal class NativeFmodBankBridge {
 
     external fun calibrationSourceSummary(): String
 
+    /** Plays a generated, non-persisted chirp through the same limiter/gate/device path. */
+    external fun playAcousticLatencyChirp(): String?
+
     external fun unloadCalibrationCar()
 
     /** Returns a human-readable error or null after synchronously applying the control frame. */

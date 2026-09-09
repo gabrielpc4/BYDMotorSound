@@ -27,12 +27,20 @@ import com.gabrielpc.enginesoundsimulator.audio.MixerCarSpecificGains
 import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains
 import com.gabrielpc.enginesoundsimulator.audio.AppVolumeRepository
 import com.gabrielpc.enginesoundsimulator.audio.AppVolumeSettings
+import com.gabrielpc.enginesoundsimulator.audio.AcousticDiagnosticProgress
+import com.gabrielpc.enginesoundsimulator.audio.AcousticDiagnosticRepository
+import com.gabrielpc.enginesoundsimulator.audio.AcousticDiagnosticSummary
+import com.gabrielpc.enginesoundsimulator.audio.AcousticAdjustmentState
+import com.gabrielpc.enginesoundsimulator.audio.AcousticAdjustmentValidity
+import com.gabrielpc.enginesoundsimulator.audio.IphoneAcousticMeterRepository
 import com.gabrielpc.enginesoundsimulator.audio.LoudnessCalibrationKey
 import com.gabrielpc.enginesoundsimulator.audio.LoudnessCalibrationProgress
 import com.gabrielpc.enginesoundsimulator.audio.LoudnessCalibrationStatus
 import com.gabrielpc.enginesoundsimulator.audio.LoudnessNormalizationRepository
+import com.gabrielpc.enginesoundsimulator.audio.LoudnessCalibrationRecordValidity
 import com.gabrielpc.enginesoundsimulator.audio.LoudnessNormalizationState
 import com.gabrielpc.enginesoundsimulator.audio.LoudnessNormalizationSummary
+import com.gabrielpc.enginesoundsimulator.audio.LoudnessNormalizationValidity
 import com.gabrielpc.enginesoundsimulator.audio.composeMasterOutputGain
 import com.gabrielpc.enginesoundsimulator.audio.effectiveCategoryGains
 import com.gabrielpc.enginesoundsimulator.audio.effectiveEffectsHostForOverrides
@@ -105,8 +113,13 @@ data class DriveSnapshot(
     val mixerCarSpecificGains: MixerCarSpecificGains = MixerCarSpecificGains(),
     val appVolumeSettings: AppVolumeSettings = AppVolumeSettings(),
     val currentLoudnessNormalization: LoudnessNormalizationState = LoudnessNormalizationState(),
+    val currentAcousticAdjustment: AcousticAdjustmentState = AcousticAdjustmentState(),
     val loudnessNormalizationSummary: LoudnessNormalizationSummary = LoudnessNormalizationSummary(),
     val loudnessCalibrationProgress: LoudnessCalibrationProgress = LoudnessCalibrationProgress(),
+    val acousticDiagnosticProgress: AcousticDiagnosticProgress = AcousticDiagnosticProgress(),
+    val acousticDiagnosticSummary: AcousticDiagnosticSummary = AcousticDiagnosticSummary(),
+    val iphoneMeterLinked: Boolean = false,
+    val iphoneMeterSelected: Boolean = false,
     /** Global backfire policy, deliberately independent of each car bank's authored thresholds. */
     val backfireSettings: BackfireSettings = BackfireSettings(),
     val popsAndBangsOverride: Boolean = false,
@@ -168,8 +181,11 @@ class DriveController(context: Context) {
     )
     private val calibrationFingerprintCache = AtomicReference<Map<LoudnessCalibrationKey, String>>(emptyMap())
     private val currentLoudnessNormalization = AtomicReference(LoudnessNormalizationState())
+    private val currentAcousticAdjustment = AtomicReference(AcousticAdjustmentState())
     private val loudnessNormalizationSummary = AtomicReference(LoudnessNormalizationSummary())
     private val observedCalibrationProgress = AtomicLong(Long.MIN_VALUE)
+    private val observedAcousticProgress = AtomicLong(Long.MIN_VALUE)
+    private val acousticDiagnosticSummary = AtomicReference(AcousticDiagnosticSummary())
     private val shiftModeRepository = ShiftModeRepository(appContext)
     private val soundPerspectiveRepository = EngineSoundPerspectiveRepository(appContext)
     private val effectSoundOverrideGainRepository = EffectSoundOverrideGainRepository(appContext)
@@ -177,6 +193,9 @@ class DriveController(context: Context) {
     private val mixerCarSpecificGainRepository = MixerCarSpecificGainRepository(appContext)
     private val appVolumeRepository = AppVolumeRepository(appContext)
     private val loudnessNormalizationRepository = LoudnessNormalizationRepository(appContext)
+    private val acousticDiagnosticRepository = AcousticDiagnosticRepository(appContext)
+    private val iphoneAcousticMeterRepository = IphoneAcousticMeterRepository(appContext)
+    private val selectedIphoneMeterAddress = AtomicReference<String?>(null)
     private val fmodUpdateRateRepository = FmodUpdateRateRepository(appContext)
     private val exteriorAudioModeRepository = ExteriorAudioModeRepository(appContext)
     private val backfireSettingsRepository = BackfireSettingsRepository(appContext)
@@ -267,6 +286,10 @@ class DriveController(context: Context) {
             .edit()
             .clear()
             .apply()
+        loudnessNormalizationRepository.removePackGroup(FmodBankProfiles.originalCarsPackId)
+        acousticDiagnosticRepository.removePackGroup(FmodBankProfiles.originalCarsPackId)
+        audioEngine.resetLoudnessCalibrationProgress()
+        audioEngine.resetAcousticDiagnosticProgress()
         loadPhysics(selectedProfile.get())
         simulation.manualShiftEnabled = manualShiftEnabled.get()
         mixerGlobalGains.set(mixerGlobalGainRepository.load())
@@ -274,6 +297,7 @@ class DriveController(context: Context) {
         refreshCalibrationFingerprintCache()
         loudnessNormalizationRepository.recomputeNormalizations(currentCalibrationFingerprints())
         refreshLoudnessNormalizationSummary()
+        refreshAcousticDiagnosticSummary()
         audioEngine.setFocusChangeListener(::handleAudioFocusChange)
         audioEngine.setFmodUpdateRateHz(fmodUpdateRateHz.get())
         applyCarAudioPreferences(selectedProfile.get())
@@ -308,9 +332,16 @@ class DriveController(context: Context) {
             calibrationProgress.completedCount.toLong().and(0xffffffffL)
         if (observedCalibrationProgress.getAndSet(progressMarker) != progressMarker) {
             refreshLoudnessNormalizationSummary()
+            refreshAcousticDiagnosticSummary()
             if (!calibrationProgress.isRunning) {
                 syncMasterOutputGainToAudioEngine()
             }
+        }
+        val acousticProgress = audioEngine.acousticDiagnosticProgress()
+        val acousticMarker = acousticProgress.status.ordinal.toLong().shl(32) or
+            acousticProgress.completedCount.toLong().and(0xffffffffL)
+        if (observedAcousticProgress.getAndSet(acousticMarker) != acousticMarker) {
+            refreshAcousticDiagnosticSummary()
         }
 
         return base.copy(
@@ -339,8 +370,13 @@ class DriveController(context: Context) {
             mixerCarSpecificGains = mixerCarSpecificGains.get(),
             appVolumeSettings = appVolumeSettings.get(),
             currentLoudnessNormalization = currentLoudnessNormalization.get(),
+            currentAcousticAdjustment = currentAcousticAdjustment.get(),
             loudnessNormalizationSummary = loudnessNormalizationSummary.get(),
             loudnessCalibrationProgress = calibrationProgress,
+            acousticDiagnosticProgress = acousticProgress,
+            acousticDiagnosticSummary = acousticDiagnosticSummary.get(),
+            iphoneMeterLinked = iphoneAcousticMeterRepository.loadLink() != null,
+            iphoneMeterSelected = selectedIphoneMeterAddress.get() != null,
             backfireSettings = backfireSettings.get(),
             popsAndBangsOverride = effectSoundOverrides.get().popsAndBangsOverride,
             shiftSoundsOverride = effectSoundOverrides.get().shiftSoundsOverride,
@@ -449,7 +485,7 @@ class DriveController(context: Context) {
     fun setSimulatedRegen(value: Double) { simulatedRegen.set(value.coerceIn(0.0, 1.0)) }
 
     fun setFmodUpdateRateHz(rateHz: Int) {
-        if (audioEngine.isLoudnessCalibrationRunning()) return
+        if (audioEngine.isExclusiveAudioOperationRunning()) return
         val normalized = FmodUpdateRate.normalize(rateHz)
         fmodUpdateRateHz.set(normalized)
         fmodUpdateRateRepository.save(normalized)
@@ -618,7 +654,7 @@ class DriveController(context: Context) {
     }
 
     fun setMixerGlobalGains(updated: MixerGlobalGains) {
-        if (audioEngine.isLoudnessCalibrationRunning()) return
+        if (audioEngine.isExclusiveAudioOperationRunning()) return
         val normalized = updated.normalized()
         mixerGlobalGains.set(normalized)
         mixerGlobalGainRepository.save(normalized)
@@ -626,7 +662,7 @@ class DriveController(context: Context) {
     }
 
     fun setAppVolumePercent(percent: Int) {
-        if (audioEngine.isLoudnessCalibrationRunning()) return
+        if (audioEngine.isExclusiveAudioOperationRunning()) return
         val settings = AppVolumeSettings(percent).normalized()
         appVolumeSettings.set(settings)
         appVolumeRepository.save(settings)
@@ -634,7 +670,7 @@ class DriveController(context: Context) {
     }
 
     fun setMixerCarSpecificGains(updated: MixerCarSpecificGains) {
-        if (audioEngine.isLoudnessCalibrationRunning()) return
+        if (audioEngine.isExclusiveAudioOperationRunning()) return
         val normalized = updated.normalized()
         mixerCarSpecificGains.set(normalized)
         mixerCarSpecificGainRepository.save(
@@ -646,7 +682,7 @@ class DriveController(context: Context) {
     }
 
     fun resetMixerCarSpecificGainsForCurrentSelection() {
-        if (audioEngine.isLoudnessCalibrationRunning()) return
+        if (audioEngine.isExclusiveAudioOperationRunning()) return
         val profile = selectedProfile.get()
         val perspective = selectedPerspective.get()
         mixerCarSpecificGainRepository.reset(profile, perspective)
@@ -699,16 +735,34 @@ class DriveController(context: Context) {
     private fun syncMasterOutputGainToAudioEngine() {
         val profile = selectedProfile.get()
         val perspective = selectedPerspective.get()
-        val fingerprint = runCatching { bankResolver.calibrationFingerprint(profile) }.getOrNull()
-        val normalization = loudnessNormalizationRepository.normalizationState(
-            key = LoudnessCalibrationKey(profile.id, profile.packGroup, perspective),
-            fingerprint = fingerprint,
-        )
+        val participatesInNormalization = profile.packGroup == FmodBankProfiles.moddedCarsPackId
+        val fingerprint = if (participatesInNormalization) {
+            runCatching { bankResolver.calibrationFingerprint(profile) }.getOrNull()
+        } else {
+            null
+        }
+        val key = LoudnessCalibrationKey(profile.id, profile.packGroup, perspective)
+        val normalization = if (participatesInNormalization) {
+            loudnessNormalizationRepository.normalizationState(key, fingerprint)
+        } else {
+            LoudnessNormalizationState(LoudnessNormalizationValidity.EXCLUDED)
+        }
+        val acousticAdjustment = if (participatesInNormalization &&
+            normalization.validity == LoudnessNormalizationValidity.VALID
+        ) {
+            acousticDiagnosticRepository.adjustmentState(key, fingerprint, normalization.normalizationDb)
+        } else if (participatesInNormalization) {
+            AcousticAdjustmentState()
+        } else {
+            AcousticAdjustmentState(AcousticAdjustmentValidity.EXCLUDED)
+        }
         currentLoudnessNormalization.set(normalization)
+        currentAcousticAdjustment.set(acousticAdjustment)
         audioEngine.setMasterOutputGain(
             composeMasterOutputGain(
                 appVolumeLinear = appVolumeSettings.get().linear,
                 normalizationLinear = normalization.linear,
+                acousticAdjustmentLinear = acousticAdjustment.linear,
                 carSpecificOverallLinear = mixerCarSpecificGains.get().overall,
             ),
         )
@@ -782,7 +836,7 @@ class DriveController(context: Context) {
     }
 
     fun setExteriorPureAudio(enabled: Boolean) {
-        if (audioEngine.isLoudnessCalibrationRunning()) return
+        if (audioEngine.isExclusiveAudioOperationRunning()) return
         val profile = selectedProfile.get()
         if (!enabled) {
             exteriorAudioModeRepository.save(profile, false)
@@ -801,7 +855,7 @@ class DriveController(context: Context) {
     }
 
     fun setEffectOverride(kind: EffectSoundKind, override: Boolean) {
-        if (audioEngine.isLoudnessCalibrationRunning()) return
+        if (audioEngine.isExclusiveAudioOperationRunning()) return
         val updated = effectSoundOverrides.get().withOverride(kind, override)
         effectSoundOverrides.set(updated)
         effectSoundOverrideRepository.save(updated)
@@ -828,7 +882,7 @@ class DriveController(context: Context) {
         }
     }
     fun setEffectSoundOverrideGain(kind: EffectSoundKind, gain: Float) {
-        if (audioEngine.isLoudnessCalibrationRunning()) return
+        if (audioEngine.isExclusiveAudioOperationRunning()) return
         val normalized = normalizePresetGain(gain)
         val current = effectSoundOverrideGains.get()
         val updated = when (kind) {
@@ -842,7 +896,7 @@ class DriveController(context: Context) {
     }
 
     fun setBackfireSettings(updated: BackfireSettings) {
-        if (audioEngine.isLoudnessCalibrationRunning()) return
+        if (audioEngine.isExclusiveAudioOperationRunning()) return
         val normalized = updated.normalized()
         backfireSettings.set(normalized)
         backfireSettingsRepository.save(normalized)
@@ -871,7 +925,7 @@ class DriveController(context: Context) {
     }
 
     fun resetAllPreferences() {
-        if (audioEngine.isLoudnessCalibrationRunning()) return
+        if (audioEngine.isExclusiveAudioOperationRunning()) return
         effectSoundOverrideGainRepository.resetAll()
         appContext.getSharedPreferences(AppPreferenceStores.SHIFT_MODE, Context.MODE_PRIVATE).edit().clear().apply()
         appContext.getSharedPreferences(AppPreferenceStores.ENGINE_SOUND_PERSPECTIVE, Context.MODE_PRIVATE).edit().clear().apply()
@@ -889,8 +943,13 @@ class DriveController(context: Context) {
         mixerCarSpecificGainRepository.resetAll()
         appVolumeRepository.reset()
         loudnessNormalizationRepository.clearAll()
+        acousticDiagnosticRepository.clearAll()
+        iphoneAcousticMeterRepository.clear()
+        selectedIphoneMeterAddress.set(null)
         refreshLoudnessNormalizationSummary()
+        refreshAcousticDiagnosticSummary()
         audioEngine.resetLoudnessCalibrationProgress()
+        audioEngine.resetAcousticDiagnosticProgress()
         effectSoundOverrideGains.set(EffectSoundOverrideGains())
         mixerGlobalGains.set(MixerGlobalGains())
         mixerCarSpecificGains.set(MixerCarSpecificGains())
@@ -925,11 +984,11 @@ class DriveController(context: Context) {
         audioEngine.setSoundProgram(selectedProfile.get(), selectedPerspective.get())
     }
     fun setFmodEventMute(eventName: String, muted: Boolean) {
-        if (!audioEngine.isLoudnessCalibrationRunning()) audioEngine.setEventMute(eventName, muted)
+        if (!audioEngine.isExclusiveAudioOperationRunning()) audioEngine.setEventMute(eventName, muted)
     }
 
     fun setFmodEventSolo(eventName: String, solo: Boolean) {
-        if (!audioEngine.isLoudnessCalibrationRunning()) audioEngine.setEventSolo(eventName, solo)
+        if (!audioEngine.isExclusiveAudioOperationRunning()) audioEngine.setEventSolo(eventName, solo)
     }
     fun setInputMode(mode: InputMode) { inputMode.set(mode) }
 
@@ -938,7 +997,7 @@ class DriveController(context: Context) {
      * stale event instances, voices, and decoder state cannot survive the user's reset gesture.
      */
     fun toggleAudioMute(): Boolean = synchronized(lifecycleLock) {
-        if (audioEngine.isLoudnessCalibrationRunning()) return@synchronized audioMuted.get()
+        if (audioEngine.isExclusiveAudioOperationRunning()) return@synchronized audioMuted.get()
         val shouldMute = !audioMuted.get()
         audioMuted.set(shouldMute)
         if (shouldMute) {
@@ -974,7 +1033,7 @@ class DriveController(context: Context) {
     }
 
     fun setSoundPerspective(perspective: EngineSoundPerspective) {
-        if (audioEngine.isLoudnessCalibrationRunning()) return
+        if (audioEngine.isExclusiveAudioOperationRunning()) return
         if (perspective != EngineSoundPerspective.EXTERIOR && exteriorPureAudio.get()) {
             setExteriorPureAudio(false)
         }
@@ -991,7 +1050,7 @@ class DriveController(context: Context) {
         refreshInstalledProfileCache()
 
         audioEngine.startLoudnessCalibration(
-            profiles = installedProfiles(),
+            profiles = calibrationProfiles(),
             resume = resume,
             onRecordsChanged = ::syncMasterOutputGainToAudioEngine,
         )
@@ -1001,9 +1060,31 @@ class DriveController(context: Context) {
         audioEngine.cancelLoudnessCalibration()
     }
 
+    fun selectIphoneAcousticMeter(deviceAddress: String) {
+        selectedIphoneMeterAddress.set(deviceAddress)
+    }
+
+    fun startAcousticDiagnostic(pairingCode: String?, resume: Boolean = false): Boolean =
+        synchronized(lifecycleLock) {
+            if (bankRescanRunning.get() || stagedBankImportRunning.get()) return@synchronized false
+            refreshInstalledProfileCache()
+
+            audioEngine.startAcousticDiagnostic(
+                profiles = calibrationProfiles(),
+                resume = resume,
+                deviceAddress = selectedIphoneMeterAddress.getAndSet(null),
+                pairingCode = pairingCode,
+                onRecordsChanged = ::refreshAcousticAdjustmentAndSummary,
+            )
+        }
+
+    fun cancelAcousticDiagnostic() {
+        audioEngine.cancelAcousticDiagnostic()
+    }
+
     fun selectPreviousCar() {
         synchronized(lifecycleLock) {
-            if (audioEngine.isLoudnessCalibrationRunning()) return
+            if (audioEngine.isExclusiveAudioOperationRunning()) return
             if (carNavigationIndex > 0) {
                 carNavigationIndex--
                 val profileId = carNavigationHistory[carNavigationIndex]
@@ -1031,7 +1112,7 @@ class DriveController(context: Context) {
 
     fun selectNextCar() {
         synchronized(lifecycleLock) {
-            if (audioEngine.isLoudnessCalibrationRunning()) return
+            if (audioEngine.isExclusiveAudioOperationRunning()) return
             val installed = installedProfiles()
             if (installed.isEmpty()) {
                 return
@@ -1053,7 +1134,7 @@ class DriveController(context: Context) {
 
     fun selectShuffleCar() {
         synchronized(lifecycleLock) {
-            if (audioEngine.isLoudnessCalibrationRunning()) return
+            if (audioEngine.isExclusiveAudioOperationRunning()) return
             val installed = installedProfiles()
             if (installed.isEmpty()) {
                 return
@@ -1081,7 +1162,7 @@ class DriveController(context: Context) {
 
     fun selectCar(profileId: String) {
         synchronized(lifecycleLock) {
-            if (audioEngine.isLoudnessCalibrationRunning()) return
+            if (audioEngine.isExclusiveAudioOperationRunning()) return
             FmodBankProfiles.find(profileId).takeIf(bankResolver::isInstalled)?.let { profile ->
                 truncateCarNavigationForwardHistory()
                 if (carNavigationHistory[carNavigationIndex] != profile.id) {
@@ -1096,7 +1177,7 @@ class DriveController(context: Context) {
 
     fun toggleCarFavorite(profileId: String) {
         synchronized(lifecycleLock) {
-            if (audioEngine.isLoudnessCalibrationRunning()) return
+            if (audioEngine.isExclusiveAudioOperationRunning()) return
             val updated = carFavoritesRepository.toggle(profileId)
             favoriteCarIds.set(updated)
             latest = latest.copy(favoriteCarIds = updated)
@@ -1127,7 +1208,7 @@ class DriveController(context: Context) {
         if (!MediaShiftButtonCoordinator.isMediaShiftKeyCode(keyCode)) {
             return false
         }
-        if (audioEngine.isLoudnessCalibrationRunning()) return true
+        if (audioEngine.isExclusiveAudioOperationRunning()) return true
 
         synchronized(lifecycleLock) {
             if (transmissionPosition.get() != TransmissionPosition.DRIVE) {
@@ -1170,7 +1251,7 @@ class DriveController(context: Context) {
 
     fun rescanBanks() {
         val shouldStart = synchronized(lifecycleLock) {
-            !audioEngine.isLoudnessCalibrationRunning() &&
+            !audioEngine.isExclusiveAudioOperationRunning() &&
                 bankRescanRunning.compareAndSet(false, true)
         }
         if (!shouldStart) return
@@ -1291,7 +1372,7 @@ class DriveController(context: Context) {
         profile: FmodBankProfile,
         forceAudioReload: Boolean = false,
     ) {
-        if (audioEngine.isLoudnessCalibrationRunning()) return
+        if (audioEngine.isExclusiveAudioOperationRunning()) return
         synchronized(lifecycleLock) {
             selectedProfile.set(profile)
             selectedCarRepository.save(profile)
@@ -1368,7 +1449,7 @@ class DriveController(context: Context) {
      */
     private fun importStagedBankPacksAsync() {
         val shouldStart = synchronized(lifecycleLock) {
-            !audioEngine.isLoudnessCalibrationRunning() &&
+            !audioEngine.isExclusiveAudioOperationRunning() &&
                 stagedBankImportRunning.compareAndSet(false, true)
         }
         if (!shouldStart) return
@@ -1437,6 +1518,9 @@ class DriveController(context: Context) {
     private fun installedProfiles(): List<FmodBankProfile> =
         installedProfileCache.get()
 
+    private fun calibrationProfiles(): List<FmodBankProfile> =
+        installedProfiles().filter { it.packGroup == FmodBankProfiles.moddedCarsPackId }
+
     private fun resolveInitialProfile(): FmodBankProfile {
         refreshInstalledProfileCache()
         return defaultInstalledProfile()
@@ -1463,6 +1547,7 @@ class DriveController(context: Context) {
         refreshCalibrationFingerprintCache()
         loudnessNormalizationRepository.recomputeNormalizations(currentCalibrationFingerprints())
         refreshLoudnessNormalizationSummary()
+        refreshAcousticDiagnosticSummary()
     }
 
     private fun currentCalibrationFingerprints(): Map<LoudnessCalibrationKey, String> =
@@ -1471,7 +1556,7 @@ class DriveController(context: Context) {
     private fun refreshCalibrationFingerprintCache() {
         calibrationFingerprintCache.set(
             buildMap {
-                installedProfiles().forEach { profile ->
+                calibrationProfiles().forEach { profile ->
                     val fingerprint = runCatching { bankResolver.calibrationFingerprint(profile) }.getOrNull()
                         ?: return@forEach
                     EngineSoundPerspective.entries.forEach { perspective ->
@@ -1486,6 +1571,40 @@ class DriveController(context: Context) {
         loudnessNormalizationSummary.set(
             loudnessNormalizationRepository.summary(currentCalibrationFingerprints()),
         )
+    }
+
+    private fun refreshAcousticDiagnosticSummary() {
+        val profileNames = buildMap {
+            calibrationProfiles().forEach { profile ->
+                EngineSoundPerspective.entries.forEach { perspective ->
+                    put(
+                        LoudnessCalibrationKey(profile.id, profile.packGroup, perspective),
+                        "${profile.displayName} ${perspective.name}",
+                    )
+                }
+            }
+        }
+        val records = loudnessNormalizationRepository.records().associateBy { it.key }
+        val currentTargets = buildMap {
+            currentCalibrationFingerprints().forEach { (key, fingerprint) ->
+                val record = records[key]
+                if (LoudnessCalibrationRecordValidity.isValid(record, fingerprint)) {
+                    put(key, fingerprint to requireNotNull(record).normalizationDb)
+                }
+            }
+        }
+        acousticDiagnosticSummary.set(
+            acousticDiagnosticRepository.summary(
+                profileNames = profileNames,
+                currentTargets = currentTargets,
+                scopePackGroup = FmodBankProfiles.moddedCarsPackId,
+            ),
+        )
+    }
+
+    private fun refreshAcousticAdjustmentAndSummary() {
+        refreshAcousticDiagnosticSummary()
+        syncMasterOutputGainToAudioEngine()
     }
 
     private fun runLoop(runId: Long) {
@@ -1821,7 +1940,7 @@ class DriveController(context: Context) {
     }
 
     private fun handleAudioFocusChange(event: AudioFocusEvent) {
-        if (audioEngine.isLoudnessCalibrationRunning()) return
+        if (audioEngine.isExclusiveAudioOperationRunning()) return
 
         when (event) {
             AudioFocusEvent.TRANSIENT_LOSS, AudioFocusEvent.TRANSIENT_DUCK -> {

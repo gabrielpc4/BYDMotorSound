@@ -18,13 +18,14 @@ internal data class LoudnessCalibrationRunResult(
 
 internal class FmodLoudnessCalibrationRunner(
     context: Context,
-    private val profiles: List<FmodBankProfile>,
+    profiles: List<FmodBankProfile>,
     private val repository: LoudnessNormalizationRepository,
     private val resume: Boolean,
     private val cancellationRequested: AtomicBoolean,
     private val onProgress: (LoudnessCalibrationProgress) -> Unit,
 ) {
     private val appContext = context.applicationContext
+    private val profiles = profiles.filter { it.packGroup == FmodBankProfiles.moddedCarsPackId }
     private val bankResolver = FmodBankResolver(appContext)
     private val diagnosticFile = File(appContext.filesDir, DIAGNOSTIC_FILE_NAME)
 

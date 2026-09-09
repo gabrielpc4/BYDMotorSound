@@ -3,8 +3,9 @@ package com.gabrielpc.enginesoundsimulator.simulation
 import kotlin.math.abs
 
 /**
- * Low-speed crawl needle: below 20 km/h, throttle above 1% glides the tach toward 3,000 RPM;
- * lifting the throttle or braking glides back to idle.
+ * Low-speed crawl needle: when normal drivetrain logic would sit below 3,000 RPM, throttle above
+ * 1% glides the tach toward 3,000 RPM; lifting the throttle or braking glides back to idle.
+ * Once normal logic would reach 3,000 RPM or higher, this override steps aside.
  */
 internal class LowSpeedCrawlRpmHold {
     enum class Phase {
@@ -27,11 +28,11 @@ internal class LowSpeedCrawlRpmHold {
     fun step(
         dt: Double,
         enabled: Boolean,
-        speedKmh: Double,
         brake: Double,
         throttle: Double,
         idleRpm: Double,
         currentRpm: Double,
+        baselineRpm: Double,
         launchControlActive: Boolean,
         cruisingReturnActive: Boolean,
         inDrive: Boolean,
@@ -46,7 +47,7 @@ internal class LowSpeedCrawlRpmHold {
             return null
         }
 
-        if (speedKmh >= RELEASE_SPEED_KMH) {
+        if (baselineRpm >= HOLD_RPM) {
             clear()
             return null
         }
@@ -120,7 +121,6 @@ internal class LowSpeedCrawlRpmHold {
 
     companion object {
         const val HOLD_RPM = 3_000.0
-        const val RELEASE_SPEED_KMH = 20.0
         const val THROTTLE_ENGAGE_THRESHOLD = 0.01
         const val BRAKE_THRESHOLD = 0.05
         const val APPROACH_RESPONSE_SECONDS = 1.8

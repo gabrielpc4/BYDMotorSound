@@ -2468,7 +2468,7 @@ private fun AutomaticTransmissionSettingsControl(
         )
         TachometerShiftOverlayToggle(
             title = "LOW SPEED CRAWL RPM HOLD",
-            description = "Below 20 km/h, throttle above 1% glides the tach to 3,000 RPM. Lifting the pedal or braking glides back to idle.",
+            description = "While normal RPM would stay below 3,000, throttle above 1% glides the tach to 3,000 RPM. At or above 3,000 RPM naturally, normal logic takes over. Lifting the pedal or braking glides back to idle.",
             enabled = lowSpeedCrawlRpmHoldEnabled,
             onEnabledChange = onLowSpeedCrawlRpmHoldEnabledChange,
             modifier = Modifier.fillMaxWidth(),

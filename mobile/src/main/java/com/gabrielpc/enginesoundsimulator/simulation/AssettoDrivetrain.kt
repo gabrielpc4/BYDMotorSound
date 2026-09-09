@@ -538,7 +538,7 @@ internal class AssettoDrivetrain(
             automaticShifting = automaticShifting,
             transmissionPosition = transmissionPosition,
         )
-        applyRacingStompDownshift(dt)
+        applyRacingStompDownshift(dt, rawGas)
         updateEmergencyUpshift(dt)
         updateAeroForSpeed(speedMetersPerSecond)
 
@@ -570,14 +570,19 @@ internal class AssettoDrivetrain(
             controlsGas = 0.0
         }
 
+        val kickdownCatchUpUpshift = kickdownCatchUpUpshiftNeeded(rawGas)
         val requestedDirection = if (transmissionPosition == TransmissionPosition.DRIVE) {
-            manualShiftRequest.takeIf { it != 0 } ?: automaticRequest
+            when {
+                automaticRequest > 0 && kickdownCatchUpUpshift -> automaticRequest
+                manualShiftRequest != 0 -> manualShiftRequest
+                else -> automaticRequest
+            }
         } else {
             // Discard a stale request if the selector changed while a control
             // frame was in flight; P/N must not enter a synthetic shift cycle.
             0
         }
-        val requestedManualShift = manualShiftRequest != 0
+        val requestedManualShift = manualShiftRequest != 0 && requestedDirection == manualShiftRequest
         manualShiftRequest = 0
         if (acceptShift(requestedDirection, clutch, dt, controlsGas)) {
             shiftStarted = true
@@ -849,7 +854,35 @@ internal class AssettoDrivetrain(
             return coupledRpmForGear(gear)
         }
 
+        if (shouldLockRpmToMappedRoadSpeed() && gear >= 1) {
+            // Kickdown downshifts blend RPM toward the mapped target. Road speed can outrun that
+            // glide and cross the upshift line before the needle catches up.
+            return coupledRpmForGear(gear)
+        }
+
         return rpm
+    }
+
+    /**
+     * True when mapped road speed in the current gear already warrants an upshift, even if the
+     * displayed RPM is still catching up from a kickdown blend.
+     */
+    private fun kickdownCatchUpUpshiftNeeded(gas: Double): Boolean {
+        if (gear < 1 || shifting || automaticGasCutoff > 0.0) {
+            return false
+        }
+
+        if (!shouldLockRpmToMappedRoadSpeed()) {
+            return false
+        }
+
+        if (gear >= virtualGearProfile.virtualForwardGearCount) {
+            return false
+        }
+
+        val upshiftRpm = effectiveUpshiftTriggerRpm()
+        val shiftRpm = coupledRpmForGear(gear)
+        return automaticUpshiftAllowed(shiftRpm, upshiftRpm, gas)
     }
 
     private fun automaticShiftDecision(
@@ -1066,8 +1099,8 @@ internal class AssettoDrivetrain(
     }
 
     /**
-     * From a standstill, glide the tach toward 3,000 RPM and hold below 20 km/h until the driver
-     * brakes or road speed passes the release threshold.
+     * Glide the tach toward 3,000 RPM while normal mapped RPM would stay below that line; release
+     * once baseline drivetrain logic would reach 3,000 RPM or higher.
      */
     private fun applyLowSpeedCrawlRpmHold(
         dt: Double,
@@ -1085,14 +1118,15 @@ internal class AssettoDrivetrain(
         } else {
             Double.MAX_VALUE
         }
+        val baselineRpm = rpm
         val overrideRpm = lowSpeedCrawlRpmHold.step(
             dt = dt,
             enabled = lowSpeedCrawlRpmHoldEnabled,
-            speedKmh = speedMetersPerSecond * 3.6,
             brake = brake,
             throttle = rawGas,
             idleRpm = physics.engine.idleRpm,
             currentRpm = rpm,
+            baselineRpm = baselineRpm,
             launchControlActive = launchControlPhase != LaunchControlPhase.INACTIVE,
             cruisingReturnActive = cruisingReturn.active,
             inDrive = transmissionPosition == TransmissionPosition.DRIVE,
@@ -1472,10 +1506,18 @@ internal class AssettoDrivetrain(
         clearManualKickdownFollowUp()
     }
 
-    private fun applyRacingStompDownshift(dt: Double) {
+    private fun applyRacingStompDownshift(dt: Double, rawGas: Double) {
         val targetGear = racingStompPendingTargetGear ?: return
 
         if (shifting) {
+            return
+        }
+
+        if (kickdownCatchUpUpshiftNeeded(rawGas)) {
+            if (manualKickdownSequenceActive) {
+                manualKickdownAutomaticUpshiftPending = true
+            }
+            clearRacingStompPending()
             return
         }
 

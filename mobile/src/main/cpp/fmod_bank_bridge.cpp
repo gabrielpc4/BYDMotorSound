@@ -2,6 +2,7 @@
 
 #include <android/log.h>
 #include <fmod.hpp>
+#include <fmod_dsp_effects.h>
 #include <fmod_studio.hpp>
 
 #include <algorithm>
@@ -354,6 +355,94 @@ FMOD_DSP_DESCRIPTION createGainDescriptor() {
     return description;
 }
 
+struct OutputGateState {
+    std::atomic<bool> muted{true};
+};
+
+FMOD_RESULT F_CALL createOutputGate(FMOD_DSP_STATE* state) {
+    if (state == nullptr) {
+        return FMOD_ERR_INVALID_PARAM;
+    }
+    state->plugindata = new OutputGateState();
+    return FMOD_OK;
+}
+
+FMOD_RESULT F_CALL releaseOutputGate(FMOD_DSP_STATE* state) {
+    if (state != nullptr) {
+        delete static_cast<OutputGateState*>(state->plugindata);
+        state->plugindata = nullptr;
+    }
+    return FMOD_OK;
+}
+
+FMOD_RESULT F_CALL setOutputGateMuted(FMOD_DSP_STATE* state, int, FMOD_BOOL value) {
+    if (state != nullptr && state->plugindata != nullptr) {
+        static_cast<OutputGateState*>(state->plugindata)->muted.store(
+            value != 0,
+            std::memory_order_relaxed
+        );
+    }
+    return FMOD_OK;
+}
+
+FMOD_RESULT F_CALL applyOutputGate(
+    FMOD_DSP_STATE* state,
+    float* inbuffer,
+    float* outbuffer,
+    unsigned int length,
+    int inchannels,
+    int* outchannels
+) {
+    const int channels = std::max(0, inchannels);
+    if (outchannels != nullptr) {
+        *outchannels = channels;
+    }
+    if (inbuffer == nullptr || outbuffer == nullptr || channels == 0) {
+        return FMOD_OK;
+    }
+
+    const auto* gate = state == nullptr ? nullptr : static_cast<const OutputGateState*>(state->plugindata);
+    const bool muted = gate == nullptr || gate->muted.load(std::memory_order_relaxed);
+    const unsigned int samples = length * static_cast<unsigned int>(channels);
+    if (muted) {
+        std::fill_n(outbuffer, samples, 0.0f);
+    } else {
+        std::memcpy(outbuffer, inbuffer, samples * sizeof(float));
+    }
+    return FMOD_OK;
+}
+
+FMOD_DSP_DESCRIPTION createOutputGateDescriptor() {
+    static FMOD_DSP_PARAMETER_DESC muted{};
+    static FMOD_DSP_PARAMETER_DESC* parameters[] = {&muted};
+    static bool initialized = false;
+    if (!initialized) {
+        FMOD_DSP_INIT_PARAMDESC_BOOL(
+            muted,
+            "Muted",
+            "",
+            "Silence all samples at the final calibration output gate.",
+            true,
+            nullptr
+        );
+        initialized = true;
+    }
+
+    FMOD_DSP_DESCRIPTION description{};
+    description.pluginsdkversion = FMOD_PLUGIN_SDK_VERSION;
+    std::strncpy(description.name, "Calibration Output Gate", sizeof(description.name) - 1);
+    description.version = 0x00010000;
+    description.numinputbuffers = 1;
+    description.numoutputbuffers = 1;
+    description.create = createOutputGate;
+    description.release = releaseOutputGate;
+    description.read = applyOutputGate;
+    description.numparameters = 1;
+    description.paramdesc = parameters;
+    description.setparameterbool = setOutputGateMuted;
+    return description;
+}
+
 bool parseGuid(const std::string& text, FMOD_GUID* output) {
     if (output == nullptr) {
         return false;
@@ -616,6 +705,12 @@ struct BankEventCatalogEntry {
     std::string classification;
 };
 
+struct EngineLoudnessMeasurement {
+    float integratedLufs = -80.0f;
+    float maximumTruePeak = -80.0f;
+    bool valid = false;
+};
+
 template <std::size_t Capacity>
 void copyDiagnosticText(std::array<char, Capacity>* destination, const std::string& source) {
     if (destination == nullptr) return;
@@ -641,75 +736,23 @@ public:
         bool diagnosticsEnabled
     ) {
         std::lock_guard<std::mutex> lock(mutex_);
-        closeLocked();
-        setDiagnosticsEnabledLocked(diagnosticsEnabled);
-
-        FMOD_RESULT result = FMOD::Studio::System::create(&studio_);
-        if (result != FMOD_OK) {
-            return resultText(result, "Studio::System::create");
-        }
-
-        result = studio_->getCoreSystem(&core_);
-        if (result != FMOD_OK) {
-            return failAndCloseLocked(resultText(result, "getCoreSystem"));
-        }
-        result = core_->setSoftwareFormat(kFmodOutputRate, FMOD_SPEAKERMODE_STEREO, 0);
-        if (result != FMOD_OK) {
-            return failAndCloseLocked(resultText(result, "setSoftwareFormat"));
-        }
-        result = core_->setSoftwareChannels(kFmodRealChannelCap);
-        if (result != FMOD_OK) {
-            return failAndCloseLocked(resultText(result, "setSoftwareChannels"));
-        }
-        result = core_->setDSPBufferSize(kFmodDspBlockSize, kFmodDspBlocks);
-        if (result != FMOD_OK) {
-            return failAndCloseLocked(resultText(result, "setDSPBufferSize"));
-        }
-        result = studio_->initialize(
-            kFmodLogicalChannelCap,
-            FMOD_STUDIO_INIT_SYNCHRONOUS_UPDATE,
-            FMOD_INIT_NORMAL,
-            nullptr
+        const std::string initializationError = initializeSystemLocked(
+            commonStringsBankPath,
+            commonBankPath,
+            alfaBackfireDirectory,
+            true,
+            diagnosticsEnabled
         );
-        if (result != FMOD_OK) {
-            return failAndCloseLocked(resultText(result, "Studio::System::initialize"));
+        if (!initializationError.empty()) {
+            return initializationError;
         }
 
-        loadAlfaBackfireSamplesLocked(alfaBackfireDirectory);
-        loadShiftSamplesLocked(alfaBackfireDirectory);
-
-        distanceFilter_ = createDistanceFilterDescriptor();
-        result = studio_->registerPlugin(&distanceFilter_);
-        if (result != FMOD_OK) {
-            return failAndCloseLocked(resultText(result, "register FMOD Distance Filter"));
-        }
-        gain_ = createGainDescriptor();
-        result = studio_->registerPlugin(&gain_);
-        if (result != FMOD_OK) {
-            return failAndCloseLocked(resultText(result, "register FMOD Gain"));
-        }
-
-        result = studio_->loadBankFile(
-            commonStringsBankPath.c_str(),
-            FMOD_STUDIO_LOAD_BANK_NORMAL,
-            &commonStringsBank_
-        );
-        if (result != FMOD_OK) {
-            return failAndCloseLocked(resultText(result, "load common.strings.bank"));
-        }
-        result = studio_->loadBankFile(commonBankPath.c_str(), FMOD_STUDIO_LOAD_BANK_NORMAL, &commonBank_);
-        if (result != FMOD_OK) {
-            return failAndCloseLocked(resultText(result, "load common.bank"));
-        }
+        FMOD_RESULT result = FMOD_OK;
         result = studio_->loadBankFile(carBankPath.c_str(), FMOD_STUDIO_LOAD_BANK_NORMAL, &bank_);
         if (result != FMOD_OK) {
             return failAndCloseLocked(resultText(result, "load car bank"));
         }
 
-        result = commonBank_->loadSampleData();
-        if (result != FMOD_OK) {
-            return failAndCloseLocked(resultText(result, "load common bank sample data"));
-        }
         result = bank_->loadSampleData();
         if (result != FMOD_OK) {
             return failAndCloseLocked(resultText(result, "load car bank sample data"));
@@ -751,6 +794,190 @@ public:
         }
         active_ = true;
         return {};
+    }
+
+    std::string beginLoudnessCalibration(
+        const std::string& commonStringsBankPath,
+        const std::string& commonBankPath
+    ) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const std::string error = initializeSystemLocked(
+            commonStringsBankPath,
+            commonBankPath,
+            {},
+            false,
+            false
+        );
+        if (!error.empty()) {
+            return error;
+        }
+        calibrationMode_ = true;
+        calibrationOutputMuted_ = true;
+        masterOutputGain_ = 1.0f;
+        masterChannelGroup_->setVolume(1.0f);
+        outputGateDsp_->setParameterBool(0, true);
+
+        return {};
+    }
+
+    std::string loadCalibrationCar(
+        const std::string& carBankPath,
+        float idleRpm,
+        float limiterRpm,
+        const std::array<float, 12>& spatial
+    ) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!calibrationMode_ || studio_ == nullptr || bank_ != nullptr) {
+            return "FMOD loudness calibration batch is not ready for a car.";
+        }
+
+        FMOD_RESULT result = studio_->loadBankFile(
+            carBankPath.c_str(),
+            FMOD_STUDIO_LOAD_BANK_NORMAL,
+            &bank_
+        );
+        if (result != FMOD_OK) {
+            return resultText(result, "load calibration car bank");
+        }
+        result = bank_->loadSampleData();
+        if (result != FMOD_OK) {
+            unloadCalibrationCarLocked();
+            return resultText(result, "load calibration car sample data");
+        }
+
+        discoverEventsLocked(carBankPath);
+        if (events_.find("engine_int") == events_.end() || events_.find("engine_ext") == events_.end()) {
+            unloadCalibrationCarLocked();
+            return "The installed bank has no engine_int/engine_ext event pair.";
+        }
+        engineAttributes_ = attributesAt(spatial[0], spatial[1], spatial[2]);
+        backfireAttributes_ = attributesAt(spatial[3], spatial[4], spatial[5]);
+        cabinListenerAttributes_ = attributesAt(spatial[6], spatial[7], spatial[8]);
+        exteriorListenerAttributes_ = attributesAt(spatial[9], spatial[10], spatial[11]);
+        idleRpm_ = std::max(1.0f, idleRpm);
+        limiterRpm_ = std::max(idleRpm_ + 1.0f, limiterRpm);
+        active_ = true;
+
+        return {};
+    }
+
+    std::string pumpLoudnessCalibration() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!calibrationMode_ || studio_ == nullptr || bank_ == nullptr) {
+            return "FMOD loudness calibration car is not loaded.";
+        }
+
+        const FMOD_RESULT result = studio_->update();
+        return result == FMOD_OK ? std::string{} : resultText(result, "calibration Studio::System::update");
+    }
+
+    std::string beginEngineLoudnessMeasurement(int perspective) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!calibrationMode_ || !active_ || studio_ == nullptr || bank_ == nullptr) {
+            return "FMOD loudness calibration car is not loaded.";
+        }
+        releaseEventSlotsLocked();
+        perspective_ = perspective == kPerspectiveExterior ? kPerspectiveExterior : 0;
+        exteriorPureAudio_ = perspective_ == kPerspectiveExterior;
+        const std::string selected = perspective_ == kPerspectiveExterior ? "engine_ext" : "engine_int";
+        const auto event = events_.find(selected);
+        if (event == events_.end() || createEventSlotLocked(selected, event->second) == nullptr) {
+            return lastError_.empty() ? "The selected calibration engine event is unavailable." : lastError_;
+        }
+        EventSlot* selectedSlot = slot(selected);
+        const FMOD_RESULT volumeResult = selectedSlot->instance->setVolume(1.0f);
+        if (volumeResult != FMOD_OK) {
+            releaseEventSlotsLocked();
+            return resultText(volumeResult, "set calibration engine event unity volume");
+        }
+        applySpatialAttributesLocked();
+        setListenerLocked();
+        setParameterQuietly(selected, "rpms", idleRpm_, false);
+        setParameterQuietly(selected, "throttle", 1.0f, false);
+        setParameterQuietly(selected, "drivetrain_speed", 0.0f, false);
+        startEventLocked(selected);
+        const FMOD_RESULT result = studio_->update();
+
+        return result == FMOD_OK ? std::string{} : resultText(result, "start calibration engine event");
+    }
+
+    std::string updateEngineLoudnessMeasurement(float rpm, float drivetrainSpeed) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!calibrationMode_ || !active_ || studio_ == nullptr) {
+            return "FMOD loudness calibration measurement is not active.";
+        }
+        const std::string selected = perspective_ == kPerspectiveExterior ? "engine_ext" : "engine_int";
+        if (slot(selected) == nullptr) {
+            return "The selected calibration engine event is not active.";
+        }
+        setParameterQuietly(selected, "rpms", std::max(1.0f, rpm), false);
+        setParameterQuietly(selected, "throttle", 1.0f, false);
+        setParameterQuietly(selected, "drivetrain_speed", drivetrainSpeed, false);
+        const FMOD_RESULT result = studio_->update();
+
+        return result == FMOD_OK ? std::string{} : resultText(result, "update calibration engine event");
+    }
+
+    void resetEngineLoudnessMeasurement() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (calibrationLoudnessMeterDsp_ == nullptr) {
+            return;
+        }
+        calibrationLoudnessMeterDsp_->setParameterInt(
+            FMOD_DSP_LOUDNESS_METER_STATE,
+            FMOD_DSP_LOUDNESS_METER_STATE_RESET_ALL
+        );
+        calibrationLoudnessMeterDsp_->setParameterInt(
+            FMOD_DSP_LOUDNESS_METER_STATE,
+            FMOD_DSP_LOUDNESS_METER_STATE_ANALYZING
+        );
+    }
+
+    EngineLoudnessMeasurement engineLoudnessMeasurement() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        EngineLoudnessMeasurement measurement;
+        if (calibrationLoudnessMeterDsp_ == nullptr) {
+            return measurement;
+        }
+        void* data = nullptr;
+        unsigned int length = 0;
+        const FMOD_RESULT result = calibrationLoudnessMeterDsp_->getParameterData(
+            FMOD_DSP_LOUDNESS_METER_INFO,
+            &data,
+            &length,
+            nullptr,
+            0
+        );
+        if (result != FMOD_OK || data == nullptr || length < sizeof(FMOD_DSP_LOUDNESS_METER_INFO_TYPE)) {
+            return measurement;
+        }
+        const auto* info = static_cast<const FMOD_DSP_LOUDNESS_METER_INFO_TYPE*>(data);
+        measurement.integratedLufs = info->integratedloudness;
+        measurement.maximumTruePeak = info->maxtruepeak;
+        measurement.valid = std::isfinite(measurement.integratedLufs) &&
+            std::isfinite(measurement.maximumTruePeak) && measurement.integratedLufs > -80.0f;
+        calibrationLoudnessMeterDsp_->setParameterInt(
+            FMOD_DSP_LOUDNESS_METER_STATE,
+            FMOD_DSP_LOUDNESS_METER_STATE_PAUSED
+        );
+
+        return measurement;
+    }
+
+    std::string calibrationSourceSummary() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const std::string selected = perspective_ == kPerspectiveExterior ? "engine_ext" : "engine_int";
+        return "event=" + selected + ";eventSlots=" + std::to_string(slots_.size()) +
+            ";coreOverrideChannels=" + std::to_string(
+                (alfaBackfireChannel_ == nullptr ? 0 : 1) + (shiftChannel_ == nullptr ? 0 : 1)
+            ) + ";masterGain=" + std::to_string(masterOutputGain_) +
+            ";outputMuted=" + (calibrationOutputMuted_ ? "1" : "0") +
+            ";exteriorPure=" + (exteriorPureAudio_ ? "1" : "0");
+    }
+
+    void unloadCalibrationCar() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        unloadCalibrationCarLocked();
     }
 
     std::string update(
@@ -1002,6 +1229,22 @@ public:
         applyEventOverridesLocked();
     }
 
+    void setMasterOutputGain(float linear) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        masterOutputGain_ = std::isfinite(linear) ? std::max(0.0f, linear) : 0.0f;
+        if (masterChannelGroup_ != nullptr) {
+            masterChannelGroup_->setVolume(masterOutputGain_);
+        }
+    }
+
+    void setCalibrationOutputMuted(bool muted) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        calibrationOutputMuted_ = muted;
+        if (outputGateDsp_ != nullptr) {
+            outputGateDsp_->setParameterBool(0, muted);
+        }
+    }
+
     void setOverrideEffectsHostGain(float gain) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!active_) {
@@ -1177,11 +1420,20 @@ public:
 
     float masterOutputLevel() {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (!active_) {
+        if (!active_ || outputMeterDsp_ == nullptr) {
             return 0.0f;
         }
 
-        return measureOutputLevelLocked();
+        FMOD_DSP_METERING_INFO outputInfo{};
+        if (outputMeterDsp_->getMeteringInfo(nullptr, &outputInfo) != FMOD_OK) {
+            return 0.0f;
+        }
+        float peak = 0.0f;
+        for (int index = 0; index < outputInfo.numchannels; ++index) {
+            peak = std::max(peak, outputInfo.peaklevel[index]);
+        }
+
+        return peak;
     }
 
     std::vector<std::string> voiceSnapshots() {
@@ -1995,10 +2247,220 @@ private:
         return FMOD_OK;
     }
 
+    std::string initializeSystemLocked(
+        const std::string& commonStringsBankPath,
+        const std::string& commonBankPath,
+        const std::string& overrideSamplesDirectory,
+        bool loadOverrideSamples,
+        bool diagnosticsEnabled
+    ) {
+        closeLocked();
+        setDiagnosticsEnabledLocked(diagnosticsEnabled);
+
+        FMOD_RESULT result = FMOD::Studio::System::create(&studio_);
+        if (result != FMOD_OK) {
+            return resultText(result, "Studio::System::create");
+        }
+        result = studio_->getCoreSystem(&core_);
+        if (result != FMOD_OK) {
+            return failAndCloseLocked(resultText(result, "getCoreSystem"));
+        }
+        result = core_->setSoftwareFormat(kFmodOutputRate, FMOD_SPEAKERMODE_STEREO, 0);
+        if (result != FMOD_OK) {
+            return failAndCloseLocked(resultText(result, "setSoftwareFormat"));
+        }
+        result = core_->setSoftwareChannels(kFmodRealChannelCap);
+        if (result != FMOD_OK) {
+            return failAndCloseLocked(resultText(result, "setSoftwareChannels"));
+        }
+        result = core_->setDSPBufferSize(kFmodDspBlockSize, kFmodDspBlocks);
+        if (result != FMOD_OK) {
+            return failAndCloseLocked(resultText(result, "setDSPBufferSize"));
+        }
+        result = studio_->initialize(
+            kFmodLogicalChannelCap,
+            FMOD_STUDIO_INIT_SYNCHRONOUS_UPDATE,
+            FMOD_INIT_NORMAL,
+            nullptr
+        );
+        if (result != FMOD_OK) {
+            return failAndCloseLocked(resultText(result, "Studio::System::initialize"));
+        }
+
+        const std::string masterOutputError = setupMasterOutputLocked();
+        if (!masterOutputError.empty()) {
+            return failAndCloseLocked(masterOutputError);
+        }
+        if (loadOverrideSamples) {
+            loadAlfaBackfireSamplesLocked(overrideSamplesDirectory);
+            loadShiftSamplesLocked(overrideSamplesDirectory);
+        }
+
+        distanceFilter_ = createDistanceFilterDescriptor();
+        result = studio_->registerPlugin(&distanceFilter_);
+        if (result != FMOD_OK) {
+            return failAndCloseLocked(resultText(result, "register FMOD Distance Filter"));
+        }
+        gain_ = createGainDescriptor();
+        result = studio_->registerPlugin(&gain_);
+        if (result != FMOD_OK) {
+            return failAndCloseLocked(resultText(result, "register FMOD Gain"));
+        }
+        result = studio_->loadBankFile(
+            commonStringsBankPath.c_str(),
+            FMOD_STUDIO_LOAD_BANK_NORMAL,
+            &commonStringsBank_
+        );
+        if (result != FMOD_OK) {
+            return failAndCloseLocked(resultText(result, "load common.strings.bank"));
+        }
+        result = studio_->loadBankFile(commonBankPath.c_str(), FMOD_STUDIO_LOAD_BANK_NORMAL, &commonBank_);
+        if (result != FMOD_OK) {
+            return failAndCloseLocked(resultText(result, "load common.bank"));
+        }
+        result = commonBank_->loadSampleData();
+        if (result != FMOD_OK) {
+            return failAndCloseLocked(resultText(result, "load common bank sample data"));
+        }
+
+        return {};
+    }
+
+    std::string setupMasterOutputLocked() {
+        if (core_ == nullptr) {
+            return "FMOD Core system is not available for master output setup.";
+        }
+
+        FMOD_RESULT result = core_->getMasterChannelGroup(&masterChannelGroup_);
+        if (result != FMOD_OK || masterChannelGroup_ == nullptr) {
+            return resultText(result, "getMasterChannelGroup");
+        }
+        result = masterChannelGroup_->getDSP(FMOD_CHANNELCONTROL_DSP_FADER, &masterFaderDsp_);
+        if (result != FMOD_OK || masterFaderDsp_ == nullptr) {
+            return resultText(result, "get master fader DSP");
+        }
+        result = core_->createDSPByType(FMOD_DSP_TYPE_LOUDNESS_METER, &calibrationLoudnessMeterDsp_);
+        if (result != FMOD_OK) {
+            return resultText(result, "create calibration loudness meter");
+        }
+        result = core_->createDSPByType(FMOD_DSP_TYPE_LIMITER, &masterLimiterDsp_);
+        if (result != FMOD_OK) {
+            return resultText(result, "create master limiter");
+        }
+        outputGateDescription_ = createOutputGateDescriptor();
+        result = core_->createDSP(&outputGateDescription_, &outputGateDsp_);
+        if (result != FMOD_OK) {
+            return resultText(result, "create calibration output gate");
+        }
+        result = core_->createDSPByType(FMOD_DSP_TYPE_FADER, &outputMeterDsp_);
+        if (result != FMOD_OK) {
+            return resultText(result, "create output meter");
+        }
+
+        result = calibrationLoudnessMeterDsp_->setParameterInt(
+            FMOD_DSP_LOUDNESS_METER_STATE,
+            FMOD_DSP_LOUDNESS_METER_STATE_PAUSED
+        );
+        if (result != FMOD_OK) return resultText(result, "pause calibration loudness meter");
+        result = masterLimiterDsp_->setParameterFloat(FMOD_DSP_LIMITER_RELEASETIME, 50.0f);
+        if (result != FMOD_OK) return resultText(result, "set master limiter release");
+        result = masterLimiterDsp_->setParameterFloat(FMOD_DSP_LIMITER_CEILING, -1.0f);
+        if (result != FMOD_OK) return resultText(result, "set master limiter ceiling");
+        result = masterLimiterDsp_->setParameterFloat(FMOD_DSP_LIMITER_MAXIMIZERGAIN, 0.0f);
+        if (result != FMOD_OK) return resultText(result, "disable master limiter maximizer gain");
+        result = masterLimiterDsp_->setParameterBool(FMOD_DSP_LIMITER_MODE, true);
+        if (result != FMOD_OK) return resultText(result, "link master limiter channels");
+        result = outputGateDsp_->setParameterBool(0, calibrationOutputMuted_);
+        if (result != FMOD_OK) return resultText(result, "initialize calibration output gate");
+        result = outputMeterDsp_->setParameterFloat(FMOD_DSP_FADER_GAIN, 0.0f);
+        if (result != FMOD_OK) return resultText(result, "set output meter unity gain");
+        result = outputMeterDsp_->setMeteringEnabled(false, true);
+        if (result != FMOD_OK) return resultText(result, "enable master output metering");
+        result = masterChannelGroup_->setVolumeRamp(true);
+        if (result != FMOD_OK) return resultText(result, "enable master fader ramp");
+        result = masterChannelGroup_->setVolume(masterOutputGain_);
+        if (result != FMOD_OK) return resultText(result, "set initial master output gain");
+
+        for (FMOD::DSP* dsp : {
+            calibrationLoudnessMeterDsp_,
+            masterLimiterDsp_,
+            outputGateDsp_,
+            outputMeterDsp_,
+        }) {
+            result = masterChannelGroup_->addDSP(FMOD_CHANNELCONTROL_DSP_HEAD, dsp);
+            if (result != FMOD_OK) {
+                return resultText(result, "add master output DSP");
+            }
+        }
+        const std::array<FMOD::DSP*, 5> orderedFromOutput = {
+            outputMeterDsp_,
+            outputGateDsp_,
+            masterLimiterDsp_,
+            masterFaderDsp_,
+            calibrationLoudnessMeterDsp_,
+        };
+        for (std::size_t index = 0; index < orderedFromOutput.size(); ++index) {
+            result = masterChannelGroup_->setDSPIndex(
+                orderedFromOutput[index],
+                static_cast<int>(index)
+            );
+            if (result != FMOD_OK) {
+                return resultText(result, "order master output DSP");
+            }
+        }
+
+        return {};
+    }
+
+    void releaseMasterDspLocked(FMOD::DSP*& dsp) {
+        if (dsp == nullptr) {
+            return;
+        }
+        if (masterChannelGroup_ != nullptr) {
+            masterChannelGroup_->removeDSP(dsp);
+        }
+        dsp->release();
+        dsp = nullptr;
+    }
+
     std::string failAndCloseLocked(std::string error) {
         lastError_ = std::move(error);
         closeLocked();
         return lastError_;
+    }
+
+    void releaseEventSlotsLocked() {
+        for (auto& pair : slots_) {
+            if (pair.second->instance == nullptr) {
+                continue;
+            }
+            pair.second->instance->setCallback(nullptr, 0);
+            pair.second->instance->setUserData(nullptr);
+            pair.second->instance->stop(FMOD_STUDIO_STOP_IMMEDIATE);
+            pair.second->instance->release();
+            pair.second->instance = nullptr;
+        }
+        slots_.clear();
+        embeddedChannelMultipliers_.clear();
+    }
+
+    void unloadCalibrationCarLocked() {
+        releaseEventSlotsLocked();
+        if (bank_ != nullptr) {
+            bank_->unloadSampleData();
+            bank_->unload();
+            bank_ = nullptr;
+        }
+        globalParameterNames_.clear();
+        globalParameterFallbacksReported_.clear();
+        globalParameterFailuresReported_.clear();
+        events_.clear();
+        eventPaths_.clear();
+        eventCatalog_.clear();
+        loadedProfileId_.clear();
+        active_ = false;
+        exteriorPureAudio_ = false;
+        perspective_ = 0;
     }
 
     void muteBlockedSkylineSubSoundsInEventLocked(EventSlot& event) {
@@ -2034,17 +2496,7 @@ private:
         }
         shiftSamplesLoaded_ = false;
         alfaBackfireSamplesLoaded_ = false;
-        for (auto& pair : slots_) {
-            if (pair.second->instance != nullptr) {
-                pair.second->instance->setCallback(nullptr, 0);
-                pair.second->instance->setUserData(nullptr);
-                pair.second->instance->stop(FMOD_STUDIO_STOP_IMMEDIATE);
-                pair.second->instance->release();
-                pair.second->instance = nullptr;
-            }
-        }
-        slots_.clear();
-        embeddedChannelMultipliers_.clear();
+        releaseEventSlotsLocked();
         globalParameterNames_.clear();
         globalParameterFallbacksReported_.clear();
         globalParameterFailuresReported_.clear();
@@ -2057,6 +2509,12 @@ private:
             recentSources_.clear();
             voiceStartTimes_.clear();
         }
+        releaseMasterDspLocked(outputMeterDsp_);
+        releaseMasterDspLocked(outputGateDsp_);
+        releaseMasterDspLocked(masterLimiterDsp_);
+        releaseMasterDspLocked(calibrationLoudnessMeterDsp_);
+        masterFaderDsp_ = nullptr;
+        masterChannelGroup_ = nullptr;
         if (bank_ != nullptr) {
             bank_->unload();
         }
@@ -2075,6 +2533,8 @@ private:
         bank_ = nullptr;
         commonBank_ = nullptr;
         commonStringsBank_ = nullptr;
+        calibrationOutputMuted_ = true;
+        calibrationMode_ = false;
         active_ = false;
         hasTurbo_ = false;
         hasEmbeddedSupercharger_.store(false, std::memory_order_relaxed);
@@ -2712,68 +3172,6 @@ private:
         }
     }
 
-    static void accumulateChannelAudibilityLocked(FMOD::Channel* channel, float* totalAudibilitySquared) {
-        if (channel == nullptr || totalAudibilitySquared == nullptr) {
-            return;
-        }
-
-        float audibility = 0.0f;
-        if (channel->getAudibility(&audibility) != FMOD_OK) {
-            return;
-        }
-
-        *totalAudibilitySquared += audibility * audibility;
-    }
-
-    void accumulateAudibilitySquaredLocked(FMOD::ChannelGroup* group, float* totalAudibilitySquared) {
-        if (group == nullptr || totalAudibilitySquared == nullptr) {
-            return;
-        }
-
-        int channelCount = 0;
-        if (group->getNumChannels(&channelCount) == FMOD_OK) {
-            for (int index = 0; index < channelCount; ++index) {
-                FMOD::Channel* channel = nullptr;
-                if (group->getChannel(index, &channel) != FMOD_OK || channel == nullptr) {
-                    continue;
-                }
-                accumulateChannelAudibilityLocked(channel, totalAudibilitySquared);
-            }
-        }
-
-        int childCount = 0;
-        if (group->getNumGroups(&childCount) != FMOD_OK) {
-            return;
-        }
-
-        for (int index = 0; index < childCount; ++index) {
-            FMOD::ChannelGroup* child = nullptr;
-            if (group->getGroup(index, &child) == FMOD_OK && child != nullptr) {
-                accumulateAudibilitySquaredLocked(child, totalAudibilitySquared);
-            }
-        }
-    }
-
-    float measureOutputLevelLocked() {
-        float totalAudibilitySquared = 0.0f;
-        for (auto& pair : slots_) {
-            if (pair.second->instance == nullptr) {
-                continue;
-            }
-
-            FMOD::ChannelGroup* root = nullptr;
-            if (pair.second->instance->getChannelGroup(&root) != FMOD_OK || root == nullptr) {
-                continue;
-            }
-
-            accumulateAudibilitySquaredLocked(root, &totalAudibilitySquared);
-        }
-
-        accumulateChannelAudibilityLocked(alfaBackfireChannel_, &totalAudibilitySquared);
-        accumulateChannelAudibilityLocked(shiftChannel_, &totalAudibilitySquared);
-        return std::sqrt(totalAudibilitySquared);
-    }
-
     void visitChannelGroupLocked(
         const EventSlot& event,
         FMOD::ChannelGroup* group,
@@ -2908,8 +3306,15 @@ private:
     FMOD::Studio::Bank* bank_ = nullptr;
     FMOD::Studio::Bank* commonStringsBank_ = nullptr;
     FMOD::Studio::Bank* commonBank_ = nullptr;
+    FMOD::ChannelGroup* masterChannelGroup_ = nullptr;
+    FMOD::DSP* calibrationLoudnessMeterDsp_ = nullptr;
+    FMOD::DSP* masterFaderDsp_ = nullptr;
+    FMOD::DSP* masterLimiterDsp_ = nullptr;
+    FMOD::DSP* outputGateDsp_ = nullptr;
+    FMOD::DSP* outputMeterDsp_ = nullptr;
     FMOD_DSP_DESCRIPTION distanceFilter_{};
     FMOD_DSP_DESCRIPTION gain_{};
+    FMOD_DSP_DESCRIPTION outputGateDescription_{};
     std::unordered_map<std::string, FMOD::Studio::EventDescription*> events_;
     std::unordered_map<std::string, std::string> eventPaths_;
     std::vector<BankEventCatalogEntry> eventCatalog_;
@@ -2923,6 +3328,8 @@ private:
     float hostEngineExteriorGain_ = 1.0f;
     float hostEffectsGain_ = 2.0f;
     float overrideEffectsHostGain_ = 1.0f;
+    float masterOutputGain_ = 1.0f;
+    bool calibrationOutputMuted_ = true;
     std::string loadedProfileId_;
     float transmissionGain_ = 1.0f;
     float gearShiftGain_ = 1.0f;
@@ -2965,6 +3372,7 @@ private:
     float tractionDecay_ = 10.0f;
     int perspective_ = 0;
     bool active_ = false;
+    bool calibrationMode_ = false;
     bool exteriorPureAudio_ = false;
     float minimumAudioThrottle_ = 1.0f;
     float smoothedEngineAudioThrottle_ = 1.0f;
@@ -3025,6 +3433,17 @@ jobjectArray toJavaStringArray(JNIEnv* environment, const std::vector<std::strin
         environment->SetObjectArrayElement(result, static_cast<jsize>(index), value);
         environment->DeleteLocalRef(value);
     }
+    return result;
+}
+
+jdoubleArray toJavaMeasurement(JNIEnv* environment, const EngineLoudnessMeasurement& measurement) {
+    const std::array<jdouble, 3> values = {
+        static_cast<jdouble>(measurement.integratedLufs),
+        static_cast<jdouble>(measurement.maximumTruePeak),
+        measurement.valid ? 1.0 : 0.0,
+    };
+    jdoubleArray result = environment->NewDoubleArray(static_cast<jsize>(values.size()));
+    environment->SetDoubleArrayRegion(result, 0, static_cast<jsize>(values.size()), values.data());
     return result;
 }
 
@@ -3090,6 +3509,101 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_open(
             diagnosticsEnabled == JNI_TRUE
         )
     );
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_beginLoudnessCalibration(
+    JNIEnv* environment,
+    jobject,
+    jstring commonStringsBankPath,
+    jstring commonBankPath
+) {
+    return resultString(
+        environment,
+        runtime.beginLoudnessCalibration(
+            utfString(environment, commonStringsBankPath),
+            utfString(environment, commonBankPath)
+        )
+    );
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_loadCalibrationCar(
+    JNIEnv* environment,
+    jobject,
+    jstring carBankPath,
+    jfloat idleRpm,
+    jfloat limiterRpm,
+    jfloatArray spatial
+) {
+    return resultString(
+        environment,
+        runtime.loadCalibrationCar(
+            utfString(environment, carBankPath),
+            idleRpm,
+            limiterRpm,
+            spatialArray(environment, spatial)
+        )
+    );
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_pumpLoudnessCalibration(
+    JNIEnv* environment,
+    jobject
+) {
+    return resultString(environment, runtime.pumpLoudnessCalibration());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_beginEngineLoudnessMeasurement(
+    JNIEnv* environment,
+    jobject,
+    jint perspective
+) {
+    return resultString(environment, runtime.beginEngineLoudnessMeasurement(perspective));
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_updateEngineLoudnessMeasurement(
+    JNIEnv* environment,
+    jobject,
+    jfloat rpm,
+    jfloat drivetrainSpeed
+) {
+    return resultString(environment, runtime.updateEngineLoudnessMeasurement(rpm, drivetrainSpeed));
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_resetEngineLoudnessMeasurement(
+    JNIEnv*,
+    jobject
+) {
+    runtime.resetEngineLoudnessMeasurement();
+}
+
+extern "C" JNIEXPORT jdoubleArray JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_engineLoudnessMeasurement(
+    JNIEnv* environment,
+    jobject
+) {
+    return toJavaMeasurement(environment, runtime.engineLoudnessMeasurement());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_calibrationSourceSummary(
+    JNIEnv* environment,
+    jobject
+) {
+    return environment->NewStringUTF(runtime.calibrationSourceSummary().c_str());
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_unloadCalibrationCar(
+    JNIEnv*,
+    jobject
+) {
+    runtime.unloadCalibrationCar();
 }
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -3168,6 +3682,20 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_masterOutputL
     jobject
 ) {
     return runtime.masterOutputLevel();
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setMasterOutputGain(
+    JNIEnv*, jobject, jfloat linear
+) {
+    runtime.setMasterOutputGain(linear);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setCalibrationOutputMuted(
+    JNIEnv*, jobject, jboolean muted
+) {
+    runtime.setCalibrationOutputMuted(muted == JNI_TRUE);
 }
 
 extern "C" JNIEXPORT jobjectArray JNICALL

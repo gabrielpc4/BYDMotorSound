@@ -35,6 +35,7 @@ enum class AudioFocusEvent {
 class EngineAudioEngine(context: Context) {
     private val appContext = context.applicationContext
     private val bankResolver = FmodBankResolver(appContext)
+    private val loudnessNormalizationRepository = LoudnessNormalizationRepository(appContext)
     private val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val lifecycleLock = Any()
     private val running = AtomicBoolean(false)
@@ -47,6 +48,17 @@ class EngineAudioEngine(context: Context) {
     private val focusHeld = AtomicBoolean(false)
     private val controlThread = AtomicReference<Thread?>(null)
     private val snapshotThread = AtomicReference<Thread?>(null)
+    private val loudnessCalibrationThread = AtomicReference<Thread?>(null)
+    private val loudnessCalibrationCancellationRequested = AtomicBoolean(false)
+    private val loudnessCalibrationExplicitCancellation = AtomicBoolean(false)
+    private val loudnessCalibrationRestartNormalAudio = AtomicBoolean(false)
+    private val loudnessCalibrationProgress = AtomicReference(
+        if (loudnessNormalizationRepository.checkpoint() == null) {
+            LoudnessCalibrationProgress()
+        } else {
+            LoudnessCalibrationProgress(status = LoudnessCalibrationStatus.INTERRUPTED)
+        },
+    )
     private val nativeSources = AtomicReference<List<FmodSourceState>>(emptyList())
     private val masterOutputLinear = AtomicReference(0f)
     private val mixerDiagnosticsActive = AtomicBoolean(false)
@@ -61,6 +73,7 @@ class EngineAudioEngine(context: Context) {
     private val hostEngineExteriorGain = AtomicReference(1.0f)
     private val hostEffectsGain = AtomicReference(2.0f)
     private val overrideEffectsHostGain = AtomicReference(1.0f)
+    private val masterOutputGain = AtomicReference(1.0f)
     private val effectSoundOverrideGains = AtomicReference(com.gabrielpc.enginesoundsimulator.drive.EffectSoundOverrideGains())
     private val categoryGains = AtomicReference(AudioMixGains())
     private val engineIdleGain = AtomicReference(1.0f)
@@ -121,6 +134,11 @@ class EngineAudioEngine(context: Context) {
 
     fun masterOutputLinear(): Float = masterOutputLinear.get()
 
+    fun loudnessCalibrationProgress(): LoudnessCalibrationProgress = loudnessCalibrationProgress.get()
+
+    fun isLoudnessCalibrationRunning(): Boolean =
+        loudnessCalibrationThread.get()?.isAlive == true
+
     fun setFmodUpdateRateHz(rateHz: Int) {
         fmodUpdateRateHz.set(FmodUpdateRate.normalize(rateHz))
     }
@@ -141,6 +159,10 @@ class EngineAudioEngine(context: Context) {
 
     fun setOverrideEffectsHostGain(gain: Float) {
         overrideEffectsHostGain.set(gain.coerceAtLeast(0f))
+    }
+
+    fun setMasterOutputGain(linear: Float) {
+        masterOutputGain.set(linear.takeIf(Float::isFinite)?.coerceAtLeast(0f) ?: 0f)
     }
 
     fun hostEngineInteriorGain(): Float = hostEngineInteriorGain.get()
@@ -360,13 +382,84 @@ class EngineAudioEngine(context: Context) {
 
     fun start() {
         synchronized(lifecycleLock) {
+            if (isLoudnessCalibrationRunning()) return
             if (running.get() && controlThread.get()?.isAlive == true) return
             startLocked()
         }
     }
 
     fun stop() {
-        synchronized(lifecycleLock) { stopLocked() }
+        synchronized(lifecycleLock) {
+            interruptLoudnessCalibrationLocked(explicit = false, restartNormalAudio = false)
+            stopLocked()
+        }
+    }
+
+    internal fun startLoudnessCalibration(
+        profiles: List<FmodBankProfile>,
+        resume: Boolean,
+        onRecordsChanged: () -> Unit,
+    ): Boolean =
+        synchronized(lifecycleLock) {
+            if (isLoudnessCalibrationRunning()) return@synchronized false
+            if (resume && loudnessNormalizationRepository.checkpoint() == null) {
+                loudnessCalibrationProgress.set(LoudnessCalibrationProgress())
+                return@synchronized false
+            }
+
+            val normalAudioWasActive = running.get() && controlThread.get()?.isAlive == true
+            stopLocked()
+            if (controlThread.get()?.isAlive == true) {
+                loudnessCalibrationProgress.set(
+                    LoudnessCalibrationProgress(
+                        status = LoudnessCalibrationStatus.FAILED,
+                        totalCount = profiles.size * EngineSoundPerspective.entries.size,
+                        lastError = "Normal FMOD playback did not stop in time for calibration.",
+                    ),
+                )
+                return@synchronized false
+            }
+            if (!resume) {
+                loudnessNormalizationRepository.beginCheckpoint()
+            }
+            loudnessCalibrationCancellationRequested.set(false)
+            loudnessCalibrationExplicitCancellation.set(false)
+            loudnessCalibrationRestartNormalAudio.set(normalAudioWasActive)
+            val thread = Thread(
+                { runLoudnessCalibration(profiles.toList(), resume, onRecordsChanged) },
+                "fmod-loudness-calibration",
+            ).apply { isDaemon = true }
+            loudnessCalibrationThread.set(thread)
+            runCatching(thread::start).onFailure { error ->
+                loudnessCalibrationThread.compareAndSet(thread, null)
+                if (!resume) {
+                    loudnessNormalizationRepository.clearCheckpoint()
+                }
+                loudnessCalibrationProgress.set(
+                    LoudnessCalibrationProgress(
+                        status = LoudnessCalibrationStatus.FAILED,
+                        totalCount = profiles.size * EngineSoundPerspective.entries.size,
+                        lastError = error.message ?: error.javaClass.simpleName,
+                    ),
+                )
+                if (normalAudioWasActive) {
+                    startLocked()
+                }
+            }
+
+            thread.isAlive
+        }
+
+    fun cancelLoudnessCalibration() {
+        synchronized(lifecycleLock) {
+            interruptLoudnessCalibrationLocked(explicit = true, restartNormalAudio = true)
+        }
+    }
+
+    fun resetLoudnessCalibrationProgress() {
+        if (!isLoudnessCalibrationRunning()) {
+            loudnessCalibrationProgress.set(LoudnessCalibrationProgress())
+        }
     }
 
     internal fun setSoundProgram(
@@ -406,6 +499,7 @@ class EngineAudioEngine(context: Context) {
     }
 
     private fun startLocked() {
+        if (isLoudnessCalibrationRunning()) return
         if (running.get() || controlThread.get() != null || focusHeld.get()) stopLocked()
 
         val profile = selectedProfile.get()
@@ -453,12 +547,76 @@ class EngineAudioEngine(context: Context) {
         thread?.interrupt()
         if (thread != null && thread !== Thread.currentThread()) joinThread(thread, CONTROL_JOIN_TIMEOUT_MS)
         if (thread == null || !thread.isAlive) controlThread.compareAndSet(thread, null)
-            loadedBankProfileId.set(null)
-            engineSampleDataReady.set(false)
-            nativeSources.set(emptyList())
-            nativeEventMutes.clear()
-            nativeEventSolos.clear()
+        loadedBankProfileId.set(null)
+        engineSampleDataReady.set(false)
+        nativeSources.set(emptyList())
+        nativeEventMutes.clear()
+        nativeEventSolos.clear()
         abandonFocusIfHeld()
+    }
+
+    private fun interruptLoudnessCalibrationLocked(explicit: Boolean, restartNormalAudio: Boolean) {
+        val thread = loudnessCalibrationThread.get() ?: return
+        loudnessCalibrationExplicitCancellation.set(explicit)
+        loudnessCalibrationRestartNormalAudio.set(
+            restartNormalAudio && loudnessCalibrationRestartNormalAudio.get(),
+        )
+        loudnessCalibrationCancellationRequested.set(true)
+        thread.interrupt()
+    }
+
+    private fun runLoudnessCalibration(
+        profiles: List<FmodBankProfile>,
+        resume: Boolean,
+        onRecordsChanged: () -> Unit,
+    ) {
+        val runner = FmodLoudnessCalibrationRunner(
+            context = appContext,
+            profiles = profiles,
+            repository = loudnessNormalizationRepository,
+            resume = resume,
+            cancellationRequested = loudnessCalibrationCancellationRequested,
+            onProgress = loudnessCalibrationProgress::set,
+        )
+        val result = runCatching(runner::run).getOrElse { error ->
+            LoudnessCalibrationRunResult(
+                fatal = true,
+                lastError = error.message ?: error.javaClass.simpleName,
+            )
+        }
+        synchronized(lifecycleLock) {
+            val latestProgress = loudnessCalibrationProgress.get()
+            val status = when {
+                result.cancelled && loudnessCalibrationExplicitCancellation.get() -> {
+                    loudnessNormalizationRepository.clearCheckpoint()
+                    LoudnessCalibrationStatus.CANCELLED
+                }
+                result.cancelled -> LoudnessCalibrationStatus.INTERRUPTED
+                result.fatal -> LoudnessCalibrationStatus.FAILED
+                else -> {
+                    loudnessNormalizationRepository.clearCheckpoint()
+                    LoudnessCalibrationStatus.COMPLETED
+                }
+            }
+            loudnessCalibrationProgress.set(
+                latestProgress.copy(
+                    status = status,
+                    activeProfileId = null,
+                    activeCarName = null,
+                    perspective = null,
+                    failedCount = result.failedCount,
+                    lastError = result.lastError,
+                ),
+            )
+            loudnessCalibrationThread.compareAndSet(Thread.currentThread(), null)
+            val shouldRestartNormalAudio = loudnessCalibrationRestartNormalAudio.getAndSet(false)
+            loudnessCalibrationCancellationRequested.set(false)
+            loudnessCalibrationExplicitCancellation.set(false)
+            onRecordsChanged()
+            if (shouldRestartNormalAudio) {
+                startLocked()
+            }
+        }
     }
 
     private fun controlLoop(runId: Long, profile: FmodBankProfile) {
@@ -480,6 +638,7 @@ class EngineAudioEngine(context: Context) {
         var sentHostEngineExteriorGain: Float? = null
         var sentHostEffectsGain: Float? = null
         var sentOverrideEffectsHostGain: Float? = null
+        var sentMasterOutputGain: Float? = null
         var sentNativeEventOverridesVersion = -1L
         var sentBackfireAllowedSamplesMask = -1
         var sentBackfireAudioEnabled: Boolean? = null
@@ -491,6 +650,7 @@ class EngineAudioEngine(context: Context) {
         var sentNativeDiagnosticsEnabled = DebugTelemetry.nativeDiagnosticsEnabled()
         var eventCatalogCaptured = false
         var diagnosticBankSha256: String? = null
+        var normalOutputUnmuted = false
 
         try {
             val bankFiles = bankResolver.bankFiles(profile)
@@ -500,6 +660,9 @@ class EngineAudioEngine(context: Context) {
             fmodInitialized = true
             val physics = bankResolver.physics(profile)
             val alfaBackfireDirectory = ensureAlfaBackfireSamples()
+            val initialMasterOutputGain = masterOutputGain.get()
+            bridge.setMasterOutputGain(initialMasterOutputGain)
+            sentMasterOutputGain = initialMasterOutputGain
             val startupError = bridge.open(
                 commonStringsBankPath = bankFiles.commonStrings.absolutePath,
                 commonBankPath = bankFiles.common.absolutePath,
@@ -615,6 +778,11 @@ class EngineAudioEngine(context: Context) {
                 if (requestedOverrideEffectsHostGain != sentOverrideEffectsHostGain) {
                     bridge.setOverrideEffectsHostGain(requestedOverrideEffectsHostGain)
                     sentOverrideEffectsHostGain = requestedOverrideEffectsHostGain
+                }
+                val requestedMasterOutputGain = masterOutputGain.get()
+                if (requestedMasterOutputGain != sentMasterOutputGain) {
+                    bridge.setMasterOutputGain(requestedMasterOutputGain)
+                    sentMasterOutputGain = requestedMasterOutputGain
                 }
                 val configuredGains = categoryGains.get()
                 if (configuredGains != sentCategoryGains) {
@@ -806,6 +974,11 @@ class EngineAudioEngine(context: Context) {
                     return
                 }
 
+                if (!normalOutputUnmuted) {
+                    bridge.setCalibrationOutputMuted(false)
+                    normalOutputUnmuted = true
+                }
+
                 masterOutputLinear.set(bridge.masterOutputLevel().coerceAtLeast(0f))
             }
         } catch (throwable: Throwable) {
@@ -971,6 +1144,7 @@ class EngineAudioEngine(context: Context) {
         val direction: Int,
         val suppressShiftSoundOverride: Boolean = false,
     )
+
 }
 
 internal data class AudioLoadFailure(

@@ -252,92 +252,123 @@ class MainActivity : ComponentActivity() {
                         ),
                     ) {
                         Box(modifier = Modifier.fillMaxSize()) {
-                        MotorSoundDashboard(
-                            state = state,
-                            uiMonitoringActive = uiMonitoringActive,
-                            onToggleDashboardTheme = themeController::toggle,
-                        onThrottle = controller::setSimulatedPedalThrottle,
-                        onBrake = controller::setSimulatedPedalBrake,
-                        onSimulatedRegen = controller::setSimulatedRegen,
-                        onToggleSimulatedPedalLatch = controller::setSimulatedPedalsLatched,
-                        onTransmissionPositionChange = controller::setTransmissionPosition,
-                        onSelectSimulatedPedals = controller::selectSimulatedPedals,
-                        onSelectRealPedals = controller::selectRealPedals,
-                        onToggleInputSource = controller::toggleInputSource,
-                        onToggleAudioMute = controller::toggleAudioMute,
-                        onEffectOverrideChange = controller::setEffectOverride,
-                        onEngineExternalChange = { enabled -> controller.setSoundPerspective(if (enabled) com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective.EXTERIOR else com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective.CABIN) },
-                        onEnginePureChange = controller::setExteriorPureAudio,
-                        onCruisingLogicChange = controller::setCruisingLogicEnabled,
-                        onResetAllPreferences = {
-                            controller.resetAllPreferences()
-                            themeController.resetToDefault()
-                        },
-                        onExportSettings = controller::exportAllPreferences,
-                        onRescanBanks = controller::rescanBanks,
-                        onToggleManualShiftMode = controller::toggleManualShiftMode,
-                        onMediaShiftButton = controller::handleMediaShiftButton,
-                        onGearProfileSelectionChange = controller::setGearProfileSelection,
-                        onVirtualGearSpeedBoundaryChange = controller::setVirtualGearSpeedBoundary,
-                        onRestoreVirtualGearSpeedBoundaries = controller::restoreVirtualGearSpeedBoundaries,
-                        onAllowManualOnLaunchEnabledChange = controller::setAllowManualOnLaunchEnabled,
-                        onManualTransmissionKickdownEnabledChange =
-                            controller::setManualTransmissionKickdownEnabled,
-                        onTachometerCruisingShiftRangeOverlayEnabledChange =
-                            controller::setTachometerCruisingShiftRangeOverlayEnabled,
-                        onLowSpeedCrawlRpmHoldEnabledChange = controller::setLowSpeedCrawlRpmHoldEnabled,
-                        onCruisingShiftOffsetForTachMaxRpmChange = controller::setCruisingShiftOffsetForTachMaxRpm,
-                        onRacingReturnThrottlePercentChange = controller::setRacingReturnThrottlePercent,
-                        onRacingEnterMinThrottlePercentChange = controller::setRacingEnterMinThrottlePercent,
-                        onRacingReturnHoldSecondsChange = controller::setRacingReturnHoldSeconds,
-                        onKickdownStompDeltaPercentChange = controller::setKickdownStompDeltaPercent,
-                        onKickdownStompMinThrottlePercentChange = controller::setKickdownStompMinThrottlePercent,
-                        onRacingEnterDelayMillisecondsChange = controller::setRacingEnterDelayMilliseconds,
-                        onAutomaticUpshiftMillisecondsChange = controller::setAutomaticUpshiftMilliseconds,
-                        onAutomaticDownshiftMillisecondsChange = controller::setAutomaticDownshiftMilliseconds,
-                        onManualRedlineHoldSecondsChange = controller::setManualRedlineHoldSeconds,
-                        onManualAutodownshiftRpmChange = controller::setManualAutodownshiftRpm,
-                        onMinimumAudioThrottleChange = controller::setMinimumAudioThrottle,
-                        onPedalAudioThrottleRampUpMillisecondsChange = controller::setPedalAudioThrottleRampUpMilliseconds,
-                        onPedalAudioThrottleRampDownMillisecondsChange = controller::setPedalAudioThrottleRampDownMilliseconds,
-                        onManualUpshift = controller::requestManualUpshift,
-                        onManualDownshift = controller::requestManualDownshift,
-                        onMixerGlobalGainsChange = controller::setMixerGlobalGains,
-                        onMixerCarSpecificGainsChange = controller::setMixerCarSpecificGains,
-                        onResetMixerCarSpecificGains = controller::resetMixerCarSpecificGainsForCurrentSelection,
-                        onFmodUpdateRateChange = controller::setFmodUpdateRateHz,
-                        onExteriorPureAudioChange = controller::setExteriorPureAudio,
-                        onMixerDiagnosticsActive = controller::setMixerDiagnosticsActive,
-                        onOverrideGainChange = controller::setEffectSoundOverrideGain,
-                        onBackfireSettingsChange = controller::setBackfireSettings,
-                        onPreviewBackfireSample = backfirePreviewPlayer::play,
-                        onSpeedAudioSettingsChange = controller::setSpeedAudioSettings,
-                        onEventMute = controller::setFmodEventMute,
-                        onEventSolo = controller::setFmodEventSolo,
-                        onPreviousCar = controller::selectPreviousCar,
-                        onNextCar = controller::selectNextCar,
-                        onShuffleCar = controller::selectShuffleCar,
-                        onSelectCar = controller::selectCar,
-                        onToggleCarFavorite = controller::toggleCarFavorite,
-                        onSoundPerspectiveChange = controller::setSoundPerspective,
-                            onDismissUserMessage = controller::dismissUserMessage,
-                        )
-                        DriveCaptureOverlay(
-                            capturing = driveCaptureActive,
-                            lastPath = driveCapturePath,
-                            onToggle = {
-                                if (driveCaptureActive) {
-                                    driveCapturePath = controller.stopDriveCapture()
-                                    driveCaptureActive = false
-                                } else {
-                                    driveCapturePath = controller.startDriveCapture()
-                                    driveCaptureActive = true
-                                }
-                            },
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(top = 88.dp, end = 20.dp),
-                        )
+                            MotorSoundDashboard(
+                                state = state,
+                                uiMonitoringActive = uiMonitoringActive,
+                                onToggleDashboardTheme = themeController::toggle,
+                                onThrottle = controller::setSimulatedPedalThrottle,
+                                onBrake = controller::setSimulatedPedalBrake,
+                                onSimulatedRegen = controller::setSimulatedRegen,
+                                onToggleSimulatedPedalLatch = controller::setSimulatedPedalsLatched,
+                                onTransmissionPositionChange = controller::setTransmissionPosition,
+                                onSelectSimulatedPedals = controller::selectSimulatedPedals,
+                                onSelectRealPedals = controller::selectRealPedals,
+                                onToggleInputSource = controller::toggleInputSource,
+                                onToggleAudioMute = controller::toggleAudioMute,
+                                onEffectOverrideChange = controller::setEffectOverride,
+                                onEngineExternalChange = { enabled ->
+                                    controller.setSoundPerspective(
+                                        if (enabled) {
+                                            com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective.EXTERIOR
+                                        } else {
+                                            com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective.CABIN
+                                        },
+                                    )
+                                },
+                                onEnginePureChange = controller::setExteriorPureAudio,
+                                onCruisingLogicChange = controller::setCruisingLogicEnabled,
+                                onResetAllPreferences = {
+                                    controller.resetAllPreferences()
+                                    themeController.resetToDefault()
+                                },
+                                onExportSettings = controller::exportAllPreferences,
+                                onRescanBanks = controller::rescanBanks,
+                                onToggleManualShiftMode = controller::toggleManualShiftMode,
+                                onMediaShiftButton = controller::handleMediaShiftButton,
+                                onGearProfileSelectionChange = controller::setGearProfileSelection,
+                                onVirtualGearSpeedBoundaryChange = controller::setVirtualGearSpeedBoundary,
+                                onRestoreVirtualGearSpeedBoundaries = controller::restoreVirtualGearSpeedBoundaries,
+                                onAllowManualOnLaunchEnabledChange = controller::setAllowManualOnLaunchEnabled,
+                                onManualTransmissionKickdownEnabledChange =
+                                    controller::setManualTransmissionKickdownEnabled,
+                                onTachometerCruisingShiftRangeOverlayEnabledChange =
+                                    controller::setTachometerCruisingShiftRangeOverlayEnabled,
+                                onLowSpeedCrawlRpmHoldEnabledChange =
+                                    controller::setLowSpeedCrawlRpmHoldEnabled,
+                                onCruisingShiftOffsetForTachMaxRpmChange =
+                                    controller::setCruisingShiftOffsetForTachMaxRpm,
+                                onRacingReturnThrottlePercentChange = controller::setRacingReturnThrottlePercent,
+                                onRacingEnterMinThrottlePercentChange =
+                                    controller::setRacingEnterMinThrottlePercent,
+                                onRacingReturnHoldSecondsChange = controller::setRacingReturnHoldSeconds,
+                                onKickdownStompDeltaPercentChange = controller::setKickdownStompDeltaPercent,
+                                onKickdownStompMinThrottlePercentChange =
+                                    controller::setKickdownStompMinThrottlePercent,
+                                onRacingEnterDelayMillisecondsChange = controller::setRacingEnterDelayMilliseconds,
+                                onAutomaticUpshiftMillisecondsChange = controller::setAutomaticUpshiftMilliseconds,
+                                onAutomaticDownshiftMillisecondsChange = controller::setAutomaticDownshiftMilliseconds,
+                                onManualRedlineHoldSecondsChange = controller::setManualRedlineHoldSeconds,
+                                onManualAutodownshiftRpmChange = controller::setManualAutodownshiftRpm,
+                                onMinimumAudioThrottleChange = controller::setMinimumAudioThrottle,
+                                onPedalAudioThrottleRampUpMillisecondsChange =
+                                    controller::setPedalAudioThrottleRampUpMilliseconds,
+                                onPedalAudioThrottleRampDownMillisecondsChange =
+                                    controller::setPedalAudioThrottleRampDownMilliseconds,
+                                onManualUpshift = controller::requestManualUpshift,
+                                onManualDownshift = controller::requestManualDownshift,
+                                onMixerGlobalGainsChange = controller::setMixerGlobalGains,
+                                onAppVolumePercentChange = controller::setAppVolumePercent,
+                                onMixerCarSpecificGainsChange = controller::setMixerCarSpecificGains,
+                                onResetMixerCarSpecificGains =
+                                    controller::resetMixerCarSpecificGainsForCurrentSelection,
+                                onFmodUpdateRateChange = controller::setFmodUpdateRateHz,
+                                onExteriorPureAudioChange = controller::setExteriorPureAudio,
+                                onMixerDiagnosticsActive = controller::setMixerDiagnosticsActive,
+                                onOverrideGainChange = controller::setEffectSoundOverrideGain,
+                                onBackfireSettingsChange = controller::setBackfireSettings,
+                                onPreviewBackfireSample = backfirePreviewPlayer::play,
+                                onSpeedAudioSettingsChange = controller::setSpeedAudioSettings,
+                                onEventMute = controller::setFmodEventMute,
+                                onEventSolo = controller::setFmodEventSolo,
+                                onPreviousCar = controller::selectPreviousCar,
+                                onNextCar = controller::selectNextCar,
+                                onShuffleCar = controller::selectShuffleCar,
+                                onSelectCar = controller::selectCar,
+                                onToggleCarFavorite = controller::toggleCarFavorite,
+                                onSoundPerspectiveChange = controller::setSoundPerspective,
+                                onCalibrateAllCars = {
+                                    backfirePreviewPlayer.release()
+                                    controller.startLoudnessCalibration(resume = false)
+                                },
+                                onResumeLoudnessCalibration = {
+                                    backfirePreviewPlayer.release()
+                                    controller.startLoudnessCalibration(resume = true)
+                                },
+                                onCancelLoudnessCalibration = controller::cancelLoudnessCalibration,
+                                onDismissUserMessage = controller::dismissUserMessage,
+                            )
+                            DriveCaptureOverlay(
+                                capturing = driveCaptureActive,
+                                lastPath = driveCapturePath,
+                                onToggle = {
+                                    if (driveCaptureActive) {
+                                        driveCapturePath = controller.stopDriveCapture()
+                                        driveCaptureActive = false
+                                    } else {
+                                        driveCapturePath = controller.startDriveCapture()
+                                        driveCaptureActive = true
+                                    }
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(top = 88.dp, end = 20.dp),
+                            )
+                            if (state.loudnessCalibrationProgress.isRunning) {
+                                LoudnessCalibrationModal(
+                                    progress = state.loudnessCalibrationProgress,
+                                    onCancel = controller::cancelLoudnessCalibration,
+                                )
+                            }
                         }
                     }
                 }
@@ -441,6 +472,7 @@ private fun MotorSoundDashboard(
     onManualUpshift: () -> Unit,
     onManualDownshift: () -> Unit,
     onMixerGlobalGainsChange: (com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains) -> Unit,
+    onAppVolumePercentChange: (Int) -> Unit,
     onMixerCarSpecificGainsChange: (com.gabrielpc.enginesoundsimulator.audio.MixerCarSpecificGains) -> Unit,
     onResetMixerCarSpecificGains: () -> Unit,
     onFmodUpdateRateChange: (Int) -> Unit,
@@ -458,6 +490,9 @@ private fun MotorSoundDashboard(
     onSelectCar: (String) -> Unit,
     onToggleCarFavorite: (String) -> Unit,
     onSoundPerspectiveChange: (com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective) -> Unit,
+    onCalibrateAllCars: () -> Unit,
+    onResumeLoudnessCalibration: () -> Unit,
+    onCancelLoudnessCalibration: () -> Unit,
     onDismissUserMessage: () -> Unit,
 ) {
     var mainScreen by remember {
@@ -652,6 +687,7 @@ private fun MotorSoundDashboard(
                             onManualUpshift = onManualUpshift,
                             onManualDownshift = onManualDownshift,
                             onMixerGlobalGainsChange = onMixerGlobalGainsChange,
+                            onAppVolumePercentChange = onAppVolumePercentChange,
                             onMixerCarSpecificGainsChange = onMixerCarSpecificGainsChange,
                             onResetMixerCarSpecificGains = onResetMixerCarSpecificGains,
                             onEventMute = onEventMute,
@@ -666,6 +702,11 @@ private fun MotorSoundDashboard(
                             onExportSettings = onExportSettings,
                             onResetAll = onResetAllPreferences,
                             onRescanBanks = onRescanBanks,
+                            loudnessNormalizationSummary = state.loudnessNormalizationSummary,
+                            loudnessCalibrationProgress = state.loudnessCalibrationProgress,
+                            onCalibrateAllCars = onCalibrateAllCars,
+                            onResumeLoudnessCalibration = onResumeLoudnessCalibration,
+                            onCancelLoudnessCalibration = onCancelLoudnessCalibration,
                             fmodUpdateRateHz = state.fmodUpdateRateHz,
                             onFmodUpdateRateChange = onFmodUpdateRateChange,
                             backfireSettings = state.backfireSettings,

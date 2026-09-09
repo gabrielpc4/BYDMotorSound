@@ -3,7 +3,7 @@ package com.gabrielpc.enginesoundsimulator.audio
 import java.util.Locale
 import kotlin.math.log10
 
-/** Converts FMOD master output audibility into a readable dBFS label for the dashboard header. */
+/** Converts the post-limiter FMOD output meter peak into a readable dBFS dashboard label. */
 object MasterOutputLevel {
     const val SILENCE_DBFS = -120.0
 

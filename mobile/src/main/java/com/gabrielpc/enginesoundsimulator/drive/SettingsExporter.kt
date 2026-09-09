@@ -14,6 +14,10 @@ import com.gabrielpc.enginesoundsimulator.audio.MixerCarSpecificGains
 import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGainRepository
 import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains
 import com.gabrielpc.enginesoundsimulator.audio.SelectedCarRepository
+import com.gabrielpc.enginesoundsimulator.audio.AppVolumeRepository
+import com.gabrielpc.enginesoundsimulator.audio.LOUDNESS_CALIBRATION_ALGORITHM_VERSION
+import com.gabrielpc.enginesoundsimulator.audio.LoudnessCalibrationKey
+import com.gabrielpc.enginesoundsimulator.audio.LoudnessNormalizationRepository
 import org.json.JSONArray
 import org.json.JSONObject
 import com.gabrielpc.enginesoundsimulator.simulation.VirtualGearProfile
@@ -24,7 +28,7 @@ import java.util.Locale
 
 /** Writes a JSON snapshot of every persisted app preference to internal app storage. */
 internal object SettingsExporter {
-    private const val EXPORT_VERSION = 1
+    private const val EXPORT_VERSION = 2
     private const val EXPORT_DIR = "settings_exports"
 
     fun export(context: Context): String {
@@ -48,6 +52,17 @@ internal object SettingsExporter {
         val soundPerspectiveRepository = EngineSoundPerspectiveRepository(appContext)
         val exteriorAudioModeRepository = ExteriorAudioModeRepository(appContext)
         val carFavoritesRepository = CarFavoritesRepository(appContext)
+        val appVolumeRepository = AppVolumeRepository(appContext)
+        val loudnessNormalizationRepository = LoudnessNormalizationRepository(appContext)
+        val calibrationFingerprints = buildMap {
+            installedProfiles.forEach { profile ->
+                val fingerprint = bankResolver.calibrationFingerprint(profile)
+                EngineSoundPerspective.entries.forEach { perspective ->
+                    put(LoudnessCalibrationKey(profile.id, profile.packGroup, perspective), fingerprint)
+                }
+            }
+        }
+        val normalizationSummary = loudnessNormalizationRepository.summary(calibrationFingerprints)
 
         val carPickerGroup = appContext
             .getSharedPreferences(AppPreferenceStores.CAR_PICKER_GROUP, Context.MODE_PRIVATE)
@@ -78,6 +93,7 @@ internal object SettingsExporter {
                 put("backfire", backfireToJson(backfireSettingsRepository.load()))
                 put("effectSoundOverrides", effectSoundOverridesToJson(effectSoundOverrideRepository.load()))
                 put("mixerGlobalGains", mixerGlobalGainsToJson(mixerGlobalGainRepository.load()))
+                put("appVolumePercent", appVolumeRepository.load().percent)
             },
         )
 
@@ -112,6 +128,38 @@ internal object SettingsExporter {
             )
         }
         root.put("cars", cars)
+        root.put(
+            "loudnessNormalization",
+            JSONObject().apply {
+                put("algorithmVersion", LOUDNESS_CALIBRATION_ALGORITHM_VERSION)
+                put("targetLufs", normalizationSummary.targetLufs ?: JSONObject.NULL)
+                put("validCount", normalizationSummary.validCount)
+                put("staleCount", normalizationSummary.staleCount)
+                put("missingCount", normalizationSummary.missingCount)
+                put("totalCount", normalizationSummary.totalCount)
+                put(
+                    "records",
+                    JSONArray().apply {
+                        loudnessNormalizationRepository.records()
+                            .sortedWith(compareBy({ it.profileId }, { it.packGroup }, { it.perspective.name }))
+                            .forEach { record ->
+                                put(
+                                    JSONObject()
+                                        .put("profileId", record.profileId)
+                                        .put("packGroup", record.packGroup)
+                                        .put("perspective", record.perspective.name)
+                                        .put("algorithmVersion", record.algorithmVersion)
+                                        .put("bankFingerprint", record.bankFingerprint)
+                                        .put("measuredIntegratedLufs", record.measuredIntegratedLufs)
+                                        .put("measuredMaxTruePeak", record.measuredMaxTruePeak)
+                                        .put("normalizationDb", record.normalizationDb)
+                                        .put("measuredAtEpochMs", record.measuredAtEpochMs),
+                                )
+                            }
+                    },
+                )
+            },
+        )
 
         val exportDir = File(appContext.filesDir, EXPORT_DIR)
         exportDir.mkdirs()
@@ -132,7 +180,6 @@ internal object SettingsExporter {
 
     private fun mixerGlobalGainsToJson(gains: MixerGlobalGains): JSONObject {
         return JSONObject().apply {
-            put("overall", gains.overall.toDouble())
             put("engineInterior", gains.engineInterior.toDouble())
             put("engineExterior", gains.engineExterior.toDouble())
             put("effectsHost", gains.effectsHost.toDouble())

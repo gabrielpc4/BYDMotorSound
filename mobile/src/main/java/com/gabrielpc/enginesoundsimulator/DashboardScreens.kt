@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -117,6 +118,12 @@ import com.gabrielpc.enginesoundsimulator.audio.MixerEventCategory
 import com.gabrielpc.enginesoundsimulator.audio.MixerGainScope
 import com.gabrielpc.enginesoundsimulator.audio.MixerGainScopeRepository
 import com.gabrielpc.enginesoundsimulator.audio.MixerGlobalGains
+import com.gabrielpc.enginesoundsimulator.audio.AppVolumeSettings
+import com.gabrielpc.enginesoundsimulator.audio.LoudnessCalibrationProgress
+import com.gabrielpc.enginesoundsimulator.audio.LoudnessCalibrationStatus
+import com.gabrielpc.enginesoundsimulator.audio.LoudnessNormalizationSummary
+import com.gabrielpc.enginesoundsimulator.audio.LoudnessNormalizationState
+import com.gabrielpc.enginesoundsimulator.audio.LoudnessNormalizationValidity
 import com.gabrielpc.enginesoundsimulator.audio.FmodSourceState
 import com.gabrielpc.enginesoundsimulator.audio.FmodUpdateRate
 import com.gabrielpc.enginesoundsimulator.drive.GearProfileSelection
@@ -210,6 +217,7 @@ internal fun MixerDashboardScreen(
     onManualUpshift: () -> Unit,
     onManualDownshift: () -> Unit,
     onMixerGlobalGainsChange: (MixerGlobalGains) -> Unit,
+    onAppVolumePercentChange: (Int) -> Unit,
     onMixerCarSpecificGainsChange: (MixerCarSpecificGains) -> Unit,
     onResetMixerCarSpecificGains: () -> Unit,
     onEventMute: (String, Boolean) -> Unit,
@@ -374,6 +382,8 @@ internal fun MixerDashboardScreen(
                 hasSupercharger = state.hasSupercharger,
                 mixerGains = mixerGains,
                 mixerSpecificGains = mixerSpecificGains,
+                appVolumeSettings = state.appVolumeSettings,
+                loudnessNormalization = state.currentLoudnessNormalization,
                 mutedEvents = mutedEvents,
                 soloedEvents = soloedEvents,
                 onToggleCategoryMute = { category, muted ->
@@ -404,6 +414,7 @@ internal fun MixerDashboardScreen(
                     mixerGains = updated
                     onMixerGlobalGainsChange(updated)
                 },
+                onAppVolumePercentChange = onAppVolumePercentChange,
                 onMixerSpecificGainsChange = { updated ->
                     mixerSpecificGains = updated
                     onMixerCarSpecificGainsChange(updated)
@@ -501,11 +512,14 @@ private fun MixerControlsPanel(
     hasSupercharger: Boolean,
     mixerGains: MixerGlobalGains,
     mixerSpecificGains: MixerCarSpecificGains,
+    appVolumeSettings: AppVolumeSettings,
+    loudnessNormalization: LoudnessNormalizationState,
     mutedEvents: Map<String, Boolean>,
     soloedEvents: Map<String, Boolean>,
     onToggleCategoryMute: (MixerEventCategory, Boolean) -> Unit,
     onToggleCategorySolo: (MixerEventCategory, Boolean) -> Unit,
     onMixerGainsChange: (MixerGlobalGains) -> Unit,
+    onAppVolumePercentChange: (Int) -> Unit,
     onMixerSpecificGainsChange: (MixerCarSpecificGains) -> Unit,
     onResetCarSpecificGains: () -> Unit,
     modifier: Modifier = Modifier,
@@ -517,7 +531,6 @@ private fun MixerControlsPanel(
     var gainScope by remember {
         mutableStateOf(gainScopeRepository.load())
     }
-    val combinedOverall = mixerGains.overall * mixerSpecificGains.overall
     val cardShape = skinShape(8.dp)
     val cardModifier = modifier
         .fillMaxHeight()
@@ -552,16 +565,10 @@ private fun MixerControlsPanel(
                 onResetSpecificGains = onResetCarSpecificGains,
             )
             if (gainScope == MixerGainScope.GLOBAL) {
-                MixerLayerGainSlider(
-                    label = "GLOBAL GAIN",
-                    layerValue = mixerGains.overall,
-                    globalValue = mixerGains.overall,
-                    specificValue = mixerSpecificGains.overall,
-                    overall = 1f,
-                    accentColor = Master,
-                    onValueChange = { value ->
-                        onMixerGainsChange(mixerGains.copy(overall = value))
-                    },
+                AppVolumeSlider(
+                    settings = appVolumeSettings,
+                    loudnessNormalization = loudnessNormalization,
+                    onPercentChange = onAppVolumePercentChange,
                 )
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 4.dp),
@@ -572,9 +579,8 @@ private fun MixerControlsPanel(
                 MixerLayerGainSlider(
                     label = "OVERALL",
                     layerValue = mixerSpecificGains.overall,
-                    globalValue = mixerGains.overall,
+                    globalValue = 1f,
                     specificValue = mixerSpecificGains.overall,
-                    overall = 1f,
                     accentColor = Master,
                     onValueChange = {
                         onMixerSpecificGainsChange(mixerSpecificGains.copy(overall = it))
@@ -589,7 +595,6 @@ private fun MixerControlsPanel(
                     layerValue = mixerSpecificGains.engineIdle,
                     globalValue = 1f,
                     specificValue = mixerSpecificGains.engineIdle,
-                    overall = combinedOverall,
                     accentColor = Master,
                     onValueChange = { value ->
                         onMixerSpecificGainsChange(mixerSpecificGains.copy(engineIdle = value))
@@ -606,7 +611,6 @@ private fun MixerControlsPanel(
                 layerValue = layerValueForScope(gainScope, mixerGains.engineInterior, mixerSpecificGains.engineInterior),
                 globalValue = mixerGains.engineInterior,
                 specificValue = mixerSpecificGains.engineInterior,
-                overall = combinedOverall,
                 onValueChange = { value ->
                     if (gainScope == MixerGainScope.GLOBAL) {
                         onMixerGainsChange(mixerGains.copy(engineInterior = value))
@@ -625,7 +629,6 @@ private fun MixerControlsPanel(
                 layerValue = layerValueForScope(gainScope, mixerGains.engineExterior, mixerSpecificGains.engineExterior),
                 globalValue = mixerGains.engineExterior,
                 specificValue = mixerSpecificGains.engineExterior,
-                overall = combinedOverall,
                 onValueChange = { value ->
                     if (gainScope == MixerGainScope.GLOBAL) {
                         onMixerGainsChange(mixerGains.copy(engineExterior = value))
@@ -639,7 +642,6 @@ private fun MixerControlsPanel(
                 layerValue = layerValueForScope(gainScope, mixerGains.effectsHost, mixerSpecificGains.effectsHost),
                 globalValue = mixerGains.effectsHost,
                 specificValue = mixerSpecificGains.effectsHost,
-                overall = combinedOverall,
                 onValueChange = { value ->
                     if (gainScope == MixerGainScope.GLOBAL) {
                         onMixerGainsChange(mixerGains.copy(effectsHost = value))
@@ -662,7 +664,6 @@ private fun MixerControlsPanel(
                 layerValue = layerValueForScope(gainScope, mixerGains.transmission, mixerSpecificGains.transmission),
                 globalValue = mixerGains.transmission,
                 specificValue = mixerSpecificGains.transmission,
-                overall = combinedOverall,
                 onValueChange = { value ->
                     if (gainScope == MixerGainScope.GLOBAL) {
                         onMixerGainsChange(mixerGains.copy(transmission = value))
@@ -681,7 +682,6 @@ private fun MixerControlsPanel(
                 layerValue = layerValueForScope(gainScope, mixerGains.gearShift, mixerSpecificGains.gearShift),
                 globalValue = mixerGains.gearShift,
                 specificValue = mixerSpecificGains.gearShift,
-                overall = combinedOverall,
                 onValueChange = { value ->
                     if (gainScope == MixerGainScope.GLOBAL) {
                         onMixerGainsChange(mixerGains.copy(gearShift = value))
@@ -701,7 +701,6 @@ private fun MixerControlsPanel(
                     layerValue = layerValueForScope(gainScope, mixerGains.turbo, mixerSpecificGains.turbo),
                     globalValue = mixerGains.turbo,
                     specificValue = mixerSpecificGains.turbo,
-                    overall = combinedOverall,
                     onValueChange = { value ->
                         if (gainScope == MixerGainScope.GLOBAL) {
                             onMixerGainsChange(mixerGains.copy(turbo = value))
@@ -722,7 +721,6 @@ private fun MixerControlsPanel(
                     layerValue = layerValueForScope(gainScope, mixerGains.supercharger, mixerSpecificGains.supercharger),
                     globalValue = mixerGains.supercharger,
                     specificValue = mixerSpecificGains.supercharger,
-                    overall = combinedOverall,
                     onValueChange = { value ->
                         if (gainScope == MixerGainScope.GLOBAL) {
                             onMixerGainsChange(mixerGains.copy(supercharger = value))
@@ -742,7 +740,6 @@ private fun MixerControlsPanel(
                 layerValue = layerValueForScope(gainScope, mixerGains.backfire, mixerSpecificGains.backfire),
                 globalValue = mixerGains.backfire,
                 specificValue = mixerSpecificGains.backfire,
-                overall = combinedOverall,
                 onValueChange = { value ->
                     if (gainScope == MixerGainScope.GLOBAL) {
                         onMixerGainsChange(mixerGains.copy(backfire = value))
@@ -761,7 +758,6 @@ private fun MixerControlsPanel(
                 layerValue = layerValueForScope(gainScope, mixerGains.limiter, mixerSpecificGains.limiter),
                 globalValue = mixerGains.limiter,
                 specificValue = mixerSpecificGains.limiter,
-                overall = combinedOverall,
                 onValueChange = { value ->
                     if (gainScope == MixerGainScope.GLOBAL) {
                         onMixerGainsChange(mixerGains.copy(limiter = value))
@@ -780,7 +776,6 @@ private fun MixerControlsPanel(
                     layerValue = mixerGains.backfireOverrideGain,
                     globalValue = mixerGains.backfireOverrideGain,
                     specificValue = carBackfireOverrideGain,
-                    overall = 1f,
                     onValueChange = { value ->
                         onMixerGainsChange(mixerGains.copy(backfireOverrideGain = value))
                     },
@@ -790,7 +785,6 @@ private fun MixerControlsPanel(
                     layerValue = mixerGains.shiftOverrideGain,
                     globalValue = mixerGains.shiftOverrideGain,
                     specificValue = carShiftOverrideGain,
-                    overall = 1f,
                     onValueChange = { value ->
                         onMixerGainsChange(mixerGains.copy(shiftOverrideGain = value))
                     },
@@ -883,12 +877,78 @@ private fun MixerGainScopeSelector(
 }
 
 @Composable
+private fun AppVolumeSlider(
+    settings: AppVolumeSettings,
+    loudnessNormalization: LoudnessNormalizationState,
+    onPercentChange: (Int) -> Unit,
+) {
+    val percent = settings.normalized().percent
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "APP VOLUME",
+                color = Master,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 0.8.sp,
+            )
+            Text(
+                text = "$percent%",
+                color = OnSurface,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Black,
+            )
+        }
+        Slider(
+            value = percent.toFloat(),
+            onValueChange = { onPercentChange(it.roundToInt().coerceIn(0, 200)) },
+            valueRange = AppVolumeSettings.MIN_PERCENT.toFloat()..AppVolumeSettings.MAX_PERCENT.toFloat(),
+            steps = AppVolumeSettings.sliderSteps(),
+            colors = SliderDefaults.colors(
+                thumbColor = Master,
+                activeTrackColor = Master,
+                inactiveTrackColor = Outline,
+            ),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("0%", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text("100%", color = AccentSoft, fontSize = 10.sp, fontWeight = FontWeight.Black)
+            Text("200%", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        }
+        Text(
+            text = when (loudnessNormalization.validity) {
+                LoudnessNormalizationValidity.VALID -> {
+                    "LOUDNESS NORMALIZATION ${String.format(Locale.US, "%.1f dB", loudnessNormalization.normalizationDb)}"
+                }
+                LoudnessNormalizationValidity.STALE -> "LOUDNESS NORMALIZATION STALE • UNITY"
+                LoudnessNormalizationValidity.MISSING -> "ENGINE LOUDNESS UNCALIBRATED • UNITY"
+            },
+            color = when (loudnessNormalization.validity) {
+                LoudnessNormalizationValidity.VALID -> AccentSoft
+                LoudnessNormalizationValidity.STALE -> Warning
+                LoudnessNormalizationValidity.MISSING -> Muted
+            },
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.5.sp,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+}
+
+@Composable
 private fun MixerLayerGainSlider(
     label: String,
     layerValue: Float,
     globalValue: Float,
     specificValue: Float,
-    overall: Float,
     accentColor: Color = AccentSoft,
     eventCategory: MixerEventCategory? = null,
     mutedEvents: Map<String, Boolean> = emptyMap(),
@@ -898,7 +958,7 @@ private fun MixerLayerGainSlider(
     onValueChange: (Float) -> Unit,
 ) {
     val clampedLayerValue = MixerGlobalGains.snapToStep(layerValue)
-    val effectiveValue = globalValue * specificValue * overall
+    val effectiveValue = globalValue * specificValue
     val sliderColors = SliderDefaults.colors(
         thumbColor = accentColor,
         activeTrackColor = accentColor,
@@ -970,6 +1030,11 @@ internal fun SettingsScreen(
     onExportSettings: () -> Unit,
     onResetAll: () -> Unit,
     onRescanBanks: () -> Unit,
+    loudnessNormalizationSummary: LoudnessNormalizationSummary,
+    loudnessCalibrationProgress: LoudnessCalibrationProgress,
+    onCalibrateAllCars: () -> Unit,
+    onResumeLoudnessCalibration: () -> Unit,
+    onCancelLoudnessCalibration: () -> Unit,
     fmodUpdateRateHz: Int,
     onFmodUpdateRateChange: (Int) -> Unit,
     backfireSettings: BackfireSettings,
@@ -1023,6 +1088,7 @@ internal fun SettingsScreen(
 ) {
     var selectedTab by remember { mutableStateOf(SettingsSection.SPEED_AUDIO) }
     var showResetConfirmation by remember { mutableStateOf(false) }
+    var showCalibrationConfirmation by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -1042,6 +1108,9 @@ internal fun SettingsScreen(
             }
             SettingsTab("BACKFIRE", selectedTab == SettingsSection.BACKFIRE) {
                 selectedTab = SettingsSection.BACKFIRE
+            }
+            SettingsTab("LOUDNESS", selectedTab == SettingsSection.LOUDNESS) {
+                selectedTab = SettingsSection.LOUDNESS
             }
             SettingsTab("BANK IMPORT", selectedTab == SettingsSection.BANK_IMPORT) {
                 selectedTab = SettingsSection.BANK_IMPORT
@@ -1161,6 +1230,14 @@ internal fun SettingsScreen(
                     onPreview = onPreviewBackfireSample,
                 )
             }
+            SettingsSection.LOUDNESS -> LoudnessNormalizationSettingsPanel(
+                summary = loudnessNormalizationSummary,
+                progress = loudnessCalibrationProgress,
+                onCalibrateAllCars = { showCalibrationConfirmation = true },
+                onResume = onResumeLoudnessCalibration,
+                onCancel = onCancelLoudnessCalibration,
+                modifier = Modifier.weight(1f),
+            )
             SettingsSection.BANK_IMPORT -> BankImportDiagnosticsPanel(
                 onRescanBanks = onRescanBanks,
                 modifier = Modifier.weight(1f),
@@ -1198,13 +1275,247 @@ internal fun SettingsScreen(
             containerColor = Surface,
         )
     }
+
+    if (showCalibrationConfirmation) {
+        val minimumSeconds = loudnessNormalizationSummary.totalCount * 6
+        val minutes = minimumSeconds / 60
+        val seconds = minimumSeconds % 60
+        AlertDialog(
+            onDismissRequest = { showCalibrationConfirmation = false },
+            title = {
+                Text("Calibrate all cars?", color = OnSurface, fontWeight = FontWeight.Black)
+            },
+            text = {
+                Text(
+                    "This will silently measure all ${loudnessNormalizationSummary.totalCount} car/perspective pairs. " +
+                        "Allow at least ${minutes}m ${seconds}s plus bank loading time.",
+                    color = Muted,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showCalibrationConfirmation = false
+                        onCalibrateAllCars()
+                    },
+                ) {
+                    Text("CALIBRATE", color = Accent, fontWeight = FontWeight.Black)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCalibrationConfirmation = false }) {
+                    Text("CANCEL", color = Muted, fontWeight = FontWeight.Black)
+                }
+            },
+            containerColor = Surface,
+        )
+    }
 }
 
 private enum class SettingsSection {
     SPEED_AUDIO,
     GENERAL,
     BACKFIRE,
+    LOUDNESS,
     BANK_IMPORT,
+}
+
+@Composable
+private fun LoudnessNormalizationSettingsPanel(
+    summary: LoudnessNormalizationSummary,
+    progress: LoudnessCalibrationProgress,
+    onCalibrateAllCars: () -> Unit,
+    onResume: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text("ENGINE LOUDNESS NORMALIZATION", color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Black)
+        Text(
+            "Measures each installed engine in CABIN and EXTERIOR PURE, then matches perceived engine loudness without changing Android media volume.",
+            color = Muted,
+            fontSize = 13.sp,
+            lineHeight = 17.sp,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, Outline, skinShape(8.dp))
+                .padding(18.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            LoudnessCount("CALIBRATED", "${summary.validCount} / ${summary.totalCount}", Success)
+            LoudnessCount("STALE", summary.staleCount.toString(), Warning)
+            LoudnessCount("MISSING", summary.missingCount.toString(), Muted)
+            LoudnessCount(
+                "TARGET",
+                summary.targetLufs?.let { String.format(Locale.US, "%.1f LUFS", it) } ?: "—",
+                AccentSoft,
+            )
+        }
+        if (progress.status != LoudnessCalibrationStatus.IDLE) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, Outline, skinShape(8.dp))
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = when (progress.status) {
+                        LoudnessCalibrationStatus.INTERRUPTED -> "INTERRUPTED CALIBRATION"
+                        LoudnessCalibrationStatus.RUNNING -> "CALIBRATING"
+                        LoudnessCalibrationStatus.COMPLETED -> "CALIBRATION COMPLETE"
+                        LoudnessCalibrationStatus.CANCELLED -> "CALIBRATION CANCELLED"
+                        LoudnessCalibrationStatus.FAILED -> "CALIBRATION FAILED"
+                        LoudnessCalibrationStatus.IDLE -> ""
+                    },
+                    color = if (progress.status == LoudnessCalibrationStatus.FAILED) Danger else Accent,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black,
+                )
+                if (progress.totalCount > 0) {
+                    Text(
+                        "${progress.completedCount} / ${progress.totalCount} processed · ${progress.failedCount} failed",
+                        color = OnSurface,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    LinearProgressIndicator(
+                        progress = { progress.fraction },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Accent,
+                        trackColor = MeterTrack,
+                    )
+                }
+                progress.lastError?.let { error ->
+                    Text(error, color = Warning, fontSize = 12.sp)
+                }
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Button(
+                onClick = onCalibrateAllCars,
+                enabled = !progress.isRunning && summary.totalCount > 0,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("CALIBRATE ALL CARS", fontWeight = FontWeight.Black)
+            }
+            if (progress.canResume) {
+                OutlinedButton(onClick = onResume, modifier = Modifier.weight(1f)) {
+                    Text("RESUME CALIBRATION", color = Accent, fontWeight = FontWeight.Black)
+                }
+            }
+            if (progress.isRunning) {
+                OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
+                    Text("CANCEL", color = Danger, fontWeight = FontWeight.Black)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun LoudnessCalibrationModal(
+    progress: LoudnessCalibrationProgress,
+    onCancel: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false,
+        ),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.78f))
+                .padding(40.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            MaterialSurface(
+                modifier = Modifier
+                    .fillMaxWidth(0.68f)
+                    .sizeIn(maxWidth = 760.dp),
+                shape = skinShape(14.dp),
+                color = Surface,
+                border = BorderStroke(1.dp, Outline),
+                shadowElevation = 18.dp,
+            ) {
+                Column(
+                    modifier = Modifier.padding(28.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Text(
+                        "CALIBRATING ENGINE LOUDNESS",
+                        color = Accent,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Black,
+                    )
+                    Text(
+                        "Output remains silent while the complete catalog is measured.",
+                        color = Muted,
+                        fontSize = 13.sp,
+                    )
+                    Text(
+                        progress.activeCarName ?: "Preparing FMOD…",
+                        color = OnSurface,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    progress.perspective?.let { perspective ->
+                        Text(
+                            if (perspective == EngineSoundPerspective.EXTERIOR) "EXTERIOR • PURE" else "CABIN",
+                            color = AccentSoft,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Black,
+                        )
+                    }
+                    Text(
+                        "${progress.completedCount} / ${progress.totalCount} processed" +
+                            if (progress.failedCount > 0) " • ${progress.failedCount} failed" else "",
+                        color = OnSurface,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    LinearProgressIndicator(
+                        progress = { progress.fraction },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Accent,
+                        trackColor = MeterTrack,
+                    )
+                    progress.lastError?.let { error ->
+                        Text(error, color = Warning, fontSize = 12.sp)
+                    }
+                    OutlinedButton(
+                        onClick = onCancel,
+                        modifier = Modifier.align(Alignment.End),
+                        border = BorderStroke(1.dp, Danger.copy(alpha = 0.8f)),
+                    ) {
+                        Text("CANCEL", color = Danger, fontWeight = FontWeight.Black)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LoudnessCount(label: String, value: String, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Black)
+        Text(value, color = color, fontSize = 15.sp, fontWeight = FontWeight.Black)
+    }
 }
 
 @Composable

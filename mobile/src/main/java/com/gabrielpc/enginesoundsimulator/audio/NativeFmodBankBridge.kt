@@ -22,6 +22,32 @@ internal class NativeFmodBankBridge {
         diagnosticsEnabled: Boolean,
     ): String?
 
+    external fun beginLoudnessCalibration(
+        commonStringsBankPath: String,
+        commonBankPath: String,
+    ): String?
+
+    external fun loadCalibrationCar(
+        carBankPath: String,
+        idleRpm: Float,
+        limiterRpm: Float,
+        spatial: FloatArray,
+    ): String?
+
+    external fun pumpLoudnessCalibration(): String?
+
+    external fun beginEngineLoudnessMeasurement(perspective: Int): String?
+
+    external fun updateEngineLoudnessMeasurement(rpm: Float, drivetrainSpeed: Float): String?
+
+    external fun resetEngineLoudnessMeasurement()
+
+    external fun engineLoudnessMeasurement(): DoubleArray
+
+    external fun calibrationSourceSummary(): String
+
+    external fun unloadCalibrationCar()
+
     /** Returns a human-readable error or null after synchronously applying the control frame. */
     external fun update(
         dt: Float,
@@ -54,8 +80,12 @@ internal class NativeFmodBankBridge {
     /** Immutable source rows captured from FMOD's actual event/channel hierarchy. */
     external fun voiceSnapshots(): Array<String>
 
-    /** RMS-like final mix level from FMOD channel audibility (0 = silence). */
+    /** Post-limiter, post-gate peak level from the FMOD master output. */
     external fun masterOutputLevel(): Float
+
+    external fun setMasterOutputGain(linear: Float)
+
+    external fun setCalibrationOutputMuted(muted: Boolean)
 
     /** Debug-only data is retained natively and drained at snapshot cadence, never via Logcat. */
     external fun diagnosticRecords(): Array<String>
@@ -67,7 +97,7 @@ internal class NativeFmodBankBridge {
 
     external fun setHostGains(engineInterior: Float, engineExterior: Float, effects: Float)
 
-    /** EFFECTS trim for bundled override one-shots, excluding GLOBAL GAIN / OVERALL masters. */
+    /** EFFECTS trim for bundled override one-shots before the master output stage. */
     external fun setOverrideEffectsHostGain(gain: Float)
 
     /** Identifies the loaded car bank so native code can apply per-car audio policies. */

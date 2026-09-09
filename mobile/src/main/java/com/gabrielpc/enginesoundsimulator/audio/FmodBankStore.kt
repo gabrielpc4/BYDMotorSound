@@ -141,6 +141,24 @@ internal class FmodBankStore(
         safeDestination(directory, path).takeIf(File::isFile)
     }.getOrNull()
 
+    fun calibrationInputHashes(profile: FmodBankProfile): FmodCalibrationInputHashes {
+        val carDirectory = requireNotNull(installedDirectory(profile.packGroup, profile.bankPackId)) {
+            "Install the ${profile.displayName} bank before calibrating it."
+        }
+        val carManifest = File(carDirectory, MANIFEST_NAME).inputStream().use(::readManifest)
+        val carBank = carManifest.files.single { it.path.startsWith("bank/") && it.path.endsWith(".bank") }
+        val physics = carManifest.files.single { it.path == "profiles/${profile.id}/physics.json" }
+        val commonBank = sharedBankManifest(FmodBankProfiles.commonPackId)
+        val commonStringsBank = sharedBankManifest(FmodBankProfiles.commonStringsPackId)
+
+        return FmodCalibrationInputHashes(
+            carBankSha256 = carBank.sha256,
+            physicsSha256 = physics.sha256,
+            commonBankSha256 = commonBank.sha256,
+            commonStringsBankSha256 = commonStringsBank.sha256,
+        )
+    }
+
     fun hasStagedPacks(): Boolean = stagedImportDirectory
         ?.takeIf(File::isDirectory)
         ?.listFiles()
@@ -225,6 +243,15 @@ internal class FmodBankStore(
         return safeDestination(directory, bank.path).also {
             require(it.isFile) { "Installed $displayName bank is missing ${bank.path}." }
         }
+    }
+
+    private fun sharedBankManifest(packId: String): FmodBankFile {
+        val directory = requireNotNull(installedDirectory(FmodBankProfiles.originalCarsPackId, packId)) {
+            "Install the required shared FMOD bank before calibrating."
+        }
+        val manifest = File(directory, MANIFEST_NAME).inputStream().use(::readManifest)
+
+        return manifest.files.single { it.path.startsWith("bank/") && it.path.endsWith(".bank") }
     }
 
     @Synchronized
@@ -481,6 +508,11 @@ internal class FmodBankResolver(context: Context) {
         )
     }
 
+    fun sharedBankFiles(): FmodSharedBankFiles = FmodSharedBankFiles(
+        commonStrings = store.sharedBankFile(FmodBankProfiles.commonStringsPackId),
+        common = store.sharedBankFile(FmodBankProfiles.commonPackId),
+    )
+
     /**
      * A package is only selectable when its immutable physics contract belongs to the same
      * profile as its bank.  File presence alone is not sufficient: accepting a different car's
@@ -505,6 +537,20 @@ internal class FmodBankResolver(context: Context) {
                 "Installed ${profile.displayName} package has physics for ${physics.profileId}, not ${profile.id}."
             }
         }
+
+    fun calibrationFingerprint(profile: FmodBankProfile): String {
+        require(profile in FmodBankProfiles.all) { "Car is outside this app catalog" }
+        val hashes = store.calibrationInputHashes(profile)
+
+        return LoudnessCalibrationFingerprint.create(
+            profileId = profile.id,
+            algorithmVersion = LOUDNESS_CALIBRATION_ALGORITHM_VERSION,
+            carBankSha256 = hashes.carBankSha256,
+            physicsSha256 = hashes.physicsSha256,
+            commonBankSha256 = hashes.commonBankSha256,
+            commonStringsBankSha256 = hashes.commonStringsBankSha256,
+        )
+    }
 
     fun previewFile(profile: FmodBankProfile): File? = store.previewFile(profile)
 
@@ -542,4 +588,16 @@ internal data class FmodBankFiles(
     val common: File,
     val car: File,
     val physics: File,
+)
+
+internal data class FmodSharedBankFiles(
+    val commonStrings: File,
+    val common: File,
+)
+
+internal data class FmodCalibrationInputHashes(
+    val carBankSha256: String,
+    val physicsSha256: String,
+    val commonBankSha256: String,
+    val commonStringsBankSha256: String,
 )

@@ -14,14 +14,13 @@ internal fun effectiveCategoryGains(
     mixerGlobal: MixerGlobalGains,
     mixerSpecific: MixerCarSpecificGains,
 ): AudioMixGains {
-    val master = mixerGlobal.overall * mixerSpecific.overall
     return AudioMixGains(
-        transmission = mixerGlobal.transmission * mixerSpecific.transmission * master,
-        gearShift = mixerGlobal.gearShift * mixerSpecific.gearShift * master,
-        turbo = mixerGlobal.turbo * mixerSpecific.turbo * master,
-        backfire = mixerGlobal.backfire * mixerSpecific.backfire * master,
-        limiter = mixerGlobal.limiter * mixerSpecific.limiter * master,
-        supercharger = mixerGlobal.supercharger * mixerSpecific.supercharger * master,
+        transmission = mixerGlobal.transmission * mixerSpecific.transmission,
+        gearShift = mixerGlobal.gearShift * mixerSpecific.gearShift,
+        turbo = mixerGlobal.turbo * mixerSpecific.turbo,
+        backfire = mixerGlobal.backfire * mixerSpecific.backfire,
+        limiter = mixerGlobal.limiter * mixerSpecific.limiter,
+        supercharger = mixerGlobal.supercharger * mixerSpecific.supercharger,
     )
 }
 
@@ -32,18 +31,15 @@ internal data class EffectiveHostGains(
 )
 
 internal fun effectiveEngineIdleGain(
-    mixerGlobal: MixerGlobalGains,
     mixerSpecific: MixerCarSpecificGains,
 ): Float {
-    val master = mixerGlobal.overall * mixerSpecific.overall
-    return mixerSpecific.engineIdle * master
+    return mixerSpecific.engineIdle
 }
 
 internal fun effectiveEffectsHostForOverrides(
     mixerGlobal: MixerGlobalGains,
     mixerSpecific: MixerCarSpecificGains,
 ): Float {
-    // Bundled override one-shots keep the EFFECTS trim but skip GLOBAL GAIN / OVERALL masters.
     return mixerGlobal.effectsHost * mixerSpecific.effectsHost
 }
 
@@ -51,10 +47,9 @@ internal fun effectiveHostGains(
     mixerGlobal: MixerGlobalGains,
     mixerSpecific: MixerCarSpecificGains,
 ): EffectiveHostGains {
-    val master = mixerGlobal.overall * mixerSpecific.overall
     return EffectiveHostGains(
-        engineInterior = mixerGlobal.engineInterior * mixerSpecific.engineInterior * master,
-        engineExterior = mixerGlobal.engineExterior * mixerSpecific.engineExterior * master,
-        effectsHost = mixerGlobal.effectsHost * mixerSpecific.effectsHost * master,
+        engineInterior = mixerGlobal.engineInterior * mixerSpecific.engineInterior,
+        engineExterior = mixerGlobal.engineExterior * mixerSpecific.engineExterior,
+        effectsHost = mixerGlobal.effectsHost * mixerSpecific.effectsHost,
     )
 }

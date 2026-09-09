@@ -274,4 +274,5 @@ dependencies {
     implementation(libs.androidx.media)
     debugImplementation(libs.androidx.compose.ui.tooling)
     implementation(files(File(fmodSdkDirectory, "api/core/lib/fmod.jar")))
+    testImplementation("junit:junit:4.13.2")
 }

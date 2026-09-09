@@ -51,7 +51,7 @@ data class DashboardSkin(
     val favorite: Color,
     /** Tint for the gearbox mode caption when the car is not in its aggressive shift map. */
     val modeCaptionCalm: Color,
-    /** Marks a control that scales all the others, such as the mixer's OVERALL gain. */
+    /** Marks a final-stage control, such as APP VOLUME or a car-specific OVERALL trim. */
     val master: Color,
     /**
      * The lamp beside the header title, lit while the sound engine is running.

@@ -8,7 +8,6 @@ import kotlin.math.roundToInt
 
 /** App-wide mixer multipliers applied on top of each car's per-car mixer profile. */
 data class MixerGlobalGains(
-    val overall: Float = 1.0f,
     val engineInterior: Float = 1.0f,
     val engineExterior: Float = 1.0f,
     val effectsHost: Float = 1.0f,
@@ -22,7 +21,6 @@ data class MixerGlobalGains(
     val shiftOverrideGain: Float = 1.0f,
 ) {
     fun normalized(): MixerGlobalGains = copy(
-        overall = snapToStep(overall),
         engineInterior = snapToStep(engineInterior),
         engineExterior = snapToStep(engineExterior),
         effectsHost = snapToStep(effectsHost),
@@ -81,7 +79,6 @@ internal class MixerGlobalGainRepository(context: Context) {
     fun load(): MixerGlobalGains {
         val legacyEngineHost = preferences.getFloat("engine_host", 1.0f)
         return MixerGlobalGains(
-            overall = read("overall"),
             engineInterior = read("engine_interior", legacyEngineHost),
             engineExterior = read("engine_exterior", legacyEngineHost),
             effectsHost = read("effects_host"),
@@ -99,7 +96,6 @@ internal class MixerGlobalGainRepository(context: Context) {
     fun save(gains: MixerGlobalGains) {
         val normalized = gains.normalized()
         preferences.edit()
-            .putFloat("overall", normalized.overall)
             .putFloat("engine_interior", normalized.engineInterior)
             .putFloat("engine_exterior", normalized.engineExterior)
             .putFloat("effects_host", normalized.effectsHost)

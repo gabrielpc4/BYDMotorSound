@@ -3,8 +3,8 @@ package com.gabrielpc.enginesoundsimulator.simulation
 import kotlin.math.abs
 
 /**
- * Low-speed crawl needle: from a standstill, glide the tach toward 3,000 RPM and hold until
- * road speed passes 20 km/h or the driver brakes.
+ * Low-speed crawl needle: below 20 km/h, throttle above 1% glides the tach toward 3,000 RPM;
+ * lifting the throttle or braking glides back to idle.
  */
 internal class LowSpeedCrawlRpmHold {
     enum class Phase {
@@ -20,13 +20,8 @@ internal class LowSpeedCrawlRpmHold {
     val isActive: Boolean
         get() = phase != Phase.INACTIVE
 
-    private var previousSpeedKmh: Double = 0.0
-    private var rearmEligible: Boolean = false
-
     fun clear() {
         phase = Phase.INACTIVE
-        previousSpeedKmh = 0.0
-        rearmEligible = false
     }
 
     fun step(
@@ -52,37 +47,21 @@ internal class LowSpeedCrawlRpmHold {
         }
 
         if (speedKmh >= RELEASE_SPEED_KMH) {
-            phase = Phase.INACTIVE
-            rearmEligible = false
-            previousSpeedKmh = speedKmh
+            clear()
             return null
         }
 
         val brakeApplied = brake >= BRAKE_THRESHOLD
-        val gainingSpeed = speedKmh > previousSpeedKmh + GAIN_SPEED_DELTA_KMH
-        val leftStandstill = previousSpeedKmh <= STANDSTILL_SPEED_KMH && speedKmh > STANDSTILL_SPEED_KMH
-        val driverRequestsMotion = throttle >= THROTTLE_INTENT_THRESHOLD || gainingSpeed
+        val throttleEngaged = throttle > THROTTLE_ENGAGE_THRESHOLD
+        val driverRequestsHold = throttleEngaged && !brakeApplied
 
-        if (brakeApplied) {
+        if (driverRequestsHold) {
+            if (phase == Phase.INACTIVE || phase == Phase.RETURNING_TO_IDLE) {
+                phase = Phase.APPROACHING_HOLD
+            }
+        } else if (phase == Phase.APPROACHING_HOLD || phase == Phase.HOLDING) {
             phase = Phase.RETURNING_TO_IDLE
-            rearmEligible = true
-        } else if (phase == Phase.INACTIVE) {
-            val startedFromStandstill = leftStandstill
-            val resumedAfterBrake = rearmEligible &&
-                driverRequestsMotion &&
-                speedKmh > STANDSTILL_SPEED_KMH
-            if (startedFromStandstill || resumedAfterBrake) {
-                phase = Phase.APPROACHING_HOLD
-                rearmEligible = false
-            }
-        } else if (phase == Phase.RETURNING_TO_IDLE) {
-            if (driverRequestsMotion && speedKmh > STANDSTILL_SPEED_KMH) {
-                phase = Phase.APPROACHING_HOLD
-                rearmEligible = false
-            }
         }
-
-        previousSpeedKmh = speedKmh
 
         return when (phase) {
             Phase.INACTIVE -> null
@@ -142,9 +121,7 @@ internal class LowSpeedCrawlRpmHold {
     companion object {
         const val HOLD_RPM = 3_000.0
         const val RELEASE_SPEED_KMH = 20.0
-        const val STANDSTILL_SPEED_KMH = 0.5
-        const val GAIN_SPEED_DELTA_KMH = 0.15
-        const val THROTTLE_INTENT_THRESHOLD = 0.05
+        const val THROTTLE_ENGAGE_THRESHOLD = 0.01
         const val BRAKE_THRESHOLD = 0.05
         const val APPROACH_RESPONSE_SECONDS = 1.8
         const val RETURN_TO_IDLE_RESPONSE_SECONDS = 1.35

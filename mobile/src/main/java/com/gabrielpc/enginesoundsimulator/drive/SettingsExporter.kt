@@ -218,6 +218,7 @@ internal object SettingsExporter {
                 },
             )
             put("racingReturnThrottlePercent", settings.racingReturnThrottlePercent)
+            put("racingEnterMinThrottlePercent", settings.racingEnterMinThrottlePercent)
             put("kickdownStompDeltaPercent", settings.kickdownStompDeltaPercent)
             put("kickdownStompMinThrottlePercent", settings.kickdownStompMinThrottlePercent)
             put("racingEnterDelayMilliseconds", settings.racingEnterDelayMilliseconds)
@@ -227,6 +228,7 @@ internal object SettingsExporter {
             put("manualRedlineHoldSeconds", settings.manualRedlineHoldSeconds)
             put("manualAutodownshiftRpm", settings.manualAutodownshiftRpm)
             put("tachometerCruisingShiftRangeOverlayEnabled", settings.tachometerCruisingShiftRangeOverlayEnabled)
+            put("lowSpeedCrawlRpmHoldEnabled", settings.lowSpeedCrawlRpmHoldEnabled)
         }
     }
 

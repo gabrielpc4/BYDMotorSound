@@ -134,8 +134,10 @@ import com.gabrielpc.enginesoundsimulator.drive.AutomaticUpshiftMilliseconds
 import com.gabrielpc.enginesoundsimulator.drive.ManualAutodownshiftRpm
 import com.gabrielpc.enginesoundsimulator.drive.ManualRedlineHoldSeconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingEnterDelayMilliseconds
+import com.gabrielpc.enginesoundsimulator.drive.RacingEnterMinThrottlePercent
 import com.gabrielpc.enginesoundsimulator.drive.KickdownStompDeltaPercent
 import com.gabrielpc.enginesoundsimulator.drive.KickdownStompMinThrottlePercent
+import com.gabrielpc.enginesoundsimulator.drive.RacingReturnHoldSeconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingReturnThrottlePercent
 import com.gabrielpc.enginesoundsimulator.drive.PedalAudioThrottleRampMilliseconds
 import com.gabrielpc.enginesoundsimulator.simulation.VirtualGearProfile
@@ -982,8 +984,12 @@ internal fun SettingsScreen(
     onManualTransmissionKickdownEnabledChange: (Boolean) -> Unit,
     minimumAudioThrottle: Float,
     onMinimumAudioThrottleChange: (Float) -> Unit,
+    racingEnterMinThrottlePercent: Int,
+    onRacingEnterMinThrottlePercentChange: (Int) -> Unit,
     racingReturnThrottlePercent: Int,
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
+    racingReturnHoldSeconds: Int,
+    onRacingReturnHoldSecondsChange: (Int) -> Unit,
     kickdownStompDeltaPercent: Int,
     onKickdownStompDeltaPercentChange: (Int) -> Unit,
     kickdownStompMinThrottlePercent: Int,
@@ -1004,6 +1010,8 @@ internal fun SettingsScreen(
     onPedalAudioThrottleRampDownMillisecondsChange: (Int) -> Unit,
     tachometerCruisingShiftRangeOverlayEnabled: Boolean,
     onTachometerCruisingShiftRangeOverlayEnabledChange: (Boolean) -> Unit,
+    lowSpeedCrawlRpmHoldEnabled: Boolean,
+    onLowSpeedCrawlRpmHoldEnabledChange: (Boolean) -> Unit,
     cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int>,
     onCruisingShiftOffsetForTachMaxRpmChange: (Int, Int) -> Unit,
     onPreviewBackfireSample: (Int) -> Unit,
@@ -1093,8 +1101,12 @@ internal fun SettingsScreen(
             AutomaticTransmissionSettingsControl(
                 minimumAudioThrottle = minimumAudioThrottle,
                 onMinimumAudioThrottleChange = onMinimumAudioThrottleChange,
+                racingEnterMinThrottlePercent = racingEnterMinThrottlePercent,
+                onRacingEnterMinThrottlePercentChange = onRacingEnterMinThrottlePercentChange,
                 racingReturnThrottlePercent = racingReturnThrottlePercent,
                 onRacingReturnThrottlePercentChange = onRacingReturnThrottlePercentChange,
+                racingReturnHoldSeconds = racingReturnHoldSeconds,
+                onRacingReturnHoldSecondsChange = onRacingReturnHoldSecondsChange,
                 kickdownStompDeltaPercent = kickdownStompDeltaPercent,
                 onKickdownStompDeltaPercentChange = onKickdownStompDeltaPercentChange,
                 kickdownStompMinThrottlePercent = kickdownStompMinThrottlePercent,
@@ -1115,6 +1127,8 @@ internal fun SettingsScreen(
                 onAllowManualOnLaunchEnabledChange = onAllowManualOnLaunchEnabledChange,
                 tachometerCruisingShiftRangeOverlayEnabled = tachometerCruisingShiftRangeOverlayEnabled,
                 onTachometerCruisingShiftRangeOverlayEnabledChange = onTachometerCruisingShiftRangeOverlayEnabledChange,
+                lowSpeedCrawlRpmHoldEnabled = lowSpeedCrawlRpmHoldEnabled,
+                onLowSpeedCrawlRpmHoldEnabledChange = onLowSpeedCrawlRpmHoldEnabledChange,
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1593,10 +1607,13 @@ private fun VirtualGearSpeedBoundariesSettingsControl(
                 fontWeight = FontWeight.Black,
             )
             Text(
-                text = if (activePreset != null) {
-                    "Drag dividers to set how each gear maps to road speed for the $activePreset-gear preset selected on the dashboard."
-                } else {
-                    "Select 6, 10, or 15 on the main dashboard to tune virtual gear speed bands. ORIGINAL uses the bank ratios and cannot be edited here."
+                text = when {
+                    gearProfileSelection.isAdaptive() ->
+                        "Adaptive 6/10 uses default speed bands: 6 gears in cruising, 10 in racing or manual shift. Bands cannot be edited here."
+                    activePreset != null ->
+                        "Drag dividers to set how each gear maps to road speed for the $activePreset-gear preset selected on the dashboard."
+                    else ->
+                        "Select 6, 10, or 15 on the main dashboard to tune virtual gear speed bands. ORIGINAL uses the bank ratios and cannot be edited here."
                 },
                 color = Muted,
                 fontSize = 12.sp,
@@ -1740,8 +1757,12 @@ private fun CruisingShiftOffsetsByTachMaxRpmControl(
 private fun AutomaticTransmissionSettingsControl(
     minimumAudioThrottle: Float,
     onMinimumAudioThrottleChange: (Float) -> Unit,
+    racingEnterMinThrottlePercent: Int,
+    onRacingEnterMinThrottlePercentChange: (Int) -> Unit,
     racingReturnThrottlePercent: Int,
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
+    racingReturnHoldSeconds: Int,
+    onRacingReturnHoldSecondsChange: (Int) -> Unit,
     kickdownStompDeltaPercent: Int,
     onKickdownStompDeltaPercentChange: (Int) -> Unit,
     kickdownStompMinThrottlePercent: Int,
@@ -1762,6 +1783,8 @@ private fun AutomaticTransmissionSettingsControl(
     onAllowManualOnLaunchEnabledChange: (Boolean) -> Unit,
     tachometerCruisingShiftRangeOverlayEnabled: Boolean,
     onTachometerCruisingShiftRangeOverlayEnabledChange: (Boolean) -> Unit,
+    lowSpeedCrawlRpmHoldEnabled: Boolean,
+    onLowSpeedCrawlRpmHoldEnabledChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
     Column(
@@ -1799,13 +1822,51 @@ private fun AutomaticTransmissionSettingsControl(
             valueRange = MinimumAudioThrottle.MIN..MinimumAudioThrottle.MAX,
             steps = throttleSteps.coerceAtLeast(0),
         )
+        TachometerShiftOverlayToggle(
+            title = "LOW SPEED CRAWL RPM HOLD",
+            description = "From a standstill, glide the tach to 3,000 RPM and hold below 20 km/h until you brake or pass 20 km/h.",
+            enabled = lowSpeedCrawlRpmHoldEnabled,
+            onEnabledChange = onLowSpeedCrawlRpmHoldEnabledChange,
+            modifier = Modifier.fillMaxWidth(),
+            embedded = true,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("RACING ENTER MIN THROTTLE", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
+            Text(
+                text = "$racingEnterMinThrottlePercent%",
+                color = OnSurface,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Black,
+            )
+        }
+        Text(
+            text = "While cruising, pressing the accelerator above this level switches to racing mode.",
+            color = Muted,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+        )
+        Slider(
+            value = racingEnterMinThrottlePercent.toFloat(),
+            onValueChange = { value ->
+                val selectedPercent = RacingEnterMinThrottlePercent.normalize(value.roundToInt())
+                if (selectedPercent != racingEnterMinThrottlePercent) {
+                    onRacingEnterMinThrottlePercentChange(selectedPercent)
+                }
+            },
+            valueRange = RacingEnterMinThrottlePercent.MIN.toFloat()..RacingEnterMinThrottlePercent.MAX.toFloat(),
+            steps = (RacingEnterMinThrottlePercent.MAX - RacingEnterMinThrottlePercent.MIN) / RacingEnterMinThrottlePercent.STEP - 1,
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.Top,
         ) {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Row(
@@ -1822,7 +1883,7 @@ private fun AutomaticTransmissionSettingsControl(
                     )
                 }
                 Text(
-                    text = "In racing, any brake input returns to cruising immediately. A full throttle lift-off prepares the return (P-CRUISING); re-acceleration at or below this level completes it. Above it, or a kickdown stomp, stays in racing.",
+                    text = "After P-CRUISING is armed, re-acceleration at or below this level completes the return to cruising. Above it, or a kickdown stomp, stays in racing.",
                     color = Muted,
                     fontSize = 12.sp,
                     lineHeight = 16.sp,
@@ -1837,6 +1898,42 @@ private fun AutomaticTransmissionSettingsControl(
                     },
                     valueRange = RacingReturnThrottlePercent.MIN.toFloat()..RacingReturnThrottlePercent.MAX.toFloat(),
                     steps = (RacingReturnThrottlePercent.MAX - RacingReturnThrottlePercent.MIN) / RacingReturnThrottlePercent.STEP - 1,
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("LIGHT BRAKE RETURN HOLD", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    Text(
+                        text = RacingReturnHoldSeconds.format(racingReturnHoldSeconds),
+                        color = OnSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Black,
+                    )
+                }
+                Text(
+                    text = "In racing, any brake input prepares P-CRUISING. Holding the brake lightly (below 35%) for this long completes the return to cruising.",
+                    color = Muted,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                )
+                Slider(
+                    value = racingReturnHoldSeconds.toFloat(),
+                    onValueChange = { value ->
+                        val selectedSeconds = RacingReturnHoldSeconds.normalize(value.roundToInt())
+                        if (selectedSeconds != racingReturnHoldSeconds) {
+                            onRacingReturnHoldSecondsChange(selectedSeconds)
+                        }
+                    },
+                    valueRange = RacingReturnHoldSeconds.MIN.toFloat()..RacingReturnHoldSeconds.MAX.toFloat(),
+                    steps = (RacingReturnHoldSeconds.MAX - RacingReturnHoldSeconds.MIN) / RacingReturnHoldSeconds.STEP - 1,
                 )
             }
         }
@@ -1868,7 +1965,7 @@ private fun AutomaticTransmissionSettingsControl(
             )
         }
         Text(
-            text = "When cruising switches to racing on a sharp throttle stomp, kickdown starts immediately. Each downshift blends RPM over this duration — higher is smoother.",
+            text = "When cruising switches to racing, kickdown starts immediately. Each downshift blends RPM over this duration — higher is smoother.",
             color = Muted,
             fontSize = 12.sp,
             lineHeight = 16.sp,
@@ -1898,7 +1995,7 @@ private fun AutomaticTransmissionSettingsControl(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("KICKDOWN STOMP DELTA", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    Text("MANUAL KICKDOWN STOMP DELTA", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
                     Text(
                         text = "$kickdownStompDeltaPercent%",
                         color = OnSurface,
@@ -1907,7 +2004,7 @@ private fun AutomaticTransmissionSettingsControl(
                     )
                 }
                 Text(
-                    text = "Minimum pedal increase in one frame to count as a stomp. Small jumps (e.g. 0→15%) may meet this but still fail the min throttle check below.",
+                    text = "Manual mode only: minimum pedal increase in one frame to count as a kickdown stomp.",
                     color = Muted,
                     fontSize = 12.sp,
                     lineHeight = 16.sp,
@@ -1933,7 +2030,7 @@ private fun AutomaticTransmissionSettingsControl(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("KICKDOWN MIN THROTTLE", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    Text("MANUAL KICKDOWN MIN THROTTLE", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
                     Text(
                         text = "$kickdownStompMinThrottlePercent%",
                         color = OnSurface,
@@ -1942,7 +2039,7 @@ private fun AutomaticTransmissionSettingsControl(
                     )
                 }
                 Text(
-                    text = "Pedal level the stomp must reach. 0→40% triggers kickdown; 0→15% or 5→20% usually do not because the end pedal stays too low.",
+                    text = "Manual mode only: pedal level a kickdown stomp must reach after the delta above.",
                     color = Muted,
                     fontSize = 12.sp,
                     lineHeight = 16.sp,

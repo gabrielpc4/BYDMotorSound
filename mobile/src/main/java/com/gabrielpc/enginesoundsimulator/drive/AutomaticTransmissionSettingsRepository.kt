@@ -21,6 +21,23 @@ internal object RacingReturnThrottlePercent {
     }
 }
 
+/** Minimum accelerator level in cruising that switches automatic transmission to racing. */
+internal object RacingEnterMinThrottlePercent {
+    const val MIN = 0
+    const val MAX = 100
+    const val DEFAULT = 50
+    const val STEP = 10
+
+    fun normalize(value: Int): Int {
+        val stepped = ((value.toFloat() / STEP).roundToInt() * STEP)
+        return stepped.coerceIn(MIN, MAX)
+    }
+
+    fun asFraction(percent: Int): Double {
+        return normalize(percent) / 100.0
+    }
+}
+
 /** Minimum pedal increase between consecutive samples to count as a kickdown stomp. */
 internal object KickdownStompDeltaPercent {
     const val MIN = 5
@@ -202,6 +219,7 @@ internal data class AutomaticTransmissionSettings(
     val manualTransmissionKickdownEnabled: Boolean = true,
     val cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int> = CruisingShiftOffsetByTachMaxRpm.defaultOffsets(),
     val racingReturnThrottlePercent: Int = RacingReturnThrottlePercent.DEFAULT,
+    val racingEnterMinThrottlePercent: Int = RacingEnterMinThrottlePercent.DEFAULT,
     val kickdownStompDeltaPercent: Int = KickdownStompDeltaPercent.DEFAULT,
     val kickdownStompMinThrottlePercent: Int = KickdownStompMinThrottlePercent.DEFAULT,
     val racingEnterDelayMilliseconds: Int = RacingEnterDelayMilliseconds.DEFAULT,
@@ -211,6 +229,7 @@ internal data class AutomaticTransmissionSettings(
     val manualRedlineHoldSeconds: Int = ManualRedlineHoldSeconds.DEFAULT,
     val manualAutodownshiftRpm: Int = ManualAutodownshiftRpm.DEFAULT,
     val tachometerCruisingShiftRangeOverlayEnabled: Boolean = true,
+    val lowSpeedCrawlRpmHoldEnabled: Boolean = true,
 )
 
 internal class AutomaticTransmissionSettingsRepository(context: Context) {
@@ -234,6 +253,12 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
                 preferences.getInt(
                     KEY_RACING_RETURN_THROTTLE_PERCENT,
                     RacingReturnThrottlePercent.DEFAULT,
+                ),
+            ),
+            racingEnterMinThrottlePercent = RacingEnterMinThrottlePercent.normalize(
+                preferences.getInt(
+                    KEY_RACING_ENTER_MIN_THROTTLE_PERCENT,
+                    RacingEnterMinThrottlePercent.DEFAULT,
                 ),
             ),
             kickdownStompDeltaPercent = KickdownStompDeltaPercent.normalize(
@@ -279,6 +304,10 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
                 KEY_TACHOMETER_CRUISING_SHIFT_RANGE_OVERLAY_ENABLED,
                 true,
             ),
+            lowSpeedCrawlRpmHoldEnabled = preferences.getBoolean(
+                KEY_LOW_SPEED_CRAWL_RPM_HOLD_ENABLED,
+                true,
+            ),
         )
     }
 
@@ -301,6 +330,10 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
             .putInt(
                 KEY_RACING_RETURN_THROTTLE_PERCENT,
                 RacingReturnThrottlePercent.normalize(settings.racingReturnThrottlePercent),
+            )
+            .putInt(
+                KEY_RACING_ENTER_MIN_THROTTLE_PERCENT,
+                RacingEnterMinThrottlePercent.normalize(settings.racingEnterMinThrottlePercent),
             )
             .putInt(
                 KEY_KICKDOWN_STOMP_DELTA_PERCENT,
@@ -337,6 +370,10 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
             .putBoolean(
                 KEY_TACHOMETER_CRUISING_SHIFT_RANGE_OVERLAY_ENABLED,
                 settings.tachometerCruisingShiftRangeOverlayEnabled,
+            )
+            .putBoolean(
+                KEY_LOW_SPEED_CRAWL_RPM_HOLD_ENABLED,
+                settings.lowSpeedCrawlRpmHoldEnabled,
             )
             .commit()
     }
@@ -400,6 +437,7 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
         const val KEY_MANUAL_TRANSMISSION_KICKDOWN_ENABLED = "manual_transmission_kickdown_enabled"
         const val KEY_CRUISING_SHIFT_OFFSET_RPM = "cruising_shift_offset_rpm"
         const val KEY_RACING_RETURN_THROTTLE_PERCENT = "racing_return_throttle_percent"
+        const val KEY_RACING_ENTER_MIN_THROTTLE_PERCENT = "racing_enter_min_throttle_percent"
         const val KEY_KICKDOWN_STOMP_DELTA_PERCENT = "kickdown_stomp_delta_percent"
         const val KEY_KICKDOWN_STOMP_MIN_THROTTLE_PERCENT = "kickdown_stomp_min_throttle_percent"
         const val KEY_RACING_ENTER_DELAY_MILLISECONDS = "racing_enter_delay_milliseconds"
@@ -410,6 +448,7 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
         const val KEY_MANUAL_AUTODOWNSHIFT_RPM = "manual_autodownshift_rpm"
         const val KEY_TACHOMETER_CRUISING_SHIFT_RANGE_OVERLAY_ENABLED =
             "tachometer_cruising_shift_range_overlay_enabled"
+        const val KEY_LOW_SPEED_CRAWL_RPM_HOLD_ENABLED = "low_speed_crawl_rpm_hold_enabled"
         const val LEGACY_OFFSET_RPM_KEY = "offset_rpm"
     }
 }

@@ -6,6 +6,7 @@ import com.gabrielpc.enginesoundsimulator.drive.AutomaticUpshiftMilliseconds
 import com.gabrielpc.enginesoundsimulator.drive.ManualAutodownshiftRpm
 import com.gabrielpc.enginesoundsimulator.drive.ManualRedlineHoldSeconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingEnterDelayMilliseconds
+import com.gabrielpc.enginesoundsimulator.drive.RacingEnterMinThrottlePercent
 import com.gabrielpc.enginesoundsimulator.drive.RacingReturnHoldSeconds
 import com.gabrielpc.enginesoundsimulator.drive.KickdownStompDeltaPercent
 import com.gabrielpc.enginesoundsimulator.drive.KickdownStompMinThrottlePercent
@@ -19,6 +20,9 @@ internal data class AutomaticTransmissionConfig(
     val racingReturnMaxThrottle: Double = RacingReturnThrottlePercent.asFraction(
         RacingReturnThrottlePercent.DEFAULT,
     ),
+    val racingEnterMinThrottle: Double = RacingEnterMinThrottlePercent.asFraction(
+        RacingEnterMinThrottlePercent.DEFAULT,
+    ),
     val kickdownStompMinDelta: Double = KickdownStompDeltaPercent.asFraction(
         KickdownStompDeltaPercent.DEFAULT,
     ),
@@ -31,6 +35,7 @@ internal data class AutomaticTransmissionConfig(
     val racingReturnHoldSeconds: Double = RacingReturnHoldSeconds.DEFAULT.toDouble(),
     val manualRedlineHoldSeconds: Double? = ManualRedlineHoldSeconds.asHoldSeconds(ManualRedlineHoldSeconds.DEFAULT),
     val manualAutodownshiftRpm: Double = ManualAutodownshiftRpm.DEFAULT.toDouble(),
+    val lowSpeedCrawlRpmHoldEnabled: Boolean = true,
 ) {
     companion object {
         fun fromSettings(settings: AutomaticTransmissionSettings): AutomaticTransmissionConfig {
@@ -41,6 +46,9 @@ internal data class AutomaticTransmissionConfig(
                 cruisingShiftOffsetsByTachMaxRpm = settings.cruisingShiftOffsetsByTachMaxRpm,
                 racingReturnMaxThrottle = RacingReturnThrottlePercent.asFraction(
                     settings.racingReturnThrottlePercent,
+                ),
+                racingEnterMinThrottle = RacingEnterMinThrottlePercent.asFraction(
+                    settings.racingEnterMinThrottlePercent,
                 ),
                 kickdownStompMinDelta = KickdownStompDeltaPercent.asFraction(
                     settings.kickdownStompDeltaPercent,
@@ -60,6 +68,7 @@ internal data class AutomaticTransmissionConfig(
                 racingReturnHoldSeconds = settings.racingReturnHoldSeconds.toDouble(),
                 manualRedlineHoldSeconds = ManualRedlineHoldSeconds.asHoldSeconds(settings.manualRedlineHoldSeconds),
                 manualAutodownshiftRpm = settings.manualAutodownshiftRpm.toDouble(),
+                lowSpeedCrawlRpmHoldEnabled = settings.lowSpeedCrawlRpmHoldEnabled,
             )
         }
     }

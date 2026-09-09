@@ -139,6 +139,7 @@ internal class AssettoDrivetrain(
     private var cruisingShiftOffsetRpm = 0
     private var kickdownStompMinDelta = 0.15
     private var kickdownStompMinCurrentThrottle = 0.30
+    private var racingEnterMinThrottle = 0.50
     private var racingReturnMaxThrottle = 0.30
     private var racingReturnLightBrakeHoldSeconds = 0.0
     private var racingReturnHoldSeconds = RacingReturnHoldSeconds.DEFAULT.toDouble()
@@ -172,6 +173,9 @@ internal class AssettoDrivetrain(
     private var manualKickdownAutomaticUpshiftPending = false
     /** Eases racing RPM into the cruising band after an armed return. */
     private val cruisingReturn = CruisingReturnTransition()
+    /** Low-speed crawl tach hold toward 3,000 RPM from a standstill. */
+    private val lowSpeedCrawlRpmHold = LowSpeedCrawlRpmHold()
+    private var lowSpeedCrawlRpmHoldEnabled = true
     private var driven = drivenAxle(physics.drivetrain.vehicle)
     private var aeroDrag = 0.0
     private var downforce = 0.0
@@ -194,10 +198,26 @@ internal class AssettoDrivetrain(
     }
 
     fun updateGearProfileMode(updated: VirtualGearProfile) {
+        switchGearProfilePreservingRoadSpeed(updated)
+    }
+
+    /**
+     * Rebind the virtual profile and pick a gear that matches the current road speed so a
+     * forward-gear count change does not leave the drivetrain in an impossible slot.
+     */
+    fun switchGearProfilePreservingRoadSpeed(updated: VirtualGearProfile) {
         virtualGearProfile = updated
         usesAuthoredShiftDurations = updated.usesAuthoredRatiosOnly
         landingRpmByGear = DoubleArray(updated.virtualForwardGearCount + 1)
-        gear = gear.coerceIn(0, updated.virtualForwardGearCount)
+
+        if (shiftDirection != 0) {
+            gear = gear.coerceIn(0, updated.virtualForwardGearCount)
+            return
+        }
+
+        val roadKmh = speedMetersPerSecond * 3.6
+        gear = updated.gearForRoadSpeedKmh(roadKmh)
+            .coerceIn(1, updated.virtualForwardGearCount)
     }
 
     /** @deprecated Use [updateGearProfileMode] */
@@ -428,8 +448,8 @@ internal class AssettoDrivetrain(
             offsets = automaticTransmissionConfig.cruisingShiftOffsetsByTachMaxRpm,
             tachometerMaximumRpm = physics.engine.tachometerMaximumRpm,
         )
-        racingReturnLightBrakeHoldSeconds = 0.0
         racingReturnMaxThrottle = automaticTransmissionConfig.racingReturnMaxThrottle.coerceIn(0.0, 1.0)
+        racingEnterMinThrottle = automaticTransmissionConfig.racingEnterMinThrottle.coerceIn(0.0, 1.0)
         kickdownStompMinDelta = automaticTransmissionConfig.kickdownStompMinDelta.coerceIn(0.0, 1.0)
         kickdownStompMinCurrentThrottle = automaticTransmissionConfig.kickdownStompMinCurrentThrottle.coerceIn(0.0, 1.0)
         racingReturnHoldSeconds = automaticTransmissionConfig.racingReturnHoldSeconds.coerceAtLeast(0.0)
@@ -447,6 +467,10 @@ internal class AssettoDrivetrain(
         cruisingLogicEnabled = automaticTransmissionConfig.cruisingLogicEnabled
         allowManualOnLaunchEnabled = automaticTransmissionConfig.allowManualOnLaunchEnabled
         manualTransmissionKickdownEnabled = automaticTransmissionConfig.manualTransmissionKickdownEnabled
+        lowSpeedCrawlRpmHoldEnabled = automaticTransmissionConfig.lowSpeedCrawlRpmHoldEnabled
+        if (!lowSpeedCrawlRpmHoldEnabled) {
+            lowSpeedCrawlRpmHold.clear()
+        }
         currentAutomaticShifting = automaticShifting
         if (!manualTransmissionKickdownEnabled && !automaticShifting) {
             abortManualKickdownSequence()
@@ -638,9 +662,9 @@ internal class AssettoDrivetrain(
             )
             driveForce = clutchTorqueApplied * ratio / driven.radius
             engineOmega += (engine.torque - clutchTorqueApplied) / engineInertia * dt
-        } else if (!cruisingReturn.active) {
-            // Cruising return owns the needle while active. Free-rev torque integration would
-            // outrun the glide rate when the driver keeps a light foot on the pedal.
+        } else if (!cruisingReturn.active && !lowSpeedCrawlRpmHold.isActive) {
+            // Cruising return and low-speed crawl hold own the needle while active. Free-rev torque
+            // integration would outrun the glide rate when the driver keeps a light foot on the pedal.
             engineOmega += engine.torque / physics.engine.inertia.coerceAtLeast(0.001) * dt
         }
 
@@ -666,6 +690,7 @@ internal class AssettoDrivetrain(
         if (shouldLockRpmToMappedRoadSpeed()) {
             applyMappedRoadSpeedRpm()
         }
+        applyLowSpeedCrawlRpmHold(dt, rawGas, cleanBrake, transmissionPosition)
         applyCruisingReturnTransitionRpm(dt)
         if (physics.engine.limiterRpm > 0.0) {
             rpm = rpm.coerceAtMost(physics.engine.limiterRpm)
@@ -1021,7 +1046,7 @@ internal class AssettoDrivetrain(
      * RPM at shift request time to the target gear's coupled value over the shift duration.
      */
     private fun applyMappedRoadSpeedRpm() {
-        if (cruisingReturn.active) {
+        if (cruisingReturn.active || lowSpeedCrawlRpmHold.isActive) {
             return
         }
 
@@ -1038,6 +1063,43 @@ internal class AssettoDrivetrain(
         }
 
         applyCruisingBandCap()
+    }
+
+    /**
+     * From a standstill, glide the tach toward 3,000 RPM and hold below 20 km/h until the driver
+     * brakes or road speed passes the release threshold.
+     */
+    private fun applyLowSpeedCrawlRpmHold(
+        dt: Double,
+        rawGas: Double,
+        brake: Double,
+        transmissionPosition: TransmissionPosition,
+    ) {
+        if (launchControlPhase != LaunchControlPhase.INACTIVE) {
+            lowSpeedCrawlRpmHold.clear()
+            return
+        }
+
+        val limiterRpm = if (physics.engine.limiterRpm > 0.0) {
+            physics.engine.limiterRpm
+        } else {
+            Double.MAX_VALUE
+        }
+        val overrideRpm = lowSpeedCrawlRpmHold.step(
+            dt = dt,
+            enabled = lowSpeedCrawlRpmHoldEnabled,
+            speedKmh = speedMetersPerSecond * 3.6,
+            brake = brake,
+            throttle = rawGas,
+            idleRpm = physics.engine.idleRpm,
+            currentRpm = rpm,
+            launchControlActive = launchControlPhase != LaunchControlPhase.INACTIVE,
+            cruisingReturnActive = cruisingReturn.active,
+            inDrive = transmissionPosition == TransmissionPosition.DRIVE,
+        )
+        if (overrideRpm != null) {
+            rpm = overrideRpm.coerceIn(physics.engine.idleRpm, limiterRpm)
+        }
     }
 
     /**
@@ -1510,16 +1572,14 @@ internal class AssettoDrivetrain(
             clearRacingStompPending()
         }
 
-        val cruisingKickdownStomp = AutomaticTransmissionPolicy.shouldEnterRacingFromCruisingKickdown(
+        val cruisingRacingRequested = AutomaticTransmissionPolicy.shouldEnterRacingFromMinThrottle(
             mode = automaticTransmissionMode,
-            previousThrottle = previousRawGasForManualStomp,
             currentThrottle = rawGas,
-            kickdownMinDelta = kickdownStompMinDelta,
-            kickdownMinCurrentThrottle = kickdownStompMinCurrentThrottle,
+            racingEnterMinThrottle = racingEnterMinThrottle,
         )
 
         if (
-            cruisingKickdownStomp &&
+            cruisingRacingRequested &&
             launchControlPhase == LaunchControlPhase.INACTIVE
         ) {
             automaticTransmissionMode = AutomaticTransmissionMode.RACING
@@ -1537,10 +1597,13 @@ internal class AssettoDrivetrain(
         if (automaticTransmissionMode == AutomaticTransmissionMode.RACING) {
             val racingReturnStep = AutomaticTransmissionPolicy.stepRacingReturn(
                 armed = racingReturnArmed,
+                lightBrakeHoldSeconds = racingReturnLightBrakeHoldSeconds,
                 rawGas = rawGas,
                 brake = brake,
                 previousThrottle = previousRawGasForManualStomp,
+                deltaSeconds = dt,
                 racingReturnMaxThrottle = racingReturnMaxThrottle,
+                racingReturnHoldSeconds = racingReturnHoldSeconds,
                 kickdownMinDelta = kickdownStompMinDelta,
                 kickdownMinCurrentThrottle = kickdownStompMinCurrentThrottle,
             )

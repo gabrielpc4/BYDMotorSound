@@ -120,6 +120,7 @@ data class DriveSnapshot(
     val cruisingShiftOffsetRpm: Int = CruisingShiftOffsetByTachMaxRpm.defaultOffsets().getValue(7_000),
     val cruisingShiftOffsetsByTachMaxRpm: Map<Int, Int> = CruisingShiftOffsetByTachMaxRpm.defaultOffsets(),
     val racingReturnThrottlePercent: Int = RacingReturnThrottlePercent.DEFAULT,
+    val racingEnterMinThrottlePercent: Int = RacingEnterMinThrottlePercent.DEFAULT,
     val kickdownStompDeltaPercent: Int = KickdownStompDeltaPercent.DEFAULT,
     val kickdownStompMinThrottlePercent: Int = KickdownStompMinThrottlePercent.DEFAULT,
     val racingEnterDelayMilliseconds: Int = RacingEnterDelayMilliseconds.DEFAULT,
@@ -129,6 +130,7 @@ data class DriveSnapshot(
     val manualRedlineHoldSeconds: Int = ManualRedlineHoldSeconds.DEFAULT,
     val manualAutodownshiftRpm: Int = ManualAutodownshiftRpm.DEFAULT,
     val tachometerCruisingShiftRangeOverlayEnabled: Boolean = true,
+    val lowSpeedCrawlRpmHoldEnabled: Boolean = true,
     val favoriteCarIds: Set<String> = emptySet(),
     val userMessage: UserVisibleMessage? = null,
 )
@@ -483,6 +485,12 @@ class DriveController(context: Context) {
         }
     }
 
+    fun setRacingEnterMinThrottlePercent(percent: Int) {
+        updateAutomaticTransmissionSettings {
+            it.copy(racingEnterMinThrottlePercent = RacingEnterMinThrottlePercent.normalize(percent))
+        }
+    }
+
     fun setKickdownStompDeltaPercent(percent: Int) {
         updateAutomaticTransmissionSettings {
             it.copy(kickdownStompDeltaPercent = KickdownStompDeltaPercent.normalize(percent))
@@ -552,6 +560,12 @@ class DriveController(context: Context) {
     fun setTachometerCruisingShiftRangeOverlayEnabled(enabled: Boolean) {
         updateAutomaticTransmissionSettings {
             it.copy(tachometerCruisingShiftRangeOverlayEnabled = enabled)
+        }
+    }
+
+    fun setLowSpeedCrawlRpmHoldEnabled(enabled: Boolean) {
+        updateAutomaticTransmissionSettings {
+            it.copy(lowSpeedCrawlRpmHoldEnabled = enabled)
         }
     }
 
@@ -1554,6 +1568,7 @@ class DriveController(context: Context) {
                 ),
                 cruisingShiftOffsetsByTachMaxRpm = automaticTransmissionSettings.get().cruisingShiftOffsetsByTachMaxRpm,
                 racingReturnThrottlePercent = automaticTransmissionSettings.get().racingReturnThrottlePercent,
+                racingEnterMinThrottlePercent = automaticTransmissionSettings.get().racingEnterMinThrottlePercent,
                 kickdownStompDeltaPercent = automaticTransmissionSettings.get().kickdownStompDeltaPercent,
                 kickdownStompMinThrottlePercent = automaticTransmissionSettings.get().kickdownStompMinThrottlePercent,
                 racingEnterDelayMilliseconds = automaticTransmissionSettings.get().racingEnterDelayMilliseconds,
@@ -1564,6 +1579,8 @@ class DriveController(context: Context) {
                 manualAutodownshiftRpm = automaticTransmissionSettings.get().manualAutodownshiftRpm,
                 tachometerCruisingShiftRangeOverlayEnabled =
                     automaticTransmissionSettings.get().tachometerCruisingShiftRangeOverlayEnabled,
+                lowSpeedCrawlRpmHoldEnabled =
+                    automaticTransmissionSettings.get().lowSpeedCrawlRpmHoldEnabled,
                 transmissionLockedToVehicle = transmission.lockedToVehicle,
                 carAudioReady = isSelectedCarAudioReady(selected.id),
                 masterOutputLinear = if (audioEngine.isAudioActive() && !audioMuted.get()) {

@@ -119,6 +119,7 @@ class EngineSimulation {
         VirtualGearSpeedBoundariesSettings()
     private var virtualGearProfile: VirtualGearProfile? = null
     private var equalSpeedGearMapping: EqualSpeedGearMapping? = null
+    private var appliedAdaptiveGearCount: Int? = null
     private var previousInputWasSimulated: Boolean? = null
     private var automaticTransmissionConfig = AutomaticTransmissionConfig()
 
@@ -236,9 +237,10 @@ class EngineSimulation {
         }
 
         gearProfileSelection = selection
+        appliedAdaptiveGearCount = null
         physics?.let { activePhysics ->
             rebuildGearMapping(activePhysics)
-            drivetrain?.updateGearProfileMode(virtualGearProfile!!)
+            drivetrain?.switchGearProfilePreservingRoadSpeed(virtualGearProfile!!)
         }
     }
 
@@ -249,9 +251,13 @@ class EngineSimulation {
         }
 
         virtualGearSpeedBoundaries = normalized
+        if (gearProfileSelection.isAdaptive()) {
+            return
+        }
+
         physics?.let { activePhysics ->
             rebuildGearMapping(activePhysics)
-            drivetrain?.updateGearProfileMode(virtualGearProfile!!)
+            drivetrain?.switchGearProfilePreservingRoadSpeed(virtualGearProfile!!)
         }
     }
 
@@ -264,11 +270,23 @@ class EngineSimulation {
     private fun rebuildGearMapping(activePhysics: AssettoPhysics) {
         val profile = when (val selection = gearProfileSelection) {
             is GearProfileSelection.Original -> VirtualGearProfile.fromOriginal(activePhysics)
+            is GearProfileSelection.AdaptiveCruising6Racing10 -> {
+                val count = GearProfileSelection.resolveAdaptiveGearCount(
+                    manualShiftEnabled = manualShiftEnabled,
+                    automaticTransmissionMode = drivetrain?.frame()?.automaticTransmissionMode
+                        ?: AutomaticTransmissionMode.CRUISING,
+                )
+                buildVirtualGearProfile(
+                    physics = activePhysics,
+                    virtualGearCount = count,
+                    useDefaultBoundaries = true,
+                )
+            }
             is GearProfileSelection.Virtual -> {
                 val preset = GearProfileSelection.coercePreset(selection.count)
                 val boundaries = virtualGearSpeedBoundaries.boundariesFor(preset)
                     .map { it.toDouble() }
-                VirtualGearProfile.from(
+                buildVirtualGearProfile(
                     physics = activePhysics,
                     virtualGearCount = preset,
                     physicalBoundarySpeedsKmh = boundaries,
@@ -277,6 +295,85 @@ class EngineSimulation {
         }
         virtualGearProfile = profile
         equalSpeedGearMapping = EqualSpeedGearMapping.from(activePhysics, profile)
+        if (gearProfileSelection is GearProfileSelection.AdaptiveCruising6Racing10) {
+            appliedAdaptiveGearCount = profile.virtualForwardGearCount
+        } else {
+            appliedAdaptiveGearCount = null
+        }
+    }
+
+    private fun buildVirtualGearProfile(
+        physics: AssettoPhysics,
+        virtualGearCount: Int,
+        physicalBoundarySpeedsKmh: List<Double>? = null,
+        useDefaultBoundaries: Boolean = false,
+    ): VirtualGearProfile {
+        val boundaries = when {
+            useDefaultBoundaries -> VirtualGearProfile.defaultPhysicalBoundarySpeedsKmh(virtualGearCount)
+            physicalBoundarySpeedsKmh != null -> physicalBoundarySpeedsKmh
+            else -> VirtualGearProfile.defaultPhysicalBoundarySpeedsKmh(virtualGearCount)
+        }
+        return VirtualGearProfile.from(
+            physics = physics,
+            virtualGearCount = virtualGearCount,
+            physicalBoundarySpeedsKmh = boundaries,
+        )
+    }
+
+    private fun syncAdaptiveGearProfileIfNeeded(frame: AssettoDrivetrainFrame) {
+        if (gearProfileSelection !is GearProfileSelection.AdaptiveCruising6Racing10) {
+            appliedAdaptiveGearCount = null
+            return
+        }
+
+        val activePhysics = physics ?: return
+        val desiredCount = GearProfileSelection.resolveAdaptiveGearCount(
+            manualShiftEnabled = manualShiftEnabled,
+            automaticTransmissionMode = frame.automaticTransmissionMode,
+        )
+        val currentCount = virtualGearProfile?.virtualForwardGearCount
+
+        if (desiredCount == currentCount && desiredCount == appliedAdaptiveGearCount) {
+            return
+        }
+
+        if (!canSwitchAdaptiveGearProfile(frame, desiredCount, currentCount)) {
+            return
+        }
+
+        val profile = buildVirtualGearProfile(
+            physics = activePhysics,
+            virtualGearCount = desiredCount,
+            useDefaultBoundaries = true,
+        )
+        virtualGearProfile = profile
+        equalSpeedGearMapping = EqualSpeedGearMapping.from(activePhysics, profile)
+        drivetrain?.switchGearProfilePreservingRoadSpeed(profile)
+        appliedAdaptiveGearCount = desiredCount
+    }
+
+    private fun canSwitchAdaptiveGearProfile(
+        frame: AssettoDrivetrainFrame,
+        desiredCount: Int,
+        currentCount: Int?,
+    ): Boolean {
+        if (frame.shifting) {
+            return false
+        }
+
+        if (frame.launchControlPhase != LaunchControlPhase.INACTIVE) {
+            return false
+        }
+
+        if (
+            desiredCount == GearProfileSelection.ADAPTIVE_CRUISING_GEARS &&
+            currentCount == GearProfileSelection.ADAPTIVE_RACING_GEARS &&
+            frame.cruisingReturnActive
+        ) {
+            return false
+        }
+
+        return true
     }
 
     internal fun updateBackfireSettings(settings: BackfireSettings) {
@@ -406,6 +503,7 @@ class EngineSimulation {
             launchControlEnabled = input.transmissionPosition == TransmissionPosition.DRIVE,
             automaticTransmissionConfig = automaticTransmissionConfig,
         )
+        syncAdaptiveGearProfileIfNeeded(frame)
         val audiblePresentationSpeedKmh = realOrDocumentedExtrapolatedPresentationSpeedKmh
             ?: frame.speedMetersPerSecond * 3.6
         val audiblePresentationVelocityKmhPerSecond = if (

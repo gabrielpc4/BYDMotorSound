@@ -1537,13 +1537,10 @@ internal class AssettoDrivetrain(
         if (automaticTransmissionMode == AutomaticTransmissionMode.RACING) {
             val racingReturnStep = AutomaticTransmissionPolicy.stepRacingReturn(
                 armed = racingReturnArmed,
-                lightBrakeHoldSeconds = racingReturnLightBrakeHoldSeconds,
                 rawGas = rawGas,
                 brake = brake,
                 previousThrottle = previousRawGasForManualStomp,
-                deltaSeconds = dt,
                 racingReturnMaxThrottle = racingReturnMaxThrottle,
-                racingReturnHoldSeconds = racingReturnHoldSeconds,
                 kickdownMinDelta = kickdownStompMinDelta,
                 kickdownMinCurrentThrottle = kickdownStompMinCurrentThrottle,
             )

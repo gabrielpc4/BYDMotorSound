@@ -115,6 +115,7 @@ import com.gabrielpc.enginesoundsimulator.drive.DriveSnapshot
 import com.gabrielpc.enginesoundsimulator.drive.BackfireSettings
 import com.gabrielpc.enginesoundsimulator.drive.EffectSoundKind
 import com.gabrielpc.enginesoundsimulator.drive.GearProfileSelection
+import com.gabrielpc.enginesoundsimulator.drive.SpeedAudioGainResolver
 import com.gabrielpc.enginesoundsimulator.drive.SpeedAudioSettings
 import com.gabrielpc.enginesoundsimulator.drive.UserVisibleMessage
 import com.gabrielpc.enginesoundsimulator.drive.UserVisibleMessageSeverity
@@ -200,6 +201,7 @@ class MainActivity : ComponentActivity() {
 
     private val choreographer by lazy(LazyThreadSafetyMode.NONE) { Choreographer.getInstance() }
     private var driveState by mutableStateOf<DriveSnapshot?>(null)
+    private var mixerSourceAudibility by mutableStateOf<Map<String, Double>>(emptyMap())
     private var uiMonitoringActive by mutableStateOf(false)
     private var driveCaptureActive by mutableStateOf(false)
     private var driveCapturePath by mutableStateOf<String?>(null)
@@ -209,6 +211,12 @@ class MainActivity : ComponentActivity() {
         override fun doFrame(frameTimeNanos: Long) {
             if (!uiMonitoringActive) {
                 return
+            }
+
+            if (controller.isMixerDiagnosticsActive()) {
+                mixerSourceAudibility = controller.mixerAudibilityById()
+            } else if (mixerSourceAudibility.isNotEmpty()) {
+                mixerSourceAudibility = emptyMap()
             }
 
             driveState = controller.snapshot()
@@ -253,6 +261,7 @@ class MainActivity : ComponentActivity() {
                         Box(modifier = Modifier.fillMaxSize()) {
                         MotorSoundDashboard(
                             state = state,
+                            mixerSourceAudibility = mixerSourceAudibility,
                             uiMonitoringActive = uiMonitoringActive,
                             onToggleDashboardTheme = themeController::toggle,
                         onThrottle = controller::setSimulatedPedalThrottle,
@@ -291,7 +300,6 @@ class MainActivity : ComponentActivity() {
                         onRacingEnterDelayMillisecondsChange = controller::setRacingEnterDelayMilliseconds,
                         onAutomaticUpshiftMillisecondsChange = controller::setAutomaticUpshiftMilliseconds,
                         onAutomaticDownshiftMillisecondsChange = controller::setAutomaticDownshiftMilliseconds,
-                        onRacingReturnHoldSecondsChange = controller::setRacingReturnHoldSeconds,
                         onManualRedlineHoldSecondsChange = controller::setManualRedlineHoldSeconds,
                         onManualAutodownshiftRpmChange = controller::setManualAutodownshiftRpm,
                         onMinimumAudioThrottleChange = controller::setMinimumAudioThrottle,
@@ -394,6 +402,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun MotorSoundDashboard(
     state: DriveSnapshot,
+    mixerSourceAudibility: Map<String, Double>,
     uiMonitoringActive: Boolean,
     onToggleDashboardTheme: () -> Unit,
     onThrottle: (Double) -> Unit,
@@ -427,7 +436,6 @@ private fun MotorSoundDashboard(
     onRacingEnterDelayMillisecondsChange: (Int) -> Unit,
     onAutomaticUpshiftMillisecondsChange: (Int) -> Unit,
     onAutomaticDownshiftMillisecondsChange: (Int) -> Unit,
-    onRacingReturnHoldSecondsChange: (Int) -> Unit,
     onManualRedlineHoldSecondsChange: (Int) -> Unit,
     onManualAutodownshiftRpmChange: (Int) -> Unit,
     onMinimumAudioThrottleChange: (Float) -> Unit,
@@ -635,6 +643,7 @@ private fun MotorSoundDashboard(
                         }
                         DashboardMainScreen.MIXER -> MixerDashboardScreen(
                             state = state,
+                            sourceAudibilityById = mixerSourceAudibility,
                             onThrottle = onThrottle,
                             onBrake = onBrake,
                             onSimulatedRegen = onSimulatedRegen,
@@ -676,8 +685,6 @@ private fun MotorSoundDashboard(
                                 onManualTransmissionKickdownEnabledChange,
                             minimumAudioThrottle = state.minimumAudioThrottle,
                             onMinimumAudioThrottleChange = onMinimumAudioThrottleChange,
-                            racingReturnHoldSeconds = state.racingReturnHoldSeconds,
-                            onRacingReturnHoldSecondsChange = onRacingReturnHoldSecondsChange,
                             racingReturnThrottlePercent = state.racingReturnThrottlePercent,
                             onRacingReturnThrottlePercentChange = onRacingReturnThrottlePercentChange,
                             kickdownStompDeltaPercent = state.kickdownStompDeltaPercent,
@@ -706,7 +713,16 @@ private fun MotorSoundDashboard(
                             onPreviewBackfireSample = onPreviewBackfireSample,
                             speedAudioSettings = state.speedAudioSettings,
                             onSpeedAudioSettingsChange = onSpeedAudioSettingsChange,
-                            liveRpm = { state.drivetrain.rpm },
+                            liveUsesRacingGain = {
+                                SpeedAudioGainResolver.usesRacingGain(
+                                    manualShiftEnabled = state.manualShiftModeEnabled,
+                                    automaticTransmissionMode = state.drivetrain.automaticTransmissionMode,
+                                    racingReturnArmed = state.drivetrain.racingReturnArmed,
+                                )
+                            },
+                            livePreparingCruising = {
+                                state.drivetrain.racingReturnArmed
+                            },
                             liveSpeedKmh = { state.drivetrain.presentationSpeedKmh },
                         )
                     }

@@ -126,6 +126,7 @@ import com.gabrielpc.enginesoundsimulator.drive.BackfireSettings
 import com.gabrielpc.enginesoundsimulator.drive.VirtualGearSpeedBoundaries
 import com.gabrielpc.enginesoundsimulator.drive.VirtualGearSpeedBoundariesSettings
 import com.gabrielpc.enginesoundsimulator.drive.SpeedAudioGain
+import com.gabrielpc.enginesoundsimulator.drive.SpeedAudioGainResolver
 import com.gabrielpc.enginesoundsimulator.drive.SpeedAudioSettings
 import com.gabrielpc.enginesoundsimulator.drive.MinimumAudioThrottle
 import com.gabrielpc.enginesoundsimulator.drive.AutomaticDownshiftMilliseconds
@@ -135,7 +136,6 @@ import com.gabrielpc.enginesoundsimulator.drive.ManualRedlineHoldSeconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingEnterDelayMilliseconds
 import com.gabrielpc.enginesoundsimulator.drive.KickdownStompDeltaPercent
 import com.gabrielpc.enginesoundsimulator.drive.KickdownStompMinThrottlePercent
-import com.gabrielpc.enginesoundsimulator.drive.RacingReturnHoldSeconds
 import com.gabrielpc.enginesoundsimulator.drive.RacingReturnThrottlePercent
 import com.gabrielpc.enginesoundsimulator.drive.PedalAudioThrottleRampMilliseconds
 import com.gabrielpc.enginesoundsimulator.simulation.VirtualGearProfile
@@ -198,6 +198,7 @@ private val MIXER_PEDALS_OVERLAY_HEIGHT = 240.dp
 @Composable
 internal fun MixerDashboardScreen(
     state: DriveSnapshot,
+    sourceAudibilityById: Map<String, Double>,
     onThrottle: (Double) -> Unit,
     onBrake: (Double) -> Unit,
     onSimulatedRegen: (Double) -> Unit,
@@ -218,38 +219,37 @@ internal fun MixerDashboardScreen(
     onExteriorPureAudioChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var knownSources by remember(soundPerspective, state.selectedCarId) { mutableStateOf(emptyMap<String, FmodSourceState>()) }
     var previousActive by remember(soundPerspective, state.selectedCarId) { mutableStateOf(emptySet<String>()) }
     var initialized by remember(soundPerspective, state.selectedCarId) { mutableStateOf(false) }
     var highlightedIds by remember(soundPerspective, state.selectedCarId) { mutableStateOf(emptySet<String>()) }
+    var stepextAvailable by remember(soundPerspective, state.selectedCarId) { mutableStateOf(false) }
     // FMOD swaps sound names inside one authored event as RPM changes. Keep
     // M/S on that event identity so a control never disappears with a source.
     var mutedEvents by remember(soundPerspective, state.selectedCarId) { mutableStateOf(emptyMap<String, Boolean>()) }
     var soloedEvents by remember(soundPerspective, state.selectedCarId) { mutableStateOf(emptyMap<String, Boolean>()) }
-    val activeIds = state.fmodSources.filter { it.isActive }.mapTo(mutableSetOf(), FmodSourceState::id)
-    val enteredIds = activeIds - previousActive
+    val activeSources = remember(state.fmodSources, state.mixerStructureSerial) {
+        state.fmodSources
+    }
+    val activeIds = remember(activeSources) {
+        activeSources.mapTo(mutableSetOf(), FmodSourceState::id)
+    }
 
-    LaunchedEffect(state.fmodSources) {
-        val currentSources = state.fmodSources
-            .filter(FmodSourceState::isActive)
-            .associateBy(FmodSourceState::id)
-        val inactiveKnownSources = knownSources.mapValues { (_, source) ->
-            source.copy(
-                audibility = 0.0,
-                voiceCount = 0,
-                isVirtual = false,
-                isActive = false,
-            )
+    LaunchedEffect(state.mixerStructureSerial) {
+        if (state.fmodSources.any { source ->
+                source.soundName.contains("stepext", ignoreCase = true)
+            }) {
+            stepextAvailable = true
         }
-        // Once FMOD has exposed a source, keep its diagnostic card so its
-        // disappearance is visible as SILENT instead of looking like a reset.
-        knownSources = inactiveKnownSources + currentSources
+        val currentIds = state.fmodSources.mapTo(mutableSetOf(), FmodSourceState::id)
+        val enteredIds = currentIds - previousActive
         val shouldHighlight = initialized
-        previousActive = activeIds
+        previousActive = currentIds
         initialized = true
         if (shouldHighlight && enteredIds.isNotEmpty()) {
             val highlightable = enteredIds.filter { id ->
-                state.fmodSources.firstOrNull { it.id == id }?.let { it.eventName != "engine_int" && it.eventName != "engine_ext" } == true
+                activeSources.firstOrNull { it.id == id }?.let {
+                    it.eventName != "engine_int" && it.eventName != "engine_ext"
+                } == true
             }.toSet()
             highlightedIds = highlightedIds + highlightable
         }
@@ -262,10 +262,8 @@ internal fun MixerDashboardScreen(
         }
     }
 
-    val sections = remember(knownSources) {
-        // Dormant sources that FMOD has never exposed are omitted. Sources that
-        // were previously live remain as SILENT diagnostics instead of READY.
-        knownSources.values
+    val sections = remember(activeSources, state.mixerStructureSerial) {
+        activeSources
             .groupBy(FmodSourceState::section)
             .toSortedMap(compareBy<FmodEventSection> {
                 // Keep the many engine-region cards out of the way of the
@@ -346,6 +344,8 @@ internal fun MixerDashboardScreen(
                                 row.forEach { source ->
                                     FmodSourceMeter(
                                         source = source,
+                                        liveAudibility = sourceAudibilityById[source.id]?.toFloat()
+                                            ?: source.audibility.toFloat(),
                                         highlight = source.id in highlightedIds,
                                         modifier = Modifier.weight(1f),
                                     )
@@ -370,6 +370,7 @@ internal fun MixerDashboardScreen(
                 carShiftOverrideGain = state.shiftOverrideGain,
                 hasTurbo = state.hasTurbo,
                 hasSupercharger = state.hasSupercharger,
+                stepextAvailable = stepextAvailable,
                 mixerGains = mixerGains,
                 mixerSpecificGains = mixerSpecificGains,
                 mutedEvents = mutedEvents,
@@ -497,6 +498,7 @@ private fun MixerControlsPanel(
     carShiftOverrideGain: Float,
     hasTurbo: Boolean,
     hasSupercharger: Boolean,
+    stepextAvailable: Boolean,
     mixerGains: MixerGlobalGains,
     mixerSpecificGains: MixerCarSpecificGains,
     mutedEvents: Map<String, Boolean>,
@@ -593,6 +595,19 @@ private fun MixerControlsPanel(
                         onMixerSpecificGainsChange(mixerSpecificGains.copy(engineIdle = value))
                     },
                 )
+                if (stepextAvailable) {
+                    MixerLayerGainSlider(
+                        label = "STEP EXT",
+                        layerValue = mixerSpecificGains.stepext,
+                        globalValue = 1f,
+                        specificValue = mixerSpecificGains.stepext,
+                        overall = combinedOverall,
+                        accentColor = Master,
+                        onValueChange = { value ->
+                            onMixerSpecificGainsChange(mixerSpecificGains.copy(stepext = value))
+                        },
+                    )
+                }
             }
             MixerLayerGainSlider(
                 label = "ENGINE INTERIOR",
@@ -982,8 +997,6 @@ internal fun SettingsScreen(
     onManualTransmissionKickdownEnabledChange: (Boolean) -> Unit,
     minimumAudioThrottle: Float,
     onMinimumAudioThrottleChange: (Float) -> Unit,
-    racingReturnHoldSeconds: Int,
-    onRacingReturnHoldSecondsChange: (Int) -> Unit,
     racingReturnThrottlePercent: Int,
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
     kickdownStompDeltaPercent: Int,
@@ -1011,7 +1024,8 @@ internal fun SettingsScreen(
     onPreviewBackfireSample: (Int) -> Unit,
     speedAudioSettings: SpeedAudioSettings,
     onSpeedAudioSettingsChange: (SpeedAudioSettings) -> Unit,
-    liveRpm: () -> Double,
+    liveUsesRacingGain: () -> Boolean,
+    livePreparingCruising: () -> Boolean,
     liveSpeedKmh: () -> Double,
 ) {
     var selectedTab by remember { mutableStateOf(SettingsSection.SPEED_AUDIO) }
@@ -1048,7 +1062,8 @@ internal fun SettingsScreen(
             ) {
                 SpeedAudioSettingsPanel(
                     settings = speedAudioSettings,
-                    liveRpm = liveRpm(),
+                    liveUsesRacingGain = liveUsesRacingGain(),
+                    livePreparingCruising = livePreparingCruising(),
                     liveSpeedKmh = liveSpeedKmh(),
                     onChange = onSpeedAudioSettingsChange,
                 )
@@ -1093,8 +1108,6 @@ internal fun SettingsScreen(
             AutomaticTransmissionSettingsControl(
                 minimumAudioThrottle = minimumAudioThrottle,
                 onMinimumAudioThrottleChange = onMinimumAudioThrottleChange,
-                racingReturnHoldSeconds = racingReturnHoldSeconds,
-                onRacingReturnHoldSecondsChange = onRacingReturnHoldSecondsChange,
                 racingReturnThrottlePercent = racingReturnThrottlePercent,
                 onRacingReturnThrottlePercentChange = onRacingReturnThrottlePercentChange,
                 kickdownStompDeltaPercent = kickdownStompDeltaPercent,
@@ -1198,13 +1211,37 @@ private enum class SettingsSection {
 @Composable
 private fun SpeedAudioSettingsPanel(
     settings: SpeedAudioSettings,
-    liveRpm: Double,
+    liveUsesRacingGain: Boolean,
+    livePreparingCruising: Boolean,
     liveSpeedKmh: Double,
     onChange: (SpeedAudioSettings) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val normalized = settings.normalized()
+    val modeGainSteps = SpeedAudioGain.modeGainSliderSteps()
+    val modeBlendSteps = SpeedAudioGain.modeBlendSliderSteps()
     val speedCoefficientSteps = SpeedAudioGain.speedCoefficientSliderSteps()
+    val liveModeLabel = when {
+        liveUsesRacingGain -> "RACING / MANUAL"
+        livePreparingCruising -> "P-CRUISING"
+        else -> "CRUISING"
+    }
+    val liveModeGain = remember(normalized, liveUsesRacingGain) {
+        SpeedAudioGainResolver.combinedGainOffset(
+            usesRacingGain = liveUsesRacingGain,
+            settings = normalized,
+        )
+    }
+    val liveSpeedBonus = remember(normalized, liveSpeedKmh, liveUsesRacingGain) {
+        if (!liveUsesRacingGain) {
+            0f
+        } else {
+            SpeedAudioGainResolver.speedGainBonus(
+                speedKmh = liveSpeedKmh,
+                coefficient = normalized.speedGainCoefficient,
+            )
+        }
+    }
 
     Column(
         modifier = modifier
@@ -1213,31 +1250,122 @@ private fun SpeedAudioSettingsPanel(
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "SPEED AUDIO",
+                color = Accent,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.2.sp,
+            )
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = liveModeLabel,
+                    color = Muted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = SpeedAudioGain.formatGainOffset(liveModeGain),
+                    color = OnSurface,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black,
+                )
+                if (liveSpeedBonus > 0f) {
+                    Text(
+                        text = "+ speed ${SpeedAudioGain.formatGainOffset(liveSpeedBonus)}",
+                        color = Muted,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+
         Text(
-            text = "SPEED AUDIO",
-            color = Accent,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 1.2.sp,
+            text = "Two fixed host-gain offsets: one while cruising, one while racing or in manual shift. Smooth transition cross-fades between them when the drivetrain mode changes.",
+            color = Muted,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
         )
 
-        RpmGainCurveChart(
-            curvePoints = normalized.curvePoints,
-            speedGainCoefficient = normalized.speedGainCoefficient,
-            liveRpm = liveRpm,
-            liveSpeedKmh = liveSpeedKmh,
-            onPointsChange = { points ->
-                onChange(normalized.copy(curvePoints = points))
+        SpeedAudioModeGainControl(
+            title = "CRUISING",
+            value = normalized.cruisingGain,
+            onValueChange = { value ->
+                onChange(normalized.copy(cruisingGain = value))
             },
-            onRestoreDefaults = {
+            steps = modeGainSteps,
+        )
+
+        SpeedAudioModeGainControl(
+            title = "RACING / MANUAL",
+            value = normalized.racingGain,
+            onValueChange = { value ->
+                onChange(normalized.copy(racingGain = value))
+            },
+            steps = modeGainSteps,
+        )
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "SMOOTH TRANSITION",
+                    color = Accent,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black,
+                )
+                Text(
+                    text = SpeedAudioGain.formatModeBlendSeconds(normalized.modeBlendSeconds),
+                    color = OnSurface,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black,
+                )
+            }
+            Text(
+                text = "Cross-fade time when switching between cruising and racing/manual. 0s = instant.",
+                color = Muted,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+            Slider(
+                value = normalized.modeBlendSeconds,
+                onValueChange = { value ->
+                    onChange(normalized.copy(modeBlendSeconds = value))
+                },
+                valueRange = SpeedAudioGain.MODE_BLEND_SECONDS_MIN..SpeedAudioGain.MODE_BLEND_SECONDS_MAX,
+                steps = modeBlendSteps.coerceAtLeast(0),
+            )
+        }
+
+        OutlinedButton(
+            onClick = {
                 onChange(
-                    SpeedAudioSettings(
-                        curvePoints = SpeedAudioGain.DEFAULT_CURVE_POINTS,
-                        speedGainCoefficient = normalized.speedGainCoefficient,
+                    normalized.copy(
+                        cruisingGain = SpeedAudioGain.DEFAULT_CRUISING_GAIN,
+                        racingGain = SpeedAudioGain.DEFAULT_RACING_GAIN,
+                        modeBlendSeconds = SpeedAudioGain.DEFAULT_MODE_BLEND_SECONDS,
                     ),
                 )
             },
-        )
+            border = BorderStroke(1.dp, Outline),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("RESTORE MODE DEFAULTS", color = AccentSoft, fontWeight = FontWeight.Black)
+        }
+
+        HorizontalDivider(color = Outline)
 
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -1262,7 +1390,7 @@ private fun SpeedAudioSettingsPanel(
                 )
             }
             Text(
-                text = "Adds positive gain from road speed only, scaled to ${SpeedAudioGain.SPEED_REFERENCE_KMH.toInt()} km/h. Never reduces volume.",
+                text = "Adds positive gain from road speed only while racing or in manual shift, scaled to ${SpeedAudioGain.SPEED_REFERENCE_KMH.toInt()} km/h. Never applies in cruising or P-CRUISING.",
                 color = Muted,
                 fontSize = 12.sp,
                 lineHeight = 16.sp,
@@ -1280,6 +1408,45 @@ private fun SpeedAudioSettingsPanel(
                 steps = speedCoefficientSteps.coerceAtLeast(0),
             )
         }
+    }
+}
+
+@Composable
+private fun SpeedAudioModeGainControl(
+    title: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    steps: Int,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = title,
+                color = Accent,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Black,
+            )
+            Text(
+                text = SpeedAudioGain.formatGainOffset(value),
+                color = OnSurface,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Black,
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = SpeedAudioGain.GAIN_MIN..SpeedAudioGain.GAIN_MAX,
+            steps = steps.coerceAtLeast(0),
+        )
     }
 }
 
@@ -1588,8 +1755,6 @@ private fun CruisingShiftOffsetsByTachMaxRpmControl(
 private fun AutomaticTransmissionSettingsControl(
     minimumAudioThrottle: Float,
     onMinimumAudioThrottleChange: (Float) -> Unit,
-    racingReturnHoldSeconds: Int,
-    onRacingReturnHoldSecondsChange: (Int) -> Unit,
     racingReturnThrottlePercent: Int,
     onRacingReturnThrottlePercentChange: (Int) -> Unit,
     kickdownStompDeltaPercent: Int,
@@ -1655,43 +1820,7 @@ private fun AutomaticTransmissionSettingsControl(
             verticalAlignment = Alignment.Top,
         ) {
             Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("LIGHT BRAKE RETURN HOLD", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Black)
-                    Text(
-                        text = RacingReturnHoldSeconds.format(racingReturnHoldSeconds),
-                        color = OnSurface,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Black,
-                    )
-                }
-                Text(
-                    text = "In racing mode, holding the brake lightly (below 10%) for this long returns to cruising. A full throttle lift-off prepares the return (P-CRUISING).",
-                    color = Muted,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
-                )
-                Slider(
-                    value = racingReturnHoldSeconds.toFloat(),
-                    onValueChange = { value ->
-                        val selectedSeconds = RacingReturnHoldSeconds.normalize(value.roundToInt())
-                        if (selectedSeconds != racingReturnHoldSeconds) {
-                            onRacingReturnHoldSecondsChange(selectedSeconds)
-                        }
-                    },
-                    valueRange = RacingReturnHoldSeconds.MIN.toFloat()..RacingReturnHoldSeconds.MAX.toFloat(),
-                    steps = (RacingReturnHoldSeconds.MAX - RacingReturnHoldSeconds.MIN) / RacingReturnHoldSeconds.STEP - 1,
-                )
-            }
-
-            Column(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Row(
@@ -1708,7 +1837,7 @@ private fun AutomaticTransmissionSettingsControl(
                     )
                 }
                 Text(
-                    text = "After preparing a return (lift-off or light brake), re-acceleration at or below this level completes cruising. Above it, or a kickdown stomp, stays in racing.",
+                    text = "In racing, any brake input returns to cruising immediately. A full throttle lift-off prepares the return (P-CRUISING); re-acceleration at or below this level completes it. Above it, or a kickdown stomp, stays in racing.",
                     color = Muted,
                     fontSize = 12.sp,
                     lineHeight = 16.sp,
@@ -2933,10 +3062,12 @@ private data class LoadedCarPreview(
 @Composable
 private fun FmodSourceMeter(
     source: FmodSourceState,
+    liveAudibility: Float,
     highlight: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val level = source.audibility.toFloat().coerceIn(0f, 1f)
+    val level = liveAudibility.coerceIn(0f, 1f)
+    val audibilityPercent = (level * 100f).toInt()
     val fillColor = outputMeterFillColor(level, LocalDashboardSkin.current)
     val meterLabelPaint = remember {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -3029,7 +3160,7 @@ private fun FmodSourceMeter(
                 meterLabelPaint.color = fillColor.toArgb()
                 drawIntoCanvas { canvas ->
                     canvas.nativeCanvas.drawText(
-                        "${source.audibilityPercent}%",
+                        "$audibilityPercent%",
                         size.width - 8f,
                         size.height * 0.70f,
                         meterLabelPaint,

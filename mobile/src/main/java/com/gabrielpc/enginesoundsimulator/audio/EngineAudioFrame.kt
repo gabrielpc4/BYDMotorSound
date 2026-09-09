@@ -37,4 +37,6 @@ data class EngineAudioFrame(
     val suppressEffectsLoad: Boolean = false,
     /** When true (and not suppressed), racing/manual uses RPM load for transmission and binary pedal load for supercharger. */
     val effectsLoadFromThrottle: Boolean = false,
+    /** When true, speed-audio targets the racing/manual gain instead of cruising. */
+    val usesRacingSpeedAudioGain: Boolean = false,
 )

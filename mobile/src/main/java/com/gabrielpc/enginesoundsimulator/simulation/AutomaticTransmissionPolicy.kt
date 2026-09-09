@@ -16,8 +16,6 @@ internal object AutomaticTransmissionPolicy {
     const val MANUAL_KICKDOWN_CANCEL_MAX_THROTTLE = 0.12
     /** Emergency upshift once after holding the limiter this long, unless already in top gear. */
     const val EMERGENCY_UPSHIFT_HOLD_SECONDS = 1.5
-    /** Light brake below this level can accumulate a racing → cruising return timer. */
-    const val RACING_RETURN_LIGHT_BRAKE_MAX = 0.10
     /** Complete throttle release prepares a racing → cruising return without switching immediately. */
     const val RACING_RETURN_FULL_LIFT_MAX_THROTTLE = 0.0
     /** Automatic transmission returns to cruising below this road speed in D. */
@@ -100,41 +98,33 @@ internal object AutomaticTransmissionPolicy {
     )
 
     /**
-     * Racing-mode return logic: lift-off prepares cruising; light brake held long enough or a
-     * gentle re-acceleration completes it. A stomp or heavy pedal cancels the prepare and stays racing.
+     * Racing-mode return logic: brake returns to cruising immediately; lift-off prepares
+     * P-CRUISING; gentle re-acceleration after lift-off completes the return.
      */
     fun stepRacingReturn(
         armed: Boolean,
-        lightBrakeHoldSeconds: Double,
         rawGas: Double,
         brake: Double,
         previousThrottle: Double,
-        deltaSeconds: Double,
         racingReturnMaxThrottle: Double,
-        racingReturnHoldSeconds: Double,
         kickdownMinDelta: Double,
         kickdownMinCurrentThrottle: Double,
     ): RacingReturnStepResult {
+        if (brake > 0.0) {
+            return RacingReturnStepResult(
+                armed = false,
+                lightBrakeHoldSeconds = 0.0,
+                returnToCruising = true,
+            )
+        }
+
         var nextArmed = armed
-        var nextLightBrakeHoldSeconds = lightBrakeHoldSeconds
         var returnToCruising = false
 
         val fullLift = rawGas <= RACING_RETURN_FULL_LIFT_MAX_THROTTLE
-        val lightBrakeActive = brake > 0.0 && brake < RACING_RETURN_LIGHT_BRAKE_MAX
 
         if (fullLift) {
             nextArmed = true
-        }
-
-        if (lightBrakeActive) {
-            nextArmed = true
-            nextLightBrakeHoldSeconds += deltaSeconds
-
-            if (nextLightBrakeHoldSeconds >= racingReturnHoldSeconds) {
-                returnToCruising = true
-            }
-        } else {
-            nextLightBrakeHoldSeconds = 0.0
         }
 
         if (!returnToCruising && nextArmed && rawGas > 0.0) {
@@ -154,12 +144,11 @@ internal object AutomaticTransmissionPolicy {
 
         if (returnToCruising) {
             nextArmed = false
-            nextLightBrakeHoldSeconds = 0.0
         }
 
         return RacingReturnStepResult(
             armed = nextArmed,
-            lightBrakeHoldSeconds = nextLightBrakeHoldSeconds,
+            lightBrakeHoldSeconds = 0.0,
             returnToCruising = returnToCruising,
         )
     }

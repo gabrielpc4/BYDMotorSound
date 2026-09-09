@@ -78,6 +78,9 @@ internal class NativeFmodBankBridge {
     /** Per-car trim for engine_int/engine_ext subsounds whose FMOD sound name contains "idle". */
     external fun setEngineIdleGain(gain: Float)
 
+    /** Per-car trim for embedded stepext subsounds such as corvette2stepext. */
+    external fun setStepextGain(gain: Float)
+
     external fun setEffectSoundOverrideGains(shiftOverrideGain: Float, backfireOverrideGain: Float)
     external fun hasEmbeddedSupercharger(): Boolean
 

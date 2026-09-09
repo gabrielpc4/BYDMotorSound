@@ -151,6 +151,7 @@ internal object SettingsExporter {
         return JSONObject().apply {
             put("overall", gains.overall.toDouble())
             put("engineIdle", gains.engineIdle.toDouble())
+            put("stepext", gains.stepext.toDouble())
             put("engineInterior", gains.engineInterior.toDouble())
             put("engineExterior", gains.engineExterior.toDouble())
             put("effectsHost", gains.effectsHost.toDouble())
@@ -181,19 +182,9 @@ internal object SettingsExporter {
     private fun speedAudioToJson(settings: SpeedAudioSettings): JSONObject {
         val normalized = settings.normalized()
         return JSONObject().apply {
-            put(
-                "curvePoints",
-                JSONArray().apply {
-                    normalized.curvePoints.forEach { point ->
-                        put(
-                            JSONObject().apply {
-                                put("rpm", point.rpm)
-                                put("gainOffset", point.gainOffset.toDouble())
-                            },
-                        )
-                    }
-                },
-            )
+            put("cruisingGain", normalized.cruisingGain.toDouble())
+            put("racingGain", normalized.racingGain.toDouble())
+            put("modeBlendSeconds", normalized.modeBlendSeconds.toDouble())
             put("speedGainCoefficient", normalized.speedGainCoefficient.toDouble())
         }
     }

@@ -50,6 +50,7 @@ constexpr float kEffectsFullGainRpmFraction = 0.9f;
 // as a virtual 0% card. This is an event-specific FMOD parameter, not a change to pedal physics.
 constexpr float kBackfireAudioThrottle = 0.0f;
 constexpr double kRecentSourceSeconds = 1.5;
+constexpr float kMixerAudibleMinAudibility = 0.002f;
 constexpr char kFieldSeparator = '\x1f';
 constexpr char kStableIdSeparator = '\x1e';
 constexpr std::size_t kDiagnosticRingCapacity = 8192;
@@ -432,6 +433,13 @@ bool isSuperchargerSoundName(const std::string& name) {
         ) == 0;
     }
     return false;
+}
+
+bool isStepextSoundName(const std::string& name) {
+    if (name.empty()) {
+        return false;
+    }
+    return lowercaseCopy(name.c_str()).find("stepext") != std::string::npos;
 }
 
 bool isIdleSoundName(const std::string& name) {
@@ -1081,6 +1089,23 @@ public:
         }
     }
 
+    void setStepextGain(float gain) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!active_) {
+            return;
+        }
+        const float clamped = std::max(0.0f, gain);
+        const bool wasActive = !approximatelyEmbeddedGainUnity(stepextGain_);
+        const bool isActive = !approximatelyEmbeddedGainUnity(clamped);
+        if (stepextGain_ == clamped) {
+            return;
+        }
+        stepextGain_ = clamped;
+        if (wasActive || isActive) {
+            applyEmbeddedEngineChannelGainsLockedWithIdleScan(true);
+        }
+    }
+
     void setBackfireAudioEnabled(bool enabled) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (backfireAudioEnabled_ == enabled) return;
@@ -1217,6 +1242,9 @@ public:
             const float audibility = std::clamp(std::sqrt(source.audibilitySquared), 0.0f, 1.0f);
             const bool active = source.voiceCount > 0 || source.callbackActive;
             const bool virtualOnly = source.voiceCount > 0 && source.virtualVoiceCount == source.voiceCount;
+            if (!active || virtualOnly || audibility <= kMixerAudibleMinAudibility) {
+                continue;
+            }
             recordVoiceState(source, audibility);
             std::ostringstream row;
             row << source.id << kFieldSeparator
@@ -1823,8 +1851,10 @@ private:
         }
     }
 
-    bool embeddedEngineChannelGainWorkNeededLocked(bool scanIdleChannels) const {
-        return hasEmbeddedSupercharger_.load(std::memory_order_relaxed) || scanIdleChannels;
+    bool embeddedEngineChannelGainWorkNeededLocked(bool scanEmbeddedTrimChannels) const {
+        return hasEmbeddedSupercharger_.load(std::memory_order_relaxed) ||
+            scanEmbeddedTrimChannels ||
+            !approximatelyEmbeddedGainUnity(stepextGain_);
     }
 
     static bool approximatelyEmbeddedGainUnity(float value) {
@@ -1847,6 +1877,9 @@ private:
         }
         if (isEngineIdleTrimEventName(eventName) && isIdleSoundName(soundName)) {
             return engineIdleGain_;
+        }
+        if (isStepextSoundName(soundName)) {
+            return stepextGain_;
         }
         return 1.0f;
     }
@@ -1918,10 +1951,11 @@ private:
                 }
                 const std::string soundNameString(soundName);
                 const bool isSupercharger = isSuperchargerSoundName(soundNameString);
+                const bool isStepext = isStepextSoundName(soundNameString);
                 const bool isIdle = scanIdleChannels &&
                     isEngineIdleTrimEventName(eventName) &&
                     isIdleSoundName(soundNameString);
-                if (!isSupercharger && !isIdle && !superchargerSoloActiveLocked()) {
+                if (!isSupercharger && !isStepext && !isIdle && !superchargerSoloActiveLocked()) {
                     continue;
                 }
                 applyEmbeddedChannelGainLocked(
@@ -1961,9 +1995,9 @@ private:
     }
 
     void applyEmbeddedEngineChannelGainsLocked() {
-        applyEmbeddedEngineChannelGainsLockedWithIdleScan(
-            !approximatelyEmbeddedGainUnity(engineIdleGain_)
-        );
+        // Always scan embedded trim channels so subsounds (idle, stepext) recover after a
+        // temporary mute even when their user trim is back at unity.
+        applyEmbeddedEngineChannelGainsLockedWithIdleScan(true);
     }
 
     float eventCategoryGain(const std::string& name) const {
@@ -2083,6 +2117,7 @@ private:
         superchargerProbeAccelSeconds_ = 0.0f;
         superchargerGain_ = 1.0f;
         engineIdleGain_ = 1.0f;
+        stepextGain_ = 1.0f;
         idleRpm_ = 1000.0f;
         limiterRpm_ = 7000.0f;
         limiterRunning_ = false;
@@ -2931,6 +2966,7 @@ private:
     float limiterGain_ = 1.0f;
     float superchargerGain_ = 1.0f;
     float engineIdleGain_ = 1.0f;
+    float stepextGain_ = 1.0f;
     float shiftOverrideGain_ = 1.0f;
     float backfireOverrideGain_ = 1.0f;
     std::atomic<bool> hasEmbeddedSupercharger_{false};
@@ -3235,6 +3271,13 @@ Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setEngineIdle
     JNIEnv*, jobject, jfloat gain
 ) {
     runtime.setEngineIdleGain(gain);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_gabrielpc_enginesoundsimulator_audio_NativeFmodBankBridge_setStepextGain(
+    JNIEnv*, jobject, jfloat gain
+) {
+    runtime.setStepextGain(gain);
 }
 
 extern "C" JNIEXPORT void JNICALL

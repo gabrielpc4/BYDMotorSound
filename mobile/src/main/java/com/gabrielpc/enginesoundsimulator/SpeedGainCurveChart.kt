@@ -51,11 +51,17 @@ internal fun SpeedGainCurveChart(
     val skin = LocalDashboardSkin.current
     val panelShape = skin.panelShape
     val referenceKmh = SpeedAudioGain.SPEED_REFERENCE_KMH
-    val chartMaxKmh = (referenceKmh * 1.15).roundToInt().toFloat()
+    val chartMaxKmh = referenceKmh.roundToInt().toFloat()
     val liveSpeedMarker = liveSpeedKmh.coerceAtLeast(0.0)
-    val description = remember(normalizedCoefficient, liveSpeedMarker) {
-        "Speed gain from 0 to ${referenceKmh.toInt()} km/h at " +
-            SpeedAudioGain.formatSpeedCoefficient(normalizedCoefficient)
+    val liveSpeedGain = remember(normalizedCoefficient, liveSpeedMarker) {
+        SpeedAudioGainResolver.speedGainBonus(
+            speedKmh = liveSpeedMarker,
+            coefficient = normalizedCoefficient,
+        )
+    }
+    val description = remember(normalizedCoefficient, liveSpeedMarker, liveSpeedGain) {
+        "Speed gain ${SpeedAudioGain.formatGainOffset(liveSpeedGain)} at " +
+            "${liveSpeedMarker.roundToInt()} km/h"
     }
 
     Column(
@@ -73,14 +79,15 @@ internal fun SpeedGainCurveChart(
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "0 … ${SpeedAudioGain.formatGainOffset(gainAxisMax)}",
+                text = SpeedAudioGain.formatGainOffset(liveSpeedGain),
                 color = skin.onSurface,
                 fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
             )
         }
 
         Text(
-            text = "Linear bonus from standstill to ${referenceKmh.toInt()} km/h. Above that, gain stays at the maximum.",
+            text = "Linear bonus from standstill to ${referenceKmh.toInt()} km/h.",
             color = skin.chartFooter,
             fontSize = 10.sp,
         )
@@ -100,7 +107,6 @@ internal fun SpeedGainCurveChart(
                     val gainMin = 0f
                     val gainMax = gainAxisMax
                     val gainSpan = (gainMax - gainMin).coerceAtLeast(0.01f)
-                    val referenceLineX = leftPx + plotWidth * (referenceKmh / chartMaxKmh).toFloat()
                     val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         textSize = 10.sp.toPx()
                         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
@@ -131,7 +137,7 @@ internal fun SpeedGainCurveChart(
                             )
                         }
 
-                        val gridSpeedValues = intArrayOf(0, 50, 100, referenceKmh.roundToInt(), chartMaxKmh.roundToInt())
+                        val gridSpeedValues = intArrayOf(0, 50, 100, referenceKmh.roundToInt())
                         gridSpeedValues.forEach { speedKmh ->
                             val x = leftPx + plotWidth * (speedKmh / chartMaxKmh)
                             drawLine(
@@ -141,13 +147,6 @@ internal fun SpeedGainCurveChart(
                                 strokeWidth = 1.dp.toPx(),
                             )
                         }
-
-                        drawLine(
-                            skin.chartAxis.copy(alpha = 0.35f),
-                            Offset(referenceLineX, topPx),
-                            Offset(referenceLineX, topPx + plotHeight),
-                            strokeWidth = 1.dp.toPx(),
-                        )
 
                         drawLine(
                             skin.chartAxis,
@@ -216,7 +215,7 @@ private fun sampleSpeedGainCurve(
     coefficient: Float,
     sampleCount: Int = 32,
 ): List<SpeedGainSample> {
-    val chartMaxKmh = (SpeedAudioGain.SPEED_REFERENCE_KMH * 1.15).toFloat()
+    val chartMaxKmh = SpeedAudioGain.SPEED_REFERENCE_KMH.toFloat()
 
     return List(sampleCount) { index ->
         val speedKmh = chartMaxKmh * index / (sampleCount - 1).coerceAtLeast(1)

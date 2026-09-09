@@ -48,13 +48,16 @@ internal class FmodLoudnessCalibrationRunner(
         )
         var processed = resumable.size
         var failed = 0
+        var skipped = 0
         var lastError: String? = null
-        val total = profiles.size * EngineSoundPerspective.entries.size
+        val total = measurablePairCount()
+        skipped = profiles.size * EngineSoundPerspective.entries.size - total
         onProgress(
             LoudnessCalibrationProgress(
                 status = LoudnessCalibrationStatus.RUNNING,
                 completedCount = processed,
                 totalCount = total,
+                skippedCount = skipped,
             ),
         )
 
@@ -75,7 +78,7 @@ internal class FmodLoudnessCalibrationRunner(
             profiles.forEach { profile ->
                 checkCancelled()
                 fingerprintCatalog.errorsByProfile[profile.calibrationIdentity()]?.let { error ->
-                    val perspectives = EngineSoundPerspective.entries
+                    val perspectives = measurablePerspectives(profile)
                     failed += perspectives.size
                     processed += perspectives.size
                     lastError = "${profile.displayName}: $error"
@@ -84,12 +87,13 @@ internal class FmodLoudnessCalibrationRunner(
                         perspectives,
                         processed,
                         total,
+                        skipped,
                         failed,
                         requireNotNull(lastError),
                     )
                     return@forEach
                 }
-                val pendingPerspectives = EngineSoundPerspective.entries.filter { perspective ->
+                val pendingPerspectives = measurablePerspectives(profile).filter { perspective ->
                     val key = LoudnessCalibrationKey(profile.id, profile.packGroup, perspective)
                     resumable[key] != fingerprints[key]
                 }
@@ -100,7 +104,7 @@ internal class FmodLoudnessCalibrationRunner(
                     failed += pendingPerspectives.size
                     processed += pendingPerspectives.size
                     lastError = message
-                    reportFailures(profile, pendingPerspectives, processed, total, failed, message)
+                    reportFailures(profile, pendingPerspectives, processed, total, skipped, failed, message)
                     return@forEach
                 }
                 val physics = runCatching { bankResolver.physics(profile) }.getOrElse { error ->
@@ -108,7 +112,7 @@ internal class FmodLoudnessCalibrationRunner(
                     failed += pendingPerspectives.size
                     processed += pendingPerspectives.size
                     lastError = message
-                    reportFailures(profile, pendingPerspectives, processed, total, failed, message)
+                    reportFailures(profile, pendingPerspectives, processed, total, skipped, failed, message)
                     return@forEach
                 }
                 val loadError = bridge.loadCalibrationCar(
@@ -127,6 +131,7 @@ internal class FmodLoudnessCalibrationRunner(
                         pendingPerspectives,
                         processed,
                         total,
+                        skipped,
                         failed,
                         requireNotNull(lastError),
                     )
@@ -146,6 +151,7 @@ internal class FmodLoudnessCalibrationRunner(
                                 perspective = perspective,
                                 completedCount = processed,
                                 totalCount = total,
+                                skippedCount = skipped,
                                 failedCount = failed,
                                 lastError = lastError,
                             ),
@@ -192,6 +198,7 @@ internal class FmodLoudnessCalibrationRunner(
                                 perspective = perspective,
                                 completedCount = processed,
                                 totalCount = total,
+                                skippedCount = skipped,
                                 failedCount = failed,
                                 lastError = lastError,
                             ),
@@ -209,6 +216,7 @@ internal class FmodLoudnessCalibrationRunner(
                         pendingPerspectives,
                         processed,
                         total,
+                        skipped,
                         failed,
                         requireNotNull(lastError),
                     )
@@ -239,7 +247,7 @@ internal class FmodLoudnessCalibrationRunner(
         profiles.forEach { profile ->
             runCatching { bankResolver.calibrationFingerprint(profile) }
                 .onSuccess { fingerprint ->
-                    EngineSoundPerspective.entries.forEach { perspective ->
+                    measurablePerspectives(profile).forEach { perspective ->
                         fingerprints[LoudnessCalibrationKey(profile.id, profile.packGroup, perspective)] = fingerprint
                     }
                 }
@@ -266,6 +274,18 @@ internal class FmodLoudnessCalibrationRunner(
 
     private fun FmodBankProfile.calibrationIdentity(): CalibrationProfileIdentity =
         CalibrationProfileIdentity(id, packGroup)
+
+    private fun measurablePairCount(): Int {
+        return profiles.sumOf { profile ->
+            measurablePerspectives(profile).size
+        }
+    }
+
+    private fun measurablePerspectives(profile: FmodBankProfile): List<EngineSoundPerspective> {
+        return EngineSoundPerspective.entries.filter { perspective ->
+            LoudnessCalibrationPolicy.shouldMeasure(profile.id, perspective)
+        }
+    }
 
     private fun waitForSampleData(bridge: NativeFmodBankBridge) {
         val deadline = System.nanoTime() + SAMPLE_READY_TIMEOUT_NANOS
@@ -374,6 +394,7 @@ internal class FmodLoudnessCalibrationRunner(
         perspectives: List<EngineSoundPerspective>,
         processed: Int,
         total: Int,
+        skipped: Int,
         failed: Int,
         message: String,
     ) {
@@ -391,6 +412,7 @@ internal class FmodLoudnessCalibrationRunner(
                 perspective = perspectives.lastOrNull(),
                 completedCount = processed,
                 totalCount = total,
+                skippedCount = skipped,
                 failedCount = failed,
                 lastError = message,
             ),
@@ -414,7 +436,7 @@ internal class FmodLoudnessCalibrationRunner(
         runCatching {
             diagnosticFile.writeText(
                 "${System.currentTimeMillis()};batch=start;profiles=${profiles.size};" +
-                    "pairs=${profiles.size * EngineSoundPerspective.entries.size}\n",
+                    "pairs=${measurablePairCount()};skipped=${profiles.size * EngineSoundPerspective.entries.size - measurablePairCount()}\n",
             )
         }
     }

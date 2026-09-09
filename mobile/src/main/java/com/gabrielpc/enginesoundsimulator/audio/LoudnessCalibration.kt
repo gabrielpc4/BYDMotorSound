@@ -92,6 +92,7 @@ data class LoudnessCalibrationProgress(
     val perspective: EngineSoundPerspective? = null,
     val completedCount: Int = 0,
     val totalCount: Int = 0,
+    val skippedCount: Int = 0,
     val failedCount: Int = 0,
     val lastError: String? = null,
 ) {

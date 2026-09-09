@@ -121,7 +121,6 @@ internal object FmodBankProfiles {
         profile("assetto-mercedes-sls-gt3", "Mercedes Sls Gt3"),
         profile("assetto-nissan-370z", "Nissan 370Z"),
         profile("assetto-nissan-gtr", "Nissan GT-R"),
-        profile("assetto-nissan-skyline-r34", "Nissan Skyline GT-R R34"),
         profile("assetto-p4-5-2011", "P4 5 2011"),
         profile("assetto-pagani-huayra", "Pagani Huayra"),
         profile("assetto-pagani-zonda-r", "Pagani Zonda R"),

@@ -8,6 +8,22 @@ import org.junit.Test
 
 class LoudnessNormalizationTest {
     @Test
+    fun astonMartinDbsExteriorIsExcludedFromLoudnessCalibration() {
+        assertTrue(
+            LoudnessCalibrationPolicy.shouldMeasure(
+                LoudnessCalibrationPolicy.ASTON_MARTIN_DBS_PROFILE_ID,
+                EngineSoundPerspective.CABIN,
+            ),
+        )
+        assertFalse(
+            LoudnessCalibrationPolicy.shouldMeasure(
+                LoudnessCalibrationPolicy.ASTON_MARTIN_DBS_PROFILE_ID,
+                EngineSoundPerspective.EXTERIOR,
+            ),
+        )
+    }
+
+    @Test
     fun medianTargetUsesCeilingAndCorrectionCapsOnlyAmplification() {
         assertEquals(-22.0, LoudnessNormalizationMath.targetLufs(listOf(-30.0, -22.0, -10.0))!!, 0.0001)
         assertEquals(-18.0, LoudnessNormalizationMath.targetLufs(listOf(-17.0, -15.0))!!, 0.0001)

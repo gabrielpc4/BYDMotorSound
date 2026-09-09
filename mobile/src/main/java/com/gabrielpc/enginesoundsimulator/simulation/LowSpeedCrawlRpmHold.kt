@@ -5,13 +5,15 @@ import kotlin.math.abs
 /**
  * Low-speed crawl needle: when normal drivetrain logic would sit below 3,000 RPM, throttle above
  * 1% glides the tach toward 3,000 RPM; lifting the throttle or braking glides back to idle.
- * Once normal logic would reach 3,000 RPM or higher, this override steps aside.
+ * Once normal logic would reach 3,000 RPM or higher, glide into the mapped RPM instead of
+ * snapping to it.
  */
 internal class LowSpeedCrawlRpmHold {
     enum class Phase {
         INACTIVE,
         APPROACHING_HOLD,
         HOLDING,
+        HANDOFF_TO_BASELINE,
         RETURNING_TO_IDLE,
     }
 
@@ -48,8 +50,12 @@ internal class LowSpeedCrawlRpmHold {
         }
 
         if (baselineRpm >= HOLD_RPM) {
-            clear()
-            return null
+            if (phase == Phase.APPROACHING_HOLD || phase == Phase.HOLDING) {
+                phase = Phase.HANDOFF_TO_BASELINE
+            } else if (phase != Phase.HANDOFF_TO_BASELINE) {
+                clear()
+                return null
+            }
         }
 
         val brakeApplied = brake >= BRAKE_THRESHOLD
@@ -85,6 +91,23 @@ internal class LowSpeedCrawlRpmHold {
             }
 
             Phase.HOLDING -> HOLD_RPM
+
+            Phase.HANDOFF_TO_BASELINE -> {
+                val nextRpm = approachRpm(
+                    currentRpm = currentRpm,
+                    targetRpm = baselineRpm,
+                    responseSeconds = HANDOFF_RESPONSE_SECONDS,
+                    dt = dt,
+                    idleRpm = idleRpm,
+                    limiterRpm = Double.MAX_VALUE,
+                )
+                if (abs(nextRpm - baselineRpm) <= HANDOFF_SETTLE_RPM) {
+                    clear()
+                    baselineRpm
+                } else {
+                    nextRpm
+                }
+            }
 
             Phase.RETURNING_TO_IDLE -> {
                 val nextRpm = approachRpm(
@@ -124,8 +147,10 @@ internal class LowSpeedCrawlRpmHold {
         const val THROTTLE_ENGAGE_THRESHOLD = 0.01
         const val BRAKE_THRESHOLD = 0.05
         const val APPROACH_RESPONSE_SECONDS = 1.8
+        const val HANDOFF_RESPONSE_SECONDS = 1.1
         const val RETURN_TO_IDLE_RESPONSE_SECONDS = 1.35
         const val HOLD_SETTLE_RPM = 35.0
+        const val HANDOFF_SETTLE_RPM = 45.0
         const val RETURN_SETTLE_RPM = 40.0
     }
 }

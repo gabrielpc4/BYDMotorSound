@@ -34,6 +34,7 @@ import com.gabrielpc.enginesoundsimulator.audio.AcousticAdjustmentState
 import com.gabrielpc.enginesoundsimulator.audio.AcousticAdjustmentValidity
 import com.gabrielpc.enginesoundsimulator.audio.IphoneAcousticMeterRepository
 import com.gabrielpc.enginesoundsimulator.audio.LoudnessCalibrationKey
+import com.gabrielpc.enginesoundsimulator.audio.LoudnessCalibrationPolicy
 import com.gabrielpc.enginesoundsimulator.audio.LoudnessCalibrationProgress
 import com.gabrielpc.enginesoundsimulator.audio.LoudnessCalibrationStatus
 import com.gabrielpc.enginesoundsimulator.audio.LoudnessNormalizationRepository
@@ -1560,6 +1561,10 @@ class DriveController(context: Context) {
                     val fingerprint = runCatching { bankResolver.calibrationFingerprint(profile) }.getOrNull()
                         ?: return@forEach
                     EngineSoundPerspective.entries.forEach { perspective ->
+                        if (!LoudnessCalibrationPolicy.shouldMeasure(profile.id, perspective)) {
+                            return@forEach
+                        }
+
                         put(LoudnessCalibrationKey(profile.id, profile.packGroup, perspective), fingerprint)
                     }
                 }

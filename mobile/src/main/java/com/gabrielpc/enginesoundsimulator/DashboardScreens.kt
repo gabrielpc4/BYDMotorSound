@@ -1480,7 +1480,13 @@ private fun LoudnessNormalizationSettingsPanel(
                 )
                 if (progress.totalCount > 0) {
                     Text(
-                        "${progress.completedCount} / ${progress.totalCount} processed · ${progress.failedCount} failed",
+                        buildString {
+                            append("${progress.completedCount} / ${progress.totalCount} processed")
+                            if (progress.skippedCount > 0) {
+                                append(" · ${progress.skippedCount} skipped")
+                            }
+                            append(" · ${progress.failedCount} failed")
+                        },
                         color = OnSurface,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,

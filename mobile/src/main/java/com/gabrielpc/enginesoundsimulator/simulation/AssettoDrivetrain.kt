@@ -1098,6 +1098,15 @@ internal class AssettoDrivetrain(
         applyCruisingBandCap()
     }
 
+    /** RPM the drivetrain would publish without the crawl override this frame. */
+    private fun lowSpeedCrawlBaselineRpm(): Double {
+        if (shouldLockRpmToMappedRoadSpeed() && gear >= 1) {
+            return coupledRpmForGear(gear)
+        }
+
+        return rpm
+    }
+
     /**
      * Glide the tach toward 3,000 RPM while normal mapped RPM would stay below that line; release
      * once baseline drivetrain logic would reach 3,000 RPM or higher.
@@ -1118,7 +1127,7 @@ internal class AssettoDrivetrain(
         } else {
             Double.MAX_VALUE
         }
-        val baselineRpm = rpm
+        val baselineRpm = lowSpeedCrawlBaselineRpm()
         val overrideRpm = lowSpeedCrawlRpmHold.step(
             dt = dt,
             enabled = lowSpeedCrawlRpmHoldEnabled,

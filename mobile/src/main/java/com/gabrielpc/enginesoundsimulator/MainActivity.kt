@@ -210,11 +210,12 @@ private object DashboardLayoutDefaults {
 }
 
 private object CarStageTapDefaults {
-    val sideStripWidth = 116.dp
-    val navigationButtonHeight = 232.dp
-    val navigationIconSize = 48.dp
-    val navigationArrowFontSize = 84.sp
-    val favoriteCornerHeight = 88.dp
+    val buttonWidth = 80.dp
+    val buttonHeight = 166.dp
+    val shuffleIconSize = 40.dp
+    val shuffleIconTopPadding = 36.dp
+    val arrowFontSize = 100.sp
+    val navigationButtonGap = 12.dp
 }
 
 class MainActivity : ComponentActivity() {
@@ -2606,7 +2607,7 @@ private fun CarStage(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = CarStageTapDefaults.sideStripWidth)
+                    .padding(horizontal = CarStageTapDefaults.buttonWidth)
                     .clickable { carPickerExpanded = true },
             )
 
@@ -2671,30 +2672,29 @@ private fun CarStage(
                 onClick = onPreviousCar,
                 modifier = Modifier.align(Alignment.CenterStart),
             )
-            Column(
-                modifier = Modifier.align(Alignment.CenterEnd),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .width(CarStageTapDefaults.buttonWidth),
             ) {
-                CarSelectorSideIconZone(
-                    imageVector = Icons.Filled.Shuffle,
-                    contentDescription = "Shuffle car",
-                    onClick = onShuffleCar,
-                )
                 CarSelectorSideTapZone(
                     label = "›",
                     contentDescription = "Next car",
                     onClick = onNextCar,
+                    modifier = Modifier.align(Alignment.Center),
+                )
+                CarSelectorSideIconZone(
+                    imageVector = Icons.Filled.Shuffle,
+                    contentDescription = "Shuffle car",
+                    onClick = onShuffleCar,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .offset(
+                            y = -(CarStageTapDefaults.buttonHeight + CarStageTapDefaults.navigationButtonGap),
+                        ),
                 )
             }
-            CarFavoriteStarButton(
-                isFavorite = state.selectedCarId in state.favoriteCarIds,
-                onToggle = { onToggleCarFavorite(state.selectedCarId) },
-                scale = 2f,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp),
-            )
         }
     }
 
@@ -2777,23 +2777,23 @@ private fun CarSelectorSideIconZone(
 ) {
     Box(
         modifier = modifier
-            .width(CarStageTapDefaults.sideStripWidth)
-            .height(CarStageTapDefaults.navigationButtonHeight)
-            .clip(CircleShape)
-            .background(HardwareBackdrop.copy(alpha = 0.92f))
+            .width(CarStageTapDefaults.buttonWidth)
+            .height(CarStageTapDefaults.buttonHeight)
             .clickable(
                 onClick = onClick,
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
             )
             .semantics { this.contentDescription = contentDescription },
-        contentAlignment = Alignment.Center,
+        contentAlignment = Alignment.TopCenter,
     ) {
         Icon(
             imageVector = imageVector,
             contentDescription = null,
             tint = OnSurface,
-            modifier = Modifier.size(CarStageTapDefaults.navigationIconSize),
+            modifier = Modifier
+                .padding(top = CarStageTapDefaults.shuffleIconTopPadding)
+                .size(CarStageTapDefaults.shuffleIconSize),
         )
     }
 }
@@ -2807,8 +2807,8 @@ private fun CarSelectorSideTapZone(
 ) {
     Box(
         modifier = modifier
-            .width(CarStageTapDefaults.sideStripWidth)
-            .height(CarStageTapDefaults.navigationButtonHeight)
+            .width(CarStageTapDefaults.buttonWidth)
+            .height(CarStageTapDefaults.buttonHeight)
             .clickable(
                 onClick = onClick,
                 indication = null,
@@ -2828,16 +2828,14 @@ private fun CarSelectorArrowGlyph(
 ) {
     Box(
         modifier = modifier
-            .width(CarStageTapDefaults.sideStripWidth)
-            .height(CarStageTapDefaults.navigationButtonHeight)
-            .clip(CircleShape)
-            .background(HardwareBackdrop.copy(alpha = 0.92f)),
+            .width(CarStageTapDefaults.buttonWidth)
+            .height(CarStageTapDefaults.buttonHeight),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
             color = OnSurface,
-            fontSize = CarStageTapDefaults.navigationArrowFontSize,
+            fontSize = CarStageTapDefaults.arrowFontSize,
             fontWeight = FontWeight.Light,
             textAlign = TextAlign.Center,
         )

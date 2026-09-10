@@ -442,7 +442,7 @@ class MainActivity : ComponentActivity() {
                                 onManualLoudnessPreviewChange = controller::setManualLoudnessPreviewActive,
                                 onManualLoudnessPreviewExteriorChange = controller::setManualLoudnessPreviewExterior,
                                 onStopManualLoudnessPreviews = controller::stopManualLoudnessPreviews,
-                                onSaveManualLoudnessAsDefault = controller::saveManualLoudnessAsDefault,
+                                onRestoreManualLoudnessDefaults = controller::restoreManualLoudnessDefaults,
                                 onExportManualLoudnessPreset = controller::exportManualLoudnessPreset,
                                 onStartAcousticDiagnostic = { code ->
                                     backfirePreviewPlayer.release()
@@ -768,7 +768,7 @@ private fun MotorSoundDashboard(
     onManualLoudnessPreviewChange: (String, Boolean) -> Unit,
     onManualLoudnessPreviewExteriorChange: (String, Boolean) -> Unit,
     onStopManualLoudnessPreviews: () -> Unit,
-    onSaveManualLoudnessAsDefault: () -> Unit,
+    onRestoreManualLoudnessDefaults: () -> Unit,
     onExportManualLoudnessPreset: () -> Unit,
     onStartAcousticDiagnostic: (String?) -> Unit,
     onResumeAcousticDiagnostic: () -> Unit,
@@ -939,7 +939,7 @@ private fun MotorSoundDashboard(
                                     .align(Alignment.CenterEnd)
                                     .width(maxWidth * DashboardLayoutDefaults.TACHOMETER_OVERLAY_WIDTH_FRACTION)
                                     .fillMaxHeight()
-                                    .padding(start = 16.dp, bottom = 6.dp),
+                                    .padding(start = 16.dp, top = 16.dp, bottom = 6.dp),
                                 horizontalAlignment = Alignment.End,
                             ) {
                                 Tachometer(
@@ -1017,7 +1017,7 @@ private fun MotorSoundDashboard(
                             onManualLoudnessPreviewChange = onManualLoudnessPreviewChange,
                             onManualLoudnessPreviewExteriorChange = onManualLoudnessPreviewExteriorChange,
                             onStopManualLoudnessPreviews = onStopManualLoudnessPreviews,
-                            onSaveManualLoudnessAsDefault = onSaveManualLoudnessAsDefault,
+                            onRestoreManualLoudnessDefaults = onRestoreManualLoudnessDefaults,
                             onExportManualLoudnessPreset = onExportManualLoudnessPreset,
                             onStartAcousticDiagnostic = onStartAcousticDiagnostic,
                             onResumeAcousticDiagnostic = onResumeAcousticDiagnostic,
@@ -1700,7 +1700,7 @@ private fun DashboardTachometerAccessoryControls(
     Column(
         modifier = modifier
             .wrapContentWidth(align = Alignment.End, unbounded = true)
-            .padding(top = 8.dp),
+            .padding(top = 2.dp),
         horizontalAlignment = Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {

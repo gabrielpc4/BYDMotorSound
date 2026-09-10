@@ -11,7 +11,6 @@ import java.util.Locale
 internal object ManualLoudnessPreset {
     const val PRESET_VERSION = 1
     const val EXPORT_FILE_NAME = "manual_loudness_preset.json"
-    const val USER_DEFAULT_FILE_NAME = "manual_loudness_user_default.json"
     const val FACTORY_ASSET_NAME = "manual_loudness_factory_defaults.json"
 
     fun exportCurrent(
@@ -26,21 +25,14 @@ internal object ManualLoudnessPreset {
         return exportFile
     }
 
-    fun saveAsUserDefault(
-        context: Context,
-        repository: ManualLoudnessRepository,
-        profiles: List<FmodBankProfile>,
-        manualLoudnessEnabled: Boolean,
-    ): File {
-        val preset = buildPreset(repository, profiles, manualLoudnessEnabled)
-        val defaultFile = presetFile(context, USER_DEFAULT_FILE_NAME)
-        defaultFile.writeText(preset.toString(2))
-        return defaultFile
+    fun restoreFactoryDefaults(context: Context, repository: ManualLoudnessRepository) {
+        val factoryPreset = loadFactoryDefaults(context) ?: return
+        applyPreset(repository, factoryPreset)
     }
 
     fun applyMissingDefaults(context: Context, repository: ManualLoudnessRepository) {
-        val bundledPreset = loadBundledPreset(context) ?: return
-        applyMissingEntries(repository, bundledPreset)
+        val factoryPreset = loadFactoryDefaults(context) ?: return
+        applyMissingEntries(repository, factoryPreset)
     }
 
     fun applyPreset(repository: ManualLoudnessRepository, preset: JSONObject) {
@@ -147,7 +139,7 @@ internal object ManualLoudnessPreset {
         packGroup: String,
         perspective: EngineSoundPerspective,
     ): Double {
-        val preset = loadBundledPreset(context) ?: return 0.0
+        val preset = loadFactoryDefaults(context) ?: return 0.0
         val cars = preset.optJSONArray("cars") ?: return 0.0
         for (index in 0 until cars.length()) {
             val car = cars.optJSONObject(index) ?: continue
@@ -165,12 +157,7 @@ internal object ManualLoudnessPreset {
         return 0.0
     }
 
-    fun loadBundledPreset(context: Context): JSONObject? {
-        val userDefaultFile = presetFile(context, USER_DEFAULT_FILE_NAME)
-        if (userDefaultFile.isFile) {
-            return runCatching { JSONObject(userDefaultFile.readText()) }.getOrNull()
-        }
-
+    fun loadFactoryDefaults(context: Context): JSONObject? {
         return runCatching {
             context.applicationContext.assets.open(FACTORY_ASSET_NAME).bufferedReader().use { reader ->
                 JSONObject(reader.readText())

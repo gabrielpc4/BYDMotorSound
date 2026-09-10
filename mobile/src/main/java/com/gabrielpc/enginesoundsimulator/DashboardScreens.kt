@@ -1094,7 +1094,7 @@ internal fun SettingsScreen(
     onManualLoudnessPreviewChange: (String, Boolean) -> Unit,
     onManualLoudnessPreviewExteriorChange: (String, Boolean) -> Unit,
     onStopManualLoudnessPreviews: () -> Unit,
-    onSaveManualLoudnessAsDefault: () -> Unit,
+    onRestoreManualLoudnessDefaults: () -> Unit,
     onExportManualLoudnessPreset: () -> Unit,
     onStartAcousticDiagnostic: (String?) -> Unit,
     onResumeAcousticDiagnostic: () -> Unit,
@@ -1301,7 +1301,7 @@ internal fun SettingsScreen(
                 onAdjustmentDbChange = onManualLoudnessDbChange,
                 onPreviewChange = onManualLoudnessPreviewChange,
                 onPreviewExteriorChange = onManualLoudnessPreviewExteriorChange,
-                onSaveManualLoudnessAsDefault = onSaveManualLoudnessAsDefault,
+                onRestoreManualLoudnessDefaults = onRestoreManualLoudnessDefaults,
                 onExportManualLoudnessPreset = onExportManualLoudnessPreset,
                 onStopManualLoudnessPreviews = onStopManualLoudnessPreviews,
                 modifier = Modifier
@@ -1435,7 +1435,7 @@ private fun ManualLoudnessSettingsTab(
     onAdjustmentDbChange: (String, EngineSoundPerspective, Double) -> Unit,
     onPreviewChange: (String, Boolean) -> Unit,
     onPreviewExteriorChange: (String, Boolean) -> Unit,
-    onSaveManualLoudnessAsDefault: () -> Unit,
+    onRestoreManualLoudnessDefaults: () -> Unit,
     onExportManualLoudnessPreset: () -> Unit,
     onStopManualLoudnessPreviews: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1451,7 +1451,7 @@ private fun ManualLoudnessSettingsTab(
         onAdjustmentDbChange = onAdjustmentDbChange,
         onPreviewChange = onPreviewChange,
         onPreviewExteriorChange = onPreviewExteriorChange,
-        onSaveManualLoudnessAsDefault = onSaveManualLoudnessAsDefault,
+        onRestoreManualLoudnessDefaults = onRestoreManualLoudnessDefaults,
         onExportManualLoudnessPreset = onExportManualLoudnessPreset,
         modifier = modifier
             .fillMaxWidth()
@@ -1567,7 +1567,7 @@ private fun ManualLoudnessAdjustmentPanel(
     onAdjustmentDbChange: (String, EngineSoundPerspective, Double) -> Unit,
     onPreviewChange: (String, Boolean) -> Unit,
     onPreviewExteriorChange: (String, Boolean) -> Unit,
-    onSaveManualLoudnessAsDefault: () -> Unit,
+    onRestoreManualLoudnessDefaults: () -> Unit,
     onExportManualLoudnessPreset: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1620,11 +1620,11 @@ private fun ManualLoudnessAdjustmentPanel(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Button(
-                onClick = onSaveManualLoudnessAsDefault,
+                onClick = onRestoreManualLoudnessDefaults,
                 colors = ButtonDefaults.buttonColors(containerColor = Accent),
                 modifier = Modifier.weight(1f),
             ) {
-                Text("SAVE AS DEFAULT", color = Background, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                Text("RESTORE DEFAULT", color = Background, fontWeight = FontWeight.Black, fontSize = 12.sp)
             }
             OutlinedButton(
                 onClick = onExportManualLoudnessPreset,

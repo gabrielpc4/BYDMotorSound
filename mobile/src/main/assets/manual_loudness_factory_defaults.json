@@ -1,5 +1,258 @@
 {
   "version": 1,
   "manualLoudnessEnabled": true,
-  "cars": []
+  "cars": [
+    {
+      "profileId": "modded-aston-martin-dbrs9-gt3",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -4,
+      "exteriorDb": 0,
+      "previewExterior": false
+    },
+    {
+      "profileId": "modded-audi-r8-lms-gt2",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -16,
+      "exteriorDb": -14.5,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-audi-tt-cup-2015",
+      "packGroup": "modded_car_packs",
+      "interiorDb": 0,
+      "exteriorDb": 0,
+      "previewExterior": false
+    },
+    {
+      "profileId": "modded-bmw-m8-gtlm",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -4,
+      "exteriorDb": -3.5,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-bugatti-chiron-pur-sport",
+      "packGroup": "modded_car_packs",
+      "interiorDb": 0,
+      "exteriorDb": 0,
+      "previewExterior": false
+    },
+    {
+      "profileId": "modded-cadillac-escalade-esv",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -10.5,
+      "exteriorDb": -10.5,
+      "previewExterior": false
+    },
+    {
+      "profileId": "modded-chevrolet-camaro-concept",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -10.5,
+      "exteriorDb": 0,
+      "previewExterior": false
+    },
+    {
+      "profileId": "modded-chevrolet-corvette-c6-z06-stanced",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -17,
+      "exteriorDb": -20,
+      "previewExterior": false
+    },
+    {
+      "profileId": "modded-chevrolet-corvette-c7-stingray-hellspec",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -17,
+      "exteriorDb": -20,
+      "previewExterior": false
+    },
+    {
+      "profileId": "modded-ferrari-360-challenge-stradale",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -13.5,
+      "exteriorDb": -9.5,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-ferrari-458-italia-gte-ferruccio",
+      "packGroup": "modded_car_packs",
+      "interiorDb": 0,
+      "exteriorDb": 0,
+      "previewExterior": false
+    },
+    {
+      "profileId": "modded-ferrari-458-italia-tune",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -8.5,
+      "exteriorDb": -9,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-ferrari-488-gte-evo-michelotto",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -8,
+      "exteriorDb": -7.5,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-ferrari-f1-2000",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -11.5,
+      "exteriorDb": -11,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-ferrari-f430-gt2-2007",
+      "packGroup": "modded_car_packs",
+      "interiorDb": 0,
+      "exteriorDb": 0,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-ferrari-laferrari-trio",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -5.5,
+      "exteriorDb": -5.5,
+      "previewExterior": false
+    },
+    {
+      "profileId": "modded-ferrari-sf90-xx-stradale-2024",
+      "packGroup": "modded_car_packs",
+      "interiorDb": 0,
+      "exteriorDb": 0,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-lamborghini-aventador-sv",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -10,
+      "exteriorDb": -20,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-lamborghini-huracan-trofeo-evo2",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -7.5,
+      "exteriorDb": -11.5,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-lexus-lfa",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -15.5,
+      "exteriorDb": -9.5,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-lexus-lfa-concept-gt500",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -17,
+      "exteriorDb": -20,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-lexus-lfa-no-hesi-spec",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -17,
+      "exteriorDb": -17.5,
+      "previewExterior": false
+    },
+    {
+      "profileId": "modded-lexus-lfa-nurburgring-edition",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -8,
+      "exteriorDb": -3.5,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-mercedes-amg-project-one-hypercar",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -9,
+      "exteriorDb": -12,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-mercedes-benz-amg-gt3-evo-2020-sprint",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -9.5,
+      "exteriorDb": -2,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-mitsubishi-eclipse-gsx-r",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -10,
+      "exteriorDb": -2,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-mitsubishi-lancer-evolution-viii-gsr",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -6,
+      "exteriorDb": -7.5,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-nissan-350z",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -8.5,
+      "exteriorDb": -14,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-nissan-370z-widebody",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -10.5,
+      "exteriorDb": -15.5,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-nissan-gt-r-nismo-godzilla",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -7,
+      "exteriorDb": -8,
+      "previewExterior": true
+    },
+    {
+      "profileId": "assetto-nissan-skyline-r34",
+      "packGroup": "modded_car_packs",
+      "interiorDb": 0,
+      "exteriorDb": 0,
+      "previewExterior": false
+    },
+    {
+      "profileId": "modded-porsche-911-992-turbo-s-pdk",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -4.5,
+      "exteriorDb": -12,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-porsche-911-gt3-rs-hellspec",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -5,
+      "exteriorDb": -15.5,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-porsche-911-turbo-s",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -5.5,
+      "exteriorDb": -2,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-porsche-carrera-gt-rs",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -11.5,
+      "exteriorDb": -17.5,
+      "previewExterior": true
+    },
+    {
+      "profileId": "modded-toyota-supra-wangan",
+      "packGroup": "modded_car_packs",
+      "interiorDb": -11,
+      "exteriorDb": -10.5,
+      "previewExterior": true
+    }
+  ]
 }

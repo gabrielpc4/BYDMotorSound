@@ -924,20 +924,17 @@ class DriveController(context: Context) {
         refreshManualLoudnessTable()
     }
 
-    fun saveManualLoudnessAsDefault(): String {
-        val file = ManualLoudnessPreset.saveAsUserDefault(
-            context = appContext,
-            repository = manualLoudnessRepository,
-            profiles = calibrationProfiles(),
-            manualLoudnessEnabled = catalogGainSettings.get().manualLoudnessEnabled,
-        )
+    fun restoreManualLoudnessDefaults() {
+        ManualLoudnessPreset.restoreFactoryDefaults(appContext, manualLoudnessRepository)
+        refreshManualLoudnessPreviewParameters()
+        refreshManualLoudnessTable()
+        syncMasterOutputGainToAudioEngine()
         userMessage = UserVisibleMessage(
             id = SystemClock.elapsedRealtime(),
-            title = "Manual loudness default saved",
-            detail = file.absolutePath,
+            title = "Manual loudness restored to defaults",
+            detail = "All cars reset to factory loudness values.",
             severity = UserVisibleMessageSeverity.INFO,
         )
-        return file.absolutePath
     }
 
     fun exportManualLoudnessPreset(): String {

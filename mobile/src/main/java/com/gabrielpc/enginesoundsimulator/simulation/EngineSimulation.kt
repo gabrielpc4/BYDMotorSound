@@ -90,6 +90,8 @@ data class DrivetrainState(
     val coupledRpmCurrentGear: Double = 0.0,
     /** Launch-control phase name for diagnostics capture; INACTIVE when staging is off. */
     val launchControlPhaseName: String = LaunchControlPhase.INACTIVE.name,
+    /** RPM captured when launch staging arms; used to sync speed-audio gain with the 5,000 RPM hold. */
+    val launchControlArmedStartRpm: Double = 0.0,
 )
 
 /** Motion snapshot preserved when swapping bank physics without stopping the vehicle. */
@@ -616,6 +618,7 @@ class EngineSimulation {
             cruisingReturnFinishedThisStep = frame.cruisingReturnFinishedThisStep,
             coupledRpmCurrentGear = frame.coupledRpmCurrentGear,
             launchControlPhaseName = frame.launchControlPhase.name,
+            launchControlArmedStartRpm = frame.launchControlArmedStartRpm,
         )
     }
 }

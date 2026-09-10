@@ -69,6 +69,8 @@ import com.gabrielpc.enginesoundsimulator.simulation.EngineSimulation
 import com.gabrielpc.enginesoundsimulator.simulation.ShiftDirection
 import com.gabrielpc.enginesoundsimulator.simulation.SimulationMotionContinuity
 import com.gabrielpc.enginesoundsimulator.simulation.AutomaticTransmissionMode
+import com.gabrielpc.enginesoundsimulator.simulation.LaunchControl
+import com.gabrielpc.enginesoundsimulator.simulation.LaunchControlPhase
 import com.gabrielpc.enginesoundsimulator.simulation.TransmissionPosition
 import com.gabrielpc.enginesoundsimulator.simulation.VirtualGearProfile
 import com.gabrielpc.enginesoundsimulator.simulation.resolveDriveInput
@@ -2211,6 +2213,16 @@ class DriveController(context: Context) {
                     automaticTransmissionMode = drivetrain.automaticTransmissionMode,
                     racingReturnArmed = drivetrain.racingReturnArmed,
                 ),
+                launchControlArmingGainBlendTarget = if (
+                    drivetrain.launchControlPhaseName == LaunchControlPhase.ARMED.name
+                ) {
+                    LaunchControl.armingRacingGainBlendFraction(
+                        rpm = drivetrain.rpm,
+                        armedStartRpm = drivetrain.launchControlArmedStartRpm,
+                    )
+                } else {
+                    null
+                },
             ),
         )
         val selected = selectedProfile.get()

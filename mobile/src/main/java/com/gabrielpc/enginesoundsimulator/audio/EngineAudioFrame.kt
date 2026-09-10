@@ -39,4 +39,8 @@ data class EngineAudioFrame(
     val effectsLoadFromThrottle: Boolean = false,
     /** When true, speed-audio targets the racing/manual gain instead of cruising. */
     val usesRacingSpeedAudioGain: Boolean = false,
+    /**
+     * When non-null, launch staging owns the racing-gain cross-fade fraction (0..1) until 5,000 RPM.
+     */
+    val launchControlArmingGainBlendTarget: Float? = null,
 )

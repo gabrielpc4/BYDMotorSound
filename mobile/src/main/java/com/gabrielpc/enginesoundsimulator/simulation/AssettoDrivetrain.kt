@@ -47,6 +47,7 @@ internal class AssettoDrivetrainFrame(
     var automaticTransmissionMode: AutomaticTransmissionMode = AutomaticTransmissionMode.CRUISING,
     var racingReturnArmed: Boolean = false,
     var launchControlPhase: LaunchControlPhase = LaunchControlPhase.INACTIVE,
+    var launchControlArmedStartRpm: Double = 0.0,
     var cruisingReturnActive: Boolean = false,
     var cruisingReturnTargetGear: Int = 0,
     var cruisingReturnChaseRpm: Double = 0.0,
@@ -769,6 +770,7 @@ internal class AssettoDrivetrain(
         lastFrame.effectiveAutomaticDownshiftRpm = effectiveDownshiftRpmForCurrentGear()
         lastFrame.racingReturnArmed = racingReturnArmed
         lastFrame.launchControlPhase = launchControlPhase
+        lastFrame.launchControlArmedStartRpm = launchControlArmedStartRpm
         lastFrame.requestAutomaticShiftMode = requestAutomaticShiftMode
         return lastFrame
     }

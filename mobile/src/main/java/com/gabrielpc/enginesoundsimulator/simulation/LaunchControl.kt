@@ -60,6 +60,17 @@ internal object LaunchControl {
         return speedMps <= STANDSTILL_SPEED_MPS && brake >= ARM_BRAKE_THRESHOLD
     }
 
+    /** Maps staged RPM to the racing gain blend so full racing loudness lands at [HOLD_RPM]. */
+    fun armingRacingGainBlendFraction(rpm: Double, armedStartRpm: Double): Float {
+        val span = HOLD_RPM - armedStartRpm
+
+        if (span <= 0.0) {
+            return 1f
+        }
+
+        return ((rpm - armedStartRpm) / span).coerceIn(0.0, 1.0).toFloat()
+    }
+
     fun armedTargetRpm(
         armedElapsedSeconds: Double,
         jitterPhaseRadians: Double,

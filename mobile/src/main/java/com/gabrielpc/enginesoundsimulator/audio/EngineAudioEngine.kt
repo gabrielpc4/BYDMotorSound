@@ -351,6 +351,13 @@ class EngineAudioEngine(context: Context) {
     }
 
     private fun updateSpeedAudioModeBlend(frame: EngineAudioFrame, dt: Float) {
+        val launchBlendTarget = frame.launchControlArmingGainBlendTarget
+
+        if (launchBlendTarget != null) {
+            smoothedRacingGainBlend = launchBlendTarget.coerceIn(0f, 1f)
+            return
+        }
+
         val settings = resolvedSpeedAudioSettings.get()
         val target = if (frame.usesRacingSpeedAudioGain) {
             1f

@@ -2643,7 +2643,7 @@ internal fun TransmissionShifter(
                 Brush.verticalGradient(HardwareGradient),
             )
             .border((2f * scale).dp, HardwareBorder, hardwareShape((16f * scale).dp))
-            .padding((8f * scale).dp)
+            .padding((8f * scale).dp),
         verticalArrangement = Arrangement.spacedBy((6f * scale).dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

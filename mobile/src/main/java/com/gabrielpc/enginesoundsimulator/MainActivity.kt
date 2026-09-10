@@ -438,7 +438,6 @@ class MainActivity : ComponentActivity() {
                                 onCatalogGainSettingsChange = controller::setCatalogGainSettings,
                                 manualLoudnessTable = state.manualLoudnessTable,
                                 onManualLoudnessDbChange = controller::setManualLoudnessDb,
-                                onRestoreManualLoudnessToDefault = controller::restoreCurrentManualLoudnessToDefault,
                                 onManualLoudnessPreviewChange = controller::setManualLoudnessPreviewActive,
                                 onManualLoudnessPreviewExteriorChange = controller::setManualLoudnessPreviewExterior,
                                 onStopManualLoudnessPreviews = controller::stopManualLoudnessPreviews,
@@ -764,7 +763,6 @@ private fun MotorSoundDashboard(
     onCatalogGainSettingsChange: (com.gabrielpc.enginesoundsimulator.audio.CatalogGainSettings) -> Unit,
     manualLoudnessTable: List<com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessTableEntry>,
     onManualLoudnessDbChange: (String, com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective, Double) -> Unit,
-    onRestoreManualLoudnessToDefault: () -> Unit,
     onManualLoudnessPreviewChange: (String, Boolean) -> Unit,
     onManualLoudnessPreviewExteriorChange: (String, Boolean) -> Unit,
     onStopManualLoudnessPreviews: () -> Unit,
@@ -904,7 +902,6 @@ private fun MotorSoundDashboard(
                                     DashboardClassicAudioControlsStack(
                                         state = state,
                                         onManualLoudnessDbChange = onManualLoudnessDbChange,
-                                        onRestoreManualLoudnessToDefault = onRestoreManualLoudnessToDefault,
                                         onEffectOverrideChange = onEffectOverrideChange,
                                         onOverrideGainChange = onOverrideGainChange,
                                         modifier = Modifier.padding(
@@ -1662,7 +1659,6 @@ private object DashboardClassicEffectLayout {
 private fun DashboardClassicAudioControlsStack(
     state: DriveSnapshot,
     onManualLoudnessDbChange: (String, com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective, Double) -> Unit,
-    onRestoreManualLoudnessToDefault: () -> Unit,
     onEffectOverrideChange: (EffectSoundKind, Boolean) -> Unit,
     onOverrideGainChange: (EffectSoundKind, Float) -> Unit,
     modifier: Modifier = Modifier,
@@ -1674,7 +1670,6 @@ private fun DashboardClassicAudioControlsStack(
         DashboardManualVolumeControl(
             state = state,
             onManualLoudnessDbChange = onManualLoudnessDbChange,
-            onRestoreManualLoudnessToDefault = onRestoreManualLoudnessToDefault,
         )
         DashboardEffectControls(
             state = state,
@@ -1820,34 +1815,29 @@ private fun DashboardEngineControls(
 private fun DashboardManualVolumeControl(
     state: DriveSnapshot,
     onManualLoudnessDbChange: (String, com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective, Double) -> Unit,
-    onRestoreManualLoudnessToDefault: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val layout = DashboardClassicEffectLayout
     val rowHeight = 42.dp
     val adjustmentDb = state.manualLoudnessAdjustmentDb
-    val defaultDb = state.manualLoudnessDefaultDb
     val perspective = state.soundPerspective
-    val perspectiveLabel = if (perspective == com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective.EXTERIOR) {
-        "OUT"
-    } else {
-        "INT"
+    val minDb = com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessTableEntry.MIN_DB
+    val maxDb = com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessTableEntry.MAX_DB
+
+    fun canAdjustBy(deltaDb: Double): Boolean {
+        return adjustmentDb + deltaDb >= minDb && adjustmentDb + deltaDb <= maxDb
     }
-    val atDefault = com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessRepository
-        .sliderPercentFromDb(adjustmentDb) ==
-        com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessRepository
-            .sliderPercentFromDb(defaultDb)
-    // Ticks are hidden rather than removed so the slider keeps snapping to the same dB steps.
-    val sliderColors = SliderDefaults.colors(
-        thumbColor = Accent,
-        activeTrackColor = Accent,
-        inactiveTrackColor = Outline,
-        activeTickColor = Color.Transparent,
-        inactiveTickColor = Color.Transparent,
-    )
+
+    fun adjustBy(deltaDb: Double) {
+        val clampedDb = (adjustmentDb + deltaDb).coerceIn(minDb, maxDb)
+        val snappedDb = com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessRepository.sliderDbFromPercent(
+            com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessRepository.sliderPercentFromDb(clampedDb),
+        )
+        onManualLoudnessDbChange(state.selectedCarId, perspective, snappedDb)
+    }
 
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.wrapContentWidth(),
         horizontalArrangement = Arrangement.spacedBy(layout.columnGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1864,54 +1854,82 @@ private fun DashboardManualVolumeControl(
                 fontWeight = FontWeight.Bold,
             )
         }
+        DashboardVolumeStepButton(
+            label = "-5",
+            enabled = canAdjustBy(-5.0),
+            onClick = { adjustBy(-5.0) },
+        )
+        DashboardVolumeStepButton(
+            label = "-1",
+            enabled = canAdjustBy(-1.0),
+            onClick = { adjustBy(-1.0) },
+        )
         Box(
             modifier = Modifier
-                .width(78.dp)
+                .width(72.dp)
                 .height(rowHeight),
-            contentAlignment = Alignment.CenterStart,
+            contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = String.format(
-                    Locale.US,
-                    "%s %+.1f dB",
-                    perspectiveLabel,
-                    adjustmentDb,
-                ),
+                text = String.format(Locale.US, "%+.1f dB", adjustmentDb),
                 color = OnSurface,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-            )
-        }
-        Slider(
-            value = com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessRepository.sliderPercentFromDb(adjustmentDb),
-            onValueChange = { percent ->
-                val db = com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessRepository.sliderDbFromPercent(percent)
-                onManualLoudnessDbChange(state.selectedCarId, perspective, db)
-            },
-            valueRange = 0f..com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessTableEntry.SLIDER_STEPS.toFloat(),
-            steps = com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessTableEntry.SLIDER_STEPS - 1,
-            colors = sliderColors,
-            modifier = Modifier
-                .weight(1f)
-                .padding(layout.columnPadding),
-        )
-        if (!atDefault) {
-            Text(
-                text = "DEFAULT",
-                color = Accent,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .width(72.dp)
-                    .height(38.dp)
-                    .clip(skinShape(6.dp))
-                    .background(SurfaceRaised)
-                    .border(1.dp, Outline, skinShape(6.dp))
-                    .clickable(onClick = onRestoreManualLoudnessToDefault)
-                    .padding(top = 10.dp),
             )
         }
+        DashboardVolumeStepButton(
+            label = "+1",
+            enabled = canAdjustBy(1.0),
+            onClick = { adjustBy(1.0) },
+        )
+        DashboardVolumeStepButton(
+            label = "+5",
+            enabled = canAdjustBy(5.0),
+            onClick = { adjustBy(5.0) },
+        )
+    }
+}
+
+@Composable
+private fun DashboardVolumeStepButton(
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val textColor = if (enabled) {
+        Accent
+    } else {
+        Muted
+    }
+    val borderColor = if (enabled) {
+        Outline
+    } else {
+        Outline.copy(alpha = 0.35f)
+    }
+
+    Box(
+        modifier = modifier
+            .width(44.dp)
+            .height(42.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = textColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(38.dp)
+                .clip(skinShape(6.dp))
+                .background(SurfaceRaised)
+                .border(1.dp, borderColor, skinShape(6.dp))
+                .clickable(enabled = enabled, onClick = onClick)
+                .padding(top = 10.dp),
+        )
     }
 }
 

@@ -47,6 +47,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.PaddingValues
@@ -145,7 +146,6 @@ import com.gabrielpc.enginesoundsimulator.audio.MediaShiftButtonCoordinator
 import com.gabrielpc.enginesoundsimulator.audio.IphoneAcousticMeterProtocol
 import com.gabrielpc.enginesoundsimulator.audio.IphoneCalibrationLogLevel
 import com.gabrielpc.enginesoundsimulator.audio.BackfirePreviewPlayer
-import com.gabrielpc.enginesoundsimulator.audio.ClubReferenceMediaPlayer
 import com.gabrielpc.enginesoundsimulator.simulation.AutomaticTransmissionMode
 import com.gabrielpc.enginesoundsimulator.simulation.DrivetrainState
 import com.gabrielpc.enginesoundsimulator.simulation.TransmissionPosition
@@ -222,8 +222,6 @@ class MainActivity : ComponentActivity() {
     private var driveState by mutableStateOf<DriveSnapshot?>(null)
     private var uiMonitoringActive by mutableStateOf(false)
     private val backfirePreviewPlayer by lazy(LazyThreadSafetyMode.NONE) { BackfirePreviewPlayer(this) }
-    private val clubReferenceMediaPlayer by lazy(LazyThreadSafetyMode.NONE) { ClubReferenceMediaPlayer(this) }
-    private var clubReferenceMediaPlaying by mutableStateOf(false)
     private var legacyIphoneScanRequested = false
     private val companionChooserLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult(),
@@ -421,15 +419,11 @@ class MainActivity : ComponentActivity() {
                                 onSoundPerspectiveChange = controller::setSoundPerspective,
                                 onCalibrateAllCars = {
                                     backfirePreviewPlayer.release()
-                                    clubReferenceMediaPlayer.stop()
-                                    clubReferenceMediaPlaying = false
                                     controller.stopManualLoudnessPreviews()
                                     controller.startLoudnessCalibration(resume = false)
                                 },
                                 onResumeLoudnessCalibration = {
                                     backfirePreviewPlayer.release()
-                                    clubReferenceMediaPlayer.stop()
-                                    clubReferenceMediaPlaying = false
                                     controller.stopManualLoudnessPreviews()
                                     controller.startLoudnessCalibration(resume = true)
                                 },
@@ -443,37 +437,20 @@ class MainActivity : ComponentActivity() {
                                 onClearIphoneCalibrationLog = controller::clearIphoneCalibrationLog,
                                 onCatalogGainSettingsChange = controller::setCatalogGainSettings,
                                 manualLoudnessTable = state.manualLoudnessTable,
-                                onManualLoudnessEnabledChange = controller::setManualLoudnessEnabled,
                                 onManualLoudnessDbChange = controller::setManualLoudnessDb,
                                 onRestoreManualLoudnessToDefault = controller::restoreCurrentManualLoudnessToDefault,
-                                onManualLoudnessPreviewChange = { profileId, active ->
-                                    if (active) {
-                                        clubReferenceMediaPlayer.stop()
-                                        clubReferenceMediaPlaying = false
-                                    }
-                                    controller.setManualLoudnessPreviewActive(profileId, active)
-                                },
+                                onManualLoudnessPreviewChange = controller::setManualLoudnessPreviewActive,
                                 onManualLoudnessPreviewExteriorChange = controller::setManualLoudnessPreviewExterior,
                                 onStopManualLoudnessPreviews = controller::stopManualLoudnessPreviews,
                                 onSaveManualLoudnessAsDefault = controller::saveManualLoudnessAsDefault,
                                 onExportManualLoudnessPreset = controller::exportManualLoudnessPreset,
-                                clubReferenceMediaPlaying = clubReferenceMediaPlaying,
-                                onToggleClubReferenceMedia = {
-                                    controller.stopManualLoudnessPreviews()
-                                    val result = clubReferenceMediaPlayer.toggle()
-                                    clubReferenceMediaPlaying = result.playing
-                                },
                                 onStartAcousticDiagnostic = { code ->
                                     backfirePreviewPlayer.release()
-                                    clubReferenceMediaPlayer.stop()
-                                    clubReferenceMediaPlaying = false
                                     controller.stopManualLoudnessPreviews()
                                     controller.startAcousticDiagnostic(code, resume = false)
                                 },
                                 onResumeAcousticDiagnostic = {
                                     backfirePreviewPlayer.release()
-                                    clubReferenceMediaPlayer.stop()
-                                    clubReferenceMediaPlaying = false
                                     controller.stopManualLoudnessPreviews()
                                     controller.startAcousticDiagnostic(null, resume = true)
                                 },
@@ -527,7 +504,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         backfirePreviewPlayer.release()
-        clubReferenceMediaPlayer.release()
         if (isFinishing) {
             (application as EngineSoundsApplication).shutdownEngine()
         }
@@ -787,7 +763,6 @@ private fun MotorSoundDashboard(
     onClearIphoneCalibrationLog: () -> Unit,
     onCatalogGainSettingsChange: (com.gabrielpc.enginesoundsimulator.audio.CatalogGainSettings) -> Unit,
     manualLoudnessTable: List<com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessTableEntry>,
-    onManualLoudnessEnabledChange: (Boolean) -> Unit,
     onManualLoudnessDbChange: (String, com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective, Double) -> Unit,
     onRestoreManualLoudnessToDefault: () -> Unit,
     onManualLoudnessPreviewChange: (String, Boolean) -> Unit,
@@ -795,8 +770,6 @@ private fun MotorSoundDashboard(
     onStopManualLoudnessPreviews: () -> Unit,
     onSaveManualLoudnessAsDefault: () -> Unit,
     onExportManualLoudnessPreset: () -> Unit,
-    clubReferenceMediaPlaying: Boolean,
-    onToggleClubReferenceMedia: () -> Unit,
     onStartAcousticDiagnostic: (String?) -> Unit,
     onResumeAcousticDiagnostic: () -> Unit,
     onCancelAcousticDiagnostic: () -> Unit,
@@ -930,14 +903,10 @@ private fun MotorSoundDashboard(
                                 ) {
                                     DashboardClassicAudioControlsStack(
                                         state = state,
-                                        onCruisingShiftOffsetForTachMaxRpmChange = onCruisingShiftOffsetForTachMaxRpmChange,
-                                        onCruisingLogicChange = onCruisingLogicChange,
                                         onManualLoudnessDbChange = onManualLoudnessDbChange,
                                         onRestoreManualLoudnessToDefault = onRestoreManualLoudnessToDefault,
                                         onEffectOverrideChange = onEffectOverrideChange,
                                         onOverrideGainChange = onOverrideGainChange,
-                                        gearProfileSelection = state.gearProfileSelection,
-                                        onGearProfileSelectionChange = onGearProfileSelectionChange,
                                         modifier = Modifier.padding(
                                             start = DashboardLayoutDefaults.classicContentStartPadding,
                                             bottom = 2.dp,
@@ -985,8 +954,12 @@ private fun MotorSoundDashboard(
                                         .weight(1f)
                                         .fillMaxWidth(),
                                 )
-                                DashboardEnginePerspectiveControls(
+                                DashboardTachometerAccessoryControls(
                                     state = state,
+                                    gearProfileSelection = state.gearProfileSelection,
+                                    onCruisingShiftOffsetForTachMaxRpmChange = onCruisingShiftOffsetForTachMaxRpmChange,
+                                    onCruisingLogicChange = onCruisingLogicChange,
+                                    onGearProfileSelectionChange = onGearProfileSelectionChange,
                                     onEngineExternalChange = onEngineExternalChange,
                                     onEnginePureChange = onEnginePureChange,
                                 )
@@ -1040,15 +1013,12 @@ private fun MotorSoundDashboard(
                             catalogGainTable = state.catalogGainTable,
                             onCatalogGainSettingsChange = onCatalogGainSettingsChange,
                             manualLoudnessTable = manualLoudnessTable,
-                            onManualLoudnessEnabledChange = onManualLoudnessEnabledChange,
                             onManualLoudnessDbChange = onManualLoudnessDbChange,
                             onManualLoudnessPreviewChange = onManualLoudnessPreviewChange,
                             onManualLoudnessPreviewExteriorChange = onManualLoudnessPreviewExteriorChange,
                             onStopManualLoudnessPreviews = onStopManualLoudnessPreviews,
                             onSaveManualLoudnessAsDefault = onSaveManualLoudnessAsDefault,
                             onExportManualLoudnessPreset = onExportManualLoudnessPreset,
-                            clubReferenceMediaPlaying = clubReferenceMediaPlaying,
-                            onToggleClubReferenceMedia = onToggleClubReferenceMedia,
                             onStartAcousticDiagnostic = onStartAcousticDiagnostic,
                             onResumeAcousticDiagnostic = onResumeAcousticDiagnostic,
                             onCancelAcousticDiagnostic = onCancelAcousticDiagnostic,
@@ -1058,6 +1028,7 @@ private fun MotorSoundDashboard(
                             onBackfireSettingsChange = onBackfireSettingsChange,
                             virtualGearSpeedBoundaries = state.virtualGearSpeedBoundaries,
                             gearProfileSelection = state.gearProfileSelection,
+                            onGearProfileSelectionChange = onGearProfileSelectionChange,
                             onVirtualGearSpeedBoundaryChange = onVirtualGearSpeedBoundaryChange,
                             onRestoreVirtualGearSpeedBoundaries = onRestoreVirtualGearSpeedBoundaries,
                             allowManualOnLaunchEnabled = state.allowManualOnLaunchEnabled,
@@ -1682,7 +1653,7 @@ private object DashboardEngineControlsLayout {
 
 private object DashboardClassicEffectLayout {
     val effectLabelColumnWidth = 94.dp
-    val presetColumnWidth = 105.dp
+    val presetColumnWidth = 76.dp
     val columnGap = 8.dp
     val columnPadding = 3.dp
 }
@@ -1690,29 +1661,16 @@ private object DashboardClassicEffectLayout {
 @Composable
 private fun DashboardClassicAudioControlsStack(
     state: DriveSnapshot,
-    onCruisingShiftOffsetForTachMaxRpmChange: (Int, Int) -> Unit,
-    onCruisingLogicChange: (Boolean) -> Unit,
     onManualLoudnessDbChange: (String, com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective, Double) -> Unit,
     onRestoreManualLoudnessToDefault: () -> Unit,
     onEffectOverrideChange: (EffectSoundKind, Boolean) -> Unit,
     onOverrideGainChange: (EffectSoundKind, Float) -> Unit,
-    gearProfileSelection: GearProfileSelection,
-    onGearProfileSelectionChange: (GearProfileSelection) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier.wrapContentWidth(),
+        modifier = modifier.width(IntrinsicSize.Max),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        DashboardEngineControls(
-            state = state,
-            onCruisingShiftOffsetForTachMaxRpmChange = onCruisingShiftOffsetForTachMaxRpmChange,
-            onCruisingLogicChange = onCruisingLogicChange,
-        )
-        DashboardGearProfileControls(
-            selection = gearProfileSelection,
-            onSelectionChange = onGearProfileSelectionChange,
-        )
         DashboardManualVolumeControl(
             state = state,
             onManualLoudnessDbChange = onManualLoudnessDbChange,
@@ -1727,32 +1685,36 @@ private fun DashboardClassicAudioControlsStack(
 }
 
 @Composable
-private fun DashboardEnginePerspectiveControls(
+private fun DashboardTachometerAccessoryControls(
     state: DriveSnapshot,
+    gearProfileSelection: GearProfileSelection,
+    onCruisingShiftOffsetForTachMaxRpmChange: (Int, Int) -> Unit,
+    onCruisingLogicChange: (Boolean) -> Unit,
+    onGearProfileSelectionChange: (GearProfileSelection) -> Unit,
     onEngineExternalChange: (Boolean) -> Unit,
     onEnginePureChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val external = state.soundPerspective == com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective.EXTERIOR
-    val layout = DashboardEngineControlsLayout
-    val rowHeight = layout.rowHeight
-
-    Row(
+    // The stock rows are wider than the tachometer column, so they are laid out unbounded and
+    // anchored to its right edge instead of being reflowed into a narrower variant.
+    Column(
         modifier = modifier
-            .fillMaxWidth()
-            .padding(top = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(layout.columnGap, Alignment.End),
-        verticalAlignment = Alignment.CenterVertically,
+            .wrapContentWidth(align = Alignment.End, unbounded = true)
+            .padding(top = 8.dp),
+        horizontalAlignment = Alignment.Start,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text("ENGINE", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-        DashboardColumnTextCell("EXTERNAL", external, rowHeight)
-        DashboardSwitchCell(rowHeight, external, Outline) {
-            onEngineExternalChange(!external)
-        }
-        DashboardColumnTextCell("PURE", state.exteriorPureAudio, rowHeight)
-        DashboardSwitchCell(rowHeight, state.exteriorPureAudio, Outline) {
-            onEnginePureChange(!state.exteriorPureAudio)
-        }
+        DashboardEngineControls(
+            state = state,
+            onCruisingShiftOffsetForTachMaxRpmChange = onCruisingShiftOffsetForTachMaxRpmChange,
+            onEngineExternalChange = onEngineExternalChange,
+            onEnginePureChange = onEnginePureChange,
+            onCruisingLogicChange = onCruisingLogicChange,
+        )
+        DashboardGearProfileControls(
+            selection = gearProfileSelection,
+            onSelectionChange = onGearProfileSelectionChange,
+        )
     }
 }
 
@@ -1760,9 +1722,12 @@ private fun DashboardEnginePerspectiveControls(
 private fun DashboardEngineControls(
     state: DriveSnapshot,
     onCruisingShiftOffsetForTachMaxRpmChange: (Int, Int) -> Unit,
+    onEngineExternalChange: (Boolean) -> Unit,
+    onEnginePureChange: (Boolean) -> Unit,
     onCruisingLogicChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val external = state.soundPerspective == com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective.EXTERIOR
     val layout = DashboardEngineControlsLayout
     val rowHeight = layout.rowHeight
 
@@ -1771,6 +1736,51 @@ private fun DashboardEngineControls(
         horizontalArrangement = Arrangement.spacedBy(layout.columnGap),
         verticalAlignment = Alignment.Bottom,
     ) {
+        Box(
+            modifier = Modifier
+                .height(rowHeight)
+                .wrapContentWidth()
+                .padding(bottom = 12.dp),
+            contentAlignment = Alignment.BottomStart,
+        ) {
+            Text("ENGINE", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        }
+        Column(
+            horizontalAlignment = Alignment.End,
+            modifier = Modifier
+                .wrapContentWidth()
+                .padding(layout.columnPadding),
+        ) {
+            DashboardColumnTextCell("EXTERNAL", external, rowHeight)
+        }
+        Column(
+            horizontalAlignment = Alignment.Start,
+            modifier = Modifier
+                .wrapContentWidth()
+                .padding(layout.columnPadding),
+        ) {
+            DashboardSwitchCell(rowHeight, external, Outline) {
+                onEngineExternalChange(!external)
+            }
+        }
+        Column(
+            horizontalAlignment = Alignment.End,
+            modifier = Modifier
+                .wrapContentWidth()
+                .padding(layout.columnPadding),
+        ) {
+            DashboardColumnTextCell("PURE", state.exteriorPureAudio, rowHeight)
+        }
+        Column(
+            horizontalAlignment = Alignment.Start,
+            modifier = Modifier
+                .wrapContentWidth()
+                .padding(layout.columnPadding),
+        ) {
+            DashboardSwitchCell(rowHeight, state.exteriorPureAudio, Outline) {
+                onEnginePureChange(!state.exteriorPureAudio)
+            }
+        }
         Column(
             horizontalAlignment = Alignment.End,
             modifier = Modifier
@@ -1819,7 +1829,7 @@ private fun DashboardManualVolumeControl(
     val defaultDb = state.manualLoudnessDefaultDb
     val perspective = state.soundPerspective
     val perspectiveLabel = if (perspective == com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective.EXTERIOR) {
-        "EXT"
+        "OUT"
     } else {
         "INT"
     }
@@ -1827,16 +1837,17 @@ private fun DashboardManualVolumeControl(
         .sliderPercentFromDb(adjustmentDb) ==
         com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessRepository
             .sliderPercentFromDb(defaultDb)
+    // Ticks are hidden rather than removed so the slider keeps snapping to the same dB steps.
     val sliderColors = SliderDefaults.colors(
         thumbColor = Accent,
         activeTrackColor = Accent,
         inactiveTrackColor = Outline,
-        activeTickColor = Background,
-        inactiveTickColor = Accent,
+        activeTickColor = Color.Transparent,
+        inactiveTickColor = Color.Transparent,
     )
 
     Row(
-        modifier = modifier.wrapContentWidth(),
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(layout.columnGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1881,7 +1892,7 @@ private fun DashboardManualVolumeControl(
             steps = com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessTableEntry.SLIDER_STEPS - 1,
             colors = sliderColors,
             modifier = Modifier
-                .width(220.dp)
+                .weight(1f)
                 .padding(layout.columnPadding),
         )
         if (!atDefault) {
@@ -2052,6 +2063,7 @@ private fun DashboardGearPresetButton(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Text(
         text = label,
@@ -2063,7 +2075,7 @@ private fun DashboardGearPresetButton(
         fontSize = 12.sp,
         fontWeight = FontWeight.Bold,
         textAlign = TextAlign.Center,
-        modifier = Modifier
+        modifier = modifier
             .width(72.dp)
             .height(38.dp)
             .clip(skinShape(6.dp))
@@ -2630,9 +2642,8 @@ internal fun TransmissionShifter(
             .background(
                 Brush.verticalGradient(HardwareGradient),
             )
-            .border((2f * scale).dp, if (lockedToVehicle) Success.copy(alpha = 0.75f) else HardwareBorder, hardwareShape((16f * scale).dp))
+            .border((2f * scale).dp, HardwareBorder, hardwareShape((16f * scale).dp))
             .padding((8f * scale).dp)
-            .alpha(if (lockedToVehicle) 0.88f else 1f),
         verticalArrangement = Arrangement.spacedBy((6f * scale).dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

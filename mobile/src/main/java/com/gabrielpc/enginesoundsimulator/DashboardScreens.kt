@@ -138,6 +138,8 @@ import com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessTableEntry
 import com.gabrielpc.enginesoundsimulator.audio.FmodSourceState
 import com.gabrielpc.enginesoundsimulator.audio.FmodUpdateRate
 import com.gabrielpc.enginesoundsimulator.drive.GearProfileSelection
+import com.gabrielpc.enginesoundsimulator.drive.SettingsSection
+import com.gabrielpc.enginesoundsimulator.drive.SettingsSectionRepository
 import com.gabrielpc.enginesoundsimulator.drive.CruisingShiftOffsetByTachMaxRpm
 import com.gabrielpc.enginesoundsimulator.drive.DriveSnapshot
 import com.gabrielpc.enginesoundsimulator.drive.BackfireSettings
@@ -1088,15 +1090,12 @@ internal fun SettingsScreen(
     catalogGainTable: List<CatalogGainTableEntry>,
     onCatalogGainSettingsChange: (CatalogGainSettings) -> Unit,
     manualLoudnessTable: List<ManualLoudnessTableEntry>,
-    onManualLoudnessEnabledChange: (Boolean) -> Unit,
     onManualLoudnessDbChange: (String, EngineSoundPerspective, Double) -> Unit,
     onManualLoudnessPreviewChange: (String, Boolean) -> Unit,
     onManualLoudnessPreviewExteriorChange: (String, Boolean) -> Unit,
     onStopManualLoudnessPreviews: () -> Unit,
     onSaveManualLoudnessAsDefault: () -> Unit,
     onExportManualLoudnessPreset: () -> Unit,
-    clubReferenceMediaPlaying: Boolean,
-    onToggleClubReferenceMedia: () -> Unit,
     onStartAcousticDiagnostic: (String?) -> Unit,
     onResumeAcousticDiagnostic: () -> Unit,
     onCancelAcousticDiagnostic: () -> Unit,
@@ -1106,6 +1105,7 @@ internal fun SettingsScreen(
     onBackfireSettingsChange: (BackfireSettings) -> Unit,
     virtualGearSpeedBoundaries: VirtualGearSpeedBoundariesSettings,
     gearProfileSelection: GearProfileSelection,
+    onGearProfileSelectionChange: (GearProfileSelection) -> Unit,
     onVirtualGearSpeedBoundaryChange: (Int, Int, Int) -> Unit,
     onRestoreVirtualGearSpeedBoundaries: (Int) -> Unit,
     allowManualOnLaunchEnabled: Boolean,
@@ -1151,7 +1151,13 @@ internal fun SettingsScreen(
     livePreparingCruising: () -> Boolean,
     liveSpeedKmh: () -> Double,
 ) {
-    var selectedTab by remember { mutableStateOf(SettingsSection.SPEED_AUDIO) }
+    val context = LocalContext.current
+    val settingsSectionRepository = remember(context) {
+        SettingsSectionRepository(context.applicationContext)
+    }
+    var selectedTab by remember {
+        mutableStateOf(settingsSectionRepository.load())
+    }
     var showResetConfirmation by remember { mutableStateOf(false) }
     var showCalibrationConfirmation by remember { mutableStateOf(false) }
     var showAcousticConfirmation by remember { mutableStateOf(false) }
@@ -1167,36 +1173,28 @@ internal fun SettingsScreen(
             modifier = Modifier.fillMaxWidth().border(1.dp, Outline, skinShape(8.dp)),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            SettingsTab("SPEED AUDIO", selectedTab == SettingsSection.SPEED_AUDIO) {
-                selectedTab = SettingsSection.SPEED_AUDIO
-            }
             SettingsTab("GENERAL", selectedTab == SettingsSection.GENERAL) {
                 selectedTab = SettingsSection.GENERAL
+                settingsSectionRepository.save(SettingsSection.GENERAL)
             }
             SettingsTab("BACKFIRE", selectedTab == SettingsSection.BACKFIRE) {
                 selectedTab = SettingsSection.BACKFIRE
+                settingsSectionRepository.save(SettingsSection.BACKFIRE)
             }
             SettingsTab("LOUDNESS", selectedTab == SettingsSection.LOUDNESS) {
                 selectedTab = SettingsSection.LOUDNESS
+                settingsSectionRepository.save(SettingsSection.LOUDNESS)
+            }
+            SettingsTab("SPEED AUDIO", selectedTab == SettingsSection.SPEED_AUDIO) {
+                selectedTab = SettingsSection.SPEED_AUDIO
+                settingsSectionRepository.save(SettingsSection.SPEED_AUDIO)
             }
             SettingsTab("BANK IMPORT", selectedTab == SettingsSection.BANK_IMPORT) {
                 selectedTab = SettingsSection.BANK_IMPORT
+                settingsSectionRepository.save(SettingsSection.BANK_IMPORT)
             }
         }
         when (selectedTab) {
-            SettingsSection.SPEED_AUDIO -> Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                SpeedAudioSettingsPanel(
-                    settings = speedAudioSettings,
-                    liveUsesRacingGain = liveUsesRacingGain(),
-                    livePreparingCruising = livePreparingCruising(),
-                    liveSpeedKmh = liveSpeedKmh(),
-                    onChange = onSpeedAudioSettingsChange,
-                )
-            }
             SettingsSection.GENERAL -> Column(
                 modifier = Modifier
                     .weight(1f)
@@ -1227,6 +1225,7 @@ internal fun SettingsScreen(
             VirtualGearSpeedBoundariesSettingsControl(
                 settings = virtualGearSpeedBoundaries,
                 gearProfileSelection = gearProfileSelection,
+                onGearProfileSelectionChange = onGearProfileSelectionChange,
                 onBoundaryChange = onVirtualGearSpeedBoundaryChange,
                 onRestorePreset = onRestoreVirtualGearSpeedBoundaries,
             )
@@ -1298,19 +1297,30 @@ internal fun SettingsScreen(
                 )
             }
             SettingsSection.LOUDNESS -> ManualLoudnessSettingsTab(
-                settings = catalogGainSettings,
                 tableEntries = manualLoudnessTable,
-                onManualEnabledChange = onManualLoudnessEnabledChange,
                 onAdjustmentDbChange = onManualLoudnessDbChange,
                 onPreviewChange = onManualLoudnessPreviewChange,
                 onPreviewExteriorChange = onManualLoudnessPreviewExteriorChange,
                 onSaveManualLoudnessAsDefault = onSaveManualLoudnessAsDefault,
                 onExportManualLoudnessPreset = onExportManualLoudnessPreset,
                 onStopManualLoudnessPreviews = onStopManualLoudnessPreviews,
-                clubReferenceMediaPlaying = clubReferenceMediaPlaying,
-                onToggleClubReferenceMedia = onToggleClubReferenceMedia,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
             )
+            SettingsSection.SPEED_AUDIO -> Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                SpeedAudioSettingsPanel(
+                    settings = speedAudioSettings,
+                    liveUsesRacingGain = liveUsesRacingGain(),
+                    livePreparingCruising = livePreparingCruising(),
+                    liveSpeedKmh = liveSpeedKmh(),
+                    onChange = onSpeedAudioSettingsChange,
+                )
+            }
             SettingsSection.BANK_IMPORT -> BankImportDiagnosticsPanel(
                 onRescanBanks = onRescanBanks,
                 modifier = Modifier.weight(1f),
@@ -1419,49 +1429,30 @@ internal fun SettingsScreen(
     }
 }
 
-private enum class SettingsSection {
-    SPEED_AUDIO,
-    GENERAL,
-    BACKFIRE,
-    LOUDNESS,
-    BANK_IMPORT,
-}
-
 @Composable
 private fun ManualLoudnessSettingsTab(
-    settings: CatalogGainSettings,
     tableEntries: List<ManualLoudnessTableEntry>,
-    onManualEnabledChange: (Boolean) -> Unit,
     onAdjustmentDbChange: (String, EngineSoundPerspective, Double) -> Unit,
     onPreviewChange: (String, Boolean) -> Unit,
     onPreviewExteriorChange: (String, Boolean) -> Unit,
     onSaveManualLoudnessAsDefault: () -> Unit,
     onExportManualLoudnessPreset: () -> Unit,
     onStopManualLoudnessPreviews: () -> Unit,
-    clubReferenceMediaPlaying: Boolean,
-    onToggleClubReferenceMedia: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     DisposableEffect(Unit) {
         onDispose {
             onStopManualLoudnessPreviews()
-            if (clubReferenceMediaPlaying) {
-                onToggleClubReferenceMedia()
-            }
         }
     }
 
     ManualLoudnessAdjustmentPanel(
-        settings = settings,
         tableEntries = tableEntries,
-        onManualEnabledChange = onManualEnabledChange,
         onAdjustmentDbChange = onAdjustmentDbChange,
         onPreviewChange = onPreviewChange,
         onPreviewExteriorChange = onPreviewExteriorChange,
         onSaveManualLoudnessAsDefault = onSaveManualLoudnessAsDefault,
         onExportManualLoudnessPreset = onExportManualLoudnessPreset,
-        clubReferenceMediaPlaying = clubReferenceMediaPlaying,
-        onToggleClubReferenceMedia = onToggleClubReferenceMedia,
         modifier = modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState()),
@@ -1572,16 +1563,12 @@ private fun CatalogGainToggleRow(
 
 @Composable
 private fun ManualLoudnessAdjustmentPanel(
-    settings: CatalogGainSettings,
     tableEntries: List<ManualLoudnessTableEntry>,
-    onManualEnabledChange: (Boolean) -> Unit,
     onAdjustmentDbChange: (String, EngineSoundPerspective, Double) -> Unit,
     onPreviewChange: (String, Boolean) -> Unit,
     onPreviewExteriorChange: (String, Boolean) -> Unit,
     onSaveManualLoudnessAsDefault: () -> Unit,
     onExportManualLoudnessPreset: () -> Unit,
-    clubReferenceMediaPlaying: Boolean,
-    onToggleClubReferenceMedia: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var editingProfileId by remember { mutableStateOf<String?>(null) }
@@ -1590,203 +1577,162 @@ private fun ManualLoudnessAdjustmentPanel(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("MANUAL LOUDNESS ADJUSTMENT", color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Black)
-        Text(
-            "Per-car volume trim from -20 dB to +20 dB. When enabled, LUFS and iPhone catalog adjustments are bypassed and their previous on/off state is restored when you turn manual mode off.",
-            color = Muted,
-            fontSize = 13.sp,
-            lineHeight = 17.sp,
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, Outline, skinShape(8.dp))
-                .padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "ENABLE MANUAL LOUDNESS ADJUSTMENT",
-                    color = OnSurface,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Black,
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    checked = settings.manualLoudnessEnabled,
-                    onCheckedChange = onManualEnabledChange,
-                )
-            }
-            OutlinedButton(
-                onClick = onToggleClubReferenceMedia,
-                border = BorderStroke(
-                    1.dp,
-                    if (clubReferenceMediaPlaying) {
-                        Accent
-                    } else {
-                        Outline
-                    },
-                ),
-            ) {
-                Text(
-                    if (clubReferenceMediaPlaying) {
-                        "STOP CLUB"
-                    } else {
-                        "IN THE CLUB"
-                    },
-                    color = if (clubReferenceMediaPlaying) {
-                        Accent
-                    } else {
-                        AccentSoft
-                    },
-                    fontWeight = FontWeight.Black,
-                    fontSize = 12.sp,
-                )
+            tableEntries.chunked(4).forEach { rowEntries ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    rowEntries.forEach { row ->
+                        ManualLoudnessCarCard(
+                            entry = row,
+                            isEditing = editingProfileId == row.profileId,
+                            onToggleEdit = {
+                                editingProfileId = if (editingProfileId == row.profileId) {
+                                    null
+                                } else {
+                                    row.profileId
+                                }
+                            },
+                            onAdjustmentDbChange = { db ->
+                                onAdjustmentDbChange(row.profileId, row.activePerspective, db)
+                            },
+                            onPreviewChange = { active ->
+                                onPreviewChange(row.profileId, active)
+                            },
+                            onPreviewExteriorChange = { exterior ->
+                                onPreviewExteriorChange(row.profileId, exterior)
+                            },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    repeat(4 - rowEntries.size) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
             }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            OutlinedButton(
+            Button(
                 onClick = onSaveManualLoudnessAsDefault,
+                colors = ButtonDefaults.buttonColors(containerColor = Accent),
                 modifier = Modifier.weight(1f),
             ) {
-                Text("SAVE AS DEFAULT", color = AccentSoft, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                Text("SAVE AS DEFAULT", color = Background, fontWeight = FontWeight.Black, fontSize = 12.sp)
             }
             OutlinedButton(
                 onClick = onExportManualLoudnessPreset,
                 modifier = Modifier.weight(1f),
+                border = BorderStroke(1.dp, Outline),
             ) {
                 Text("EXPORT PRESET", color = AccentSoft, fontWeight = FontWeight.Black, fontSize = 12.sp)
-            }
-        }
-        Text(
-            "Export writes manual_loudness_preset.json to the app files folder. Share that file to bake factory defaults into a future build.",
-            color = Muted,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
-        )
-        if (settings.manualLoudnessEnabled) {
-            Text(
-                "Tap EDIT to unlock a car slider. PLAY runs one RPM sweep and stops. INT/EXT keep separate saved values.",
-                color = Muted,
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
-            )
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, Outline, skinShape(8.dp))
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            if (tableEntries.isEmpty()) {
-                Text("No modded cars installed.", color = Muted, fontSize = 12.sp)
-            } else {
-                tableEntries.forEach { row ->
-                    ManualLoudnessCarRow(
-                        entry = row,
-                        enabled = settings.manualLoudnessEnabled,
-                        sliderEnabled = settings.manualLoudnessEnabled &&
-                            (editingProfileId == row.profileId || row.previewActive),
-                        isEditing = editingProfileId == row.profileId,
-                        onToggleEdit = {
-                            editingProfileId = if (editingProfileId == row.profileId) {
-                                null
-                            } else {
-                                row.profileId
-                            }
-                        },
-                        onAdjustmentDbChange = { db ->
-                            onAdjustmentDbChange(row.profileId, row.activePerspective, db)
-                        },
-                        onPreviewChange = { active ->
-                            onPreviewChange(row.profileId, active)
-                        },
-                        onPreviewExteriorChange = { exterior ->
-                            onPreviewExteriorChange(row.profileId, exterior)
-                        },
-                    )
-                }
             }
         }
     }
 }
 
 @Composable
-private fun ManualLoudnessCarRow(
+private fun ManualLoudnessCarCard(
     entry: ManualLoudnessTableEntry,
-    enabled: Boolean,
-    sliderEnabled: Boolean,
     isEditing: Boolean,
     onToggleEdit: () -> Unit,
     onAdjustmentDbChange: (Double) -> Unit,
     onPreviewChange: (Boolean) -> Unit,
     onPreviewExteriorChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val bankResolver = remember(context) { FmodBankResolver(context.applicationContext) }
     val profile = remember(entry.profileId) {
         FmodBankProfiles.all.firstOrNull { profile -> profile.id == entry.profileId }
     }
+    // The slider stays locked until this card is explicitly unlocked, so a stray touch on the
+    // head unit cannot retune a car that is only being auditioned.
+    val sliderEnabled = isEditing || entry.previewActive
 
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .border(1.dp, Outline, skinShape(8.dp))
+            .padding(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (profile != null) {
+            CarPreviewThumbnail(
+                profile = profile,
+                audioAssetResolver = bankResolver,
+                contentDescription = entry.carName,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp)
+                    .background(Color.Black.copy(alpha = 0.42f)),
+            )
+        }
+        Text(
+            text = entry.carName,
+            color = OnSurface,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Black,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Slider(
+            value = ManualLoudnessRepository.sliderPercentFromDb(entry.activeAdjustmentDb),
+            onValueChange = { percent ->
+                onAdjustmentDbChange(ManualLoudnessRepository.sliderDbFromPercent(percent))
+            },
+            enabled = sliderEnabled,
+            valueRange = 0f..ManualLoudnessTableEntry.SLIDER_STEPS.toFloat(),
+            steps = ManualLoudnessTableEntry.SLIDER_STEPS - 1,
+            colors = SliderDefaults.colors(
+                thumbColor = if (sliderEnabled) Accent else Muted,
+                activeTrackColor = if (sliderEnabled) Accent else Outline,
+                inactiveTrackColor = Outline,
+                disabledThumbColor = Muted,
+                disabledActiveTrackColor = Outline,
+                disabledInactiveTrackColor = Outline,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            text = String.format(
+                Locale.US,
+                "%s %+.1f dB",
+                if (entry.previewExterior) {
+                    "OUT"
+                } else {
+                    "INT"
+                },
+                entry.activeAdjustmentDb,
+            ),
+            color = AccentSoft,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (profile != null) {
-                CarPreviewThumbnail(
-                    profile = profile,
-                    audioAssetResolver = bankResolver,
-                    contentDescription = entry.carName,
-                    modifier = Modifier
-                        .width(72.dp)
-                        .height(48.dp),
-                )
-            }
-            Text(
-                entry.carName,
-                color = if (enabled) {
-                    OnSurface
-                } else {
-                    Muted
-                },
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Black,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                String.format(
-                    Locale.US,
-                    "%s %+.1f dB",
-                    if (entry.previewExterior) {
-                        "EXT"
-                    } else {
-                        "INT"
-                    },
-                    entry.activeAdjustmentDb,
-                ),
-                color = if (enabled) {
-                    AccentSoft
-                } else {
-                    Muted
-                },
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(modifier = Modifier.width(8.dp))
             OutlinedButton(
                 onClick = { onPreviewExteriorChange(!entry.previewExterior) },
-                enabled = enabled,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                 border = BorderStroke(
                     1.dp,
                     if (entry.previewExterior) {
@@ -1797,7 +1743,7 @@ private fun ManualLoudnessCarRow(
                 ),
             ) {
                 Text(
-                    "EXT",
+                    "OUT",
                     color = if (entry.previewExterior) {
                         Accent
                     } else {
@@ -1808,8 +1754,35 @@ private fun ManualLoudnessCarRow(
                 )
             }
             OutlinedButton(
+                onClick = { onPreviewChange(!entry.previewActive) },
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                border = BorderStroke(
+                    1.dp,
+                    if (entry.previewActive) {
+                        Accent
+                    } else {
+                        Outline
+                    },
+                ),
+            ) {
+                Text(
+                    if (entry.previewActive) {
+                        "PLAYING"
+                    } else {
+                        "PLAY"
+                    },
+                    color = if (entry.previewActive) {
+                        Accent
+                    } else {
+                        AccentSoft
+                    },
+                    fontWeight = FontWeight.Black,
+                    fontSize = 12.sp,
+                )
+            }
+            OutlinedButton(
                 onClick = onToggleEdit,
-                enabled = enabled,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                 border = BorderStroke(
                     1.dp,
                     if (isEditing) {
@@ -1834,50 +1807,7 @@ private fun ManualLoudnessCarRow(
                     fontSize = 12.sp,
                 )
             }
-            OutlinedButton(
-                onClick = { onPreviewChange(!entry.previewActive) },
-                enabled = enabled,
-                border = BorderStroke(
-                    1.dp,
-                    if (entry.previewActive) {
-                        Accent
-                    } else {
-                        Outline
-                    },
-                ),
-            ) {
-                Text(
-                    if (entry.previewActive) {
-                        "PLAYING"
-                    } else {
-                        "PLAY"
-                    },
-                    color = if (entry.previewActive) {
-                        Accent
-                    } else {
-                        AccentSoft
-                    },
-                    fontWeight = FontWeight.Black,
-                )
-            }
         }
-        Slider(
-            value = ManualLoudnessRepository.sliderPercentFromDb(entry.activeAdjustmentDb),
-            onValueChange = { percent ->
-                onAdjustmentDbChange(ManualLoudnessRepository.sliderDbFromPercent(percent))
-            },
-            enabled = sliderEnabled,
-            valueRange = 0f..ManualLoudnessTableEntry.SLIDER_STEPS.toFloat(),
-            steps = ManualLoudnessTableEntry.SLIDER_STEPS - 1,
-            colors = SliderDefaults.colors(
-                thumbColor = if (sliderEnabled) Accent else Muted,
-                activeTrackColor = if (sliderEnabled) Accent else Outline,
-                inactiveTrackColor = Outline,
-                disabledThumbColor = Muted,
-                disabledActiveTrackColor = Outline,
-                disabledInactiveTrackColor = Outline,
-            ),
-        )
     }
 }
 
@@ -2846,11 +2776,14 @@ private fun SettingsGridRow(
 private fun VirtualGearSpeedBoundariesSettingsControl(
     settings: VirtualGearSpeedBoundariesSettings,
     gearProfileSelection: GearProfileSelection,
+    onGearProfileSelectionChange: (GearProfileSelection) -> Unit,
     onBoundaryChange: (preset: Int, boundaryIndex: Int, speedKmh: Int) -> Unit,
     onRestorePreset: (Int) -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
-    val activePreset = gearProfileSelection.virtualCountOrNull()
+    val presetOptions = VirtualGearSpeedBoundaries.PRESETS
+    val activePreset = gearProfileSelection.virtualCountOrNull() ?: VirtualGearProfile.DEFAULT_VIRTUAL_GEARS
+    val presetSliderIndex = presetOptions.indexOf(activePreset).coerceAtLeast(0)
 
     Column(
         modifier = modifier
@@ -2868,11 +2801,11 @@ private fun VirtualGearSpeedBoundariesSettingsControl(
             Text(
                 text = when {
                     gearProfileSelection.isAdaptive() ->
-                        "Adaptive 6/10 mirrors the saved 6-gear profile in cruising and the 10-gear profile in racing or manual shift, including custom speed bands. Select 6 or 10 on the dashboard to edit those presets."
-                    activePreset != null ->
-                        "Drag dividers to set how each gear maps to road speed for the $activePreset-gear preset selected on the dashboard."
+                        "Adaptive 6/10 mirrors the saved 6-gear profile in cruising and the 10-gear profile in racing or manual shift, including custom speed bands."
+                    gearProfileSelection.isOriginal() ->
+                        "ORIGINAL uses the bank ratios on the dashboard. Move the gear amount slider to switch to a virtual preset and edit its speed bands here."
                     else ->
-                        "Select 6, 10, or 15 on the main dashboard to tune virtual gear speed bands. ORIGINAL uses the bank ratios and cannot be edited here."
+                        "Drag dividers to set how each gear maps to road speed for the selected virtual preset."
                 },
                 color = Muted,
                 fontSize = 12.sp,
@@ -2880,19 +2813,48 @@ private fun VirtualGearSpeedBoundariesSettingsControl(
             )
         }
 
-        if (activePreset != null) {
-            VirtualGearDistributionChart(
-                gearCount = activePreset,
-                boundariesKmh = settings.boundariesFor(activePreset),
-                onBoundaryChange = { boundaryIndex, speedKmh ->
-                    onBoundaryChange(activePreset, boundaryIndex, speedKmh)
-                },
-                onRestoreDefaults = {
-                    onRestorePreset(activePreset)
-                },
-                modifier = Modifier.fillMaxWidth(),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "VIRTUAL FORWARD GEARS",
+                color = Accent,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Black,
+            )
+            Text(
+                text = "$activePreset gears",
+                color = OnSurface,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Black,
             )
         }
+        Slider(
+            value = presetSliderIndex.toFloat(),
+            onValueChange = { value ->
+                val selectedPreset = presetOptions[value.roundToInt().coerceIn(0, presetOptions.lastIndex)]
+
+                if (selectedPreset != activePreset || !gearProfileSelection.matchesMixerPreset(selectedPreset)) {
+                    onGearProfileSelectionChange(GearProfileSelection.virtual(selectedPreset))
+                }
+            },
+            valueRange = 0f..presetOptions.lastIndex.toFloat(),
+            steps = (presetOptions.size - 2).coerceAtLeast(0),
+        )
+
+        VirtualGearDistributionChart(
+            gearCount = activePreset,
+            boundariesKmh = settings.boundariesFor(activePreset),
+            onBoundaryChange = { boundaryIndex, speedKmh ->
+                onBoundaryChange(activePreset, boundaryIndex, speedKmh)
+            },
+            onRestoreDefaults = {
+                onRestorePreset(activePreset)
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 

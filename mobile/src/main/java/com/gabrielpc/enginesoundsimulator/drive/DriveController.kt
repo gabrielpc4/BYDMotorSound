@@ -224,10 +224,12 @@ class DriveController(context: Context) {
     private val backfireSettingsRepository = BackfireSettingsRepository(appContext)
     private val effectSoundOverrideRepository = EffectSoundOverrideRepository(appContext)
     private val gearProfileSelectionRepository = GearProfileSelectionRepository(appContext)
+    private val settingsSectionRepository = SettingsSectionRepository(appContext)
     private val virtualGearSpeedBoundariesRepository = VirtualGearSpeedBoundariesRepository(appContext)
     private val minimumAudioThrottleRepository = MinimumAudioThrottleRepository(appContext)
     private val speedAudioSettingsRepository = SpeedAudioSettingsRepository(appContext)
     private val automaticTransmissionSettingsRepository = AutomaticTransmissionSettingsRepository(appContext)
+    private val settingsSectionRepository = SettingsSectionRepository(appContext)
     private val audioEngine = EngineAudioEngine(appContext)
     private val selectedProfile = AtomicReference(resolveInitialProfile())
     private val selectedPerspective = AtomicReference(soundPerspectiveRepository.load(selectedProfile.get()))
@@ -866,10 +868,6 @@ class DriveController(context: Context) {
         syncMasterOutputGainToAudioEngine()
     }
 
-    fun setManualLoudnessEnabled(enabled: Boolean) {
-        setCatalogGainSettings(catalogGainSettings.get().withManualLoudnessEnabled(enabled))
-    }
-
     fun restoreCurrentManualLoudnessToDefault() {
         val profile = selectedProfile.get()
         val perspective = selectedPerspective.get()
@@ -1141,6 +1139,7 @@ class DriveController(context: Context) {
         backfireSettingsRepository.reset()
         effectSoundOverrideRepository.reset()
         gearProfileSelectionRepository.reset()
+        settingsSectionRepository.reset()
         virtualGearSpeedBoundariesRepository.reset()
         minimumAudioThrottleRepository.reset()
         speedAudioSettingsRepository.reset()
@@ -1152,6 +1151,7 @@ class DriveController(context: Context) {
         appVolumeRepository.reset()
         catalogGainSettingsRepository.reset()
         manualLoudnessRepository.reset()
+        settingsSectionRepository.reset()
         loudnessNormalizationRepository.clearAll()
         acousticDiagnosticRepository.clearAll()
         iphoneAcousticMeterRepository.clear()

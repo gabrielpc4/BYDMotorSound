@@ -21,7 +21,7 @@ internal object ManualLoudnessPreset {
         manualLoudnessEnabled: Boolean,
     ): File {
         val preset = buildPreset(repository, profiles, manualLoudnessEnabled)
-        val exportFile = File(context.applicationContext.filesDir, EXPORT_FILE_NAME)
+        val exportFile = presetFile(context, EXPORT_FILE_NAME)
         exportFile.writeText(preset.toString(2))
         return exportFile
     }
@@ -33,7 +33,7 @@ internal object ManualLoudnessPreset {
         manualLoudnessEnabled: Boolean,
     ): File {
         val preset = buildPreset(repository, profiles, manualLoudnessEnabled)
-        val defaultFile = File(context.applicationContext.filesDir, USER_DEFAULT_FILE_NAME)
+        val defaultFile = presetFile(context, USER_DEFAULT_FILE_NAME)
         defaultFile.writeText(preset.toString(2))
         return defaultFile
     }
@@ -166,16 +166,48 @@ internal object ManualLoudnessPreset {
     }
 
     fun loadBundledPreset(context: Context): JSONObject? {
-        val appContext = context.applicationContext
-        val userDefaultFile = File(appContext.filesDir, USER_DEFAULT_FILE_NAME)
+        val userDefaultFile = presetFile(context, USER_DEFAULT_FILE_NAME)
         if (userDefaultFile.isFile) {
             return runCatching { JSONObject(userDefaultFile.readText()) }.getOrNull()
         }
 
         return runCatching {
-            appContext.assets.open(FACTORY_ASSET_NAME).bufferedReader().use { reader ->
+            context.applicationContext.assets.open(FACTORY_ASSET_NAME).bufferedReader().use { reader ->
                 JSONObject(reader.readText())
             }
         }.getOrNull()
+    }
+
+    fun presetFile(context: Context, fileName: String): File {
+        val directory = storageDirectory(context)
+        directory.mkdirs()
+        val destination = File(directory, fileName)
+        migrateInternalPresetIfNeeded(context, fileName, destination)
+        return destination
+    }
+
+    private fun storageDirectory(context: Context): File {
+        val appContext = context.applicationContext
+        val externalDirectory = appContext.getExternalFilesDir(null)
+        if (externalDirectory != null) {
+            return externalDirectory
+        }
+
+        return appContext.filesDir
+    }
+
+    private fun migrateInternalPresetIfNeeded(context: Context, fileName: String, destination: File) {
+        if (destination.isFile) {
+            return
+        }
+
+        val legacyFile = File(context.applicationContext.filesDir, fileName)
+        if (!legacyFile.isFile) {
+            return
+        }
+
+        runCatching {
+            legacyFile.copyTo(destination, overwrite = false)
+        }
     }
 }

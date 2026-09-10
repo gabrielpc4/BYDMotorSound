@@ -37,4 +37,6 @@ internal object AppPreferenceStores {
     const val AUTOMATIC_TRANSMISSION_SETTINGS = "automatic_transmission_settings_v1"
     const val SPEED_AUDIO_SETTINGS = "speed_audio_settings_v1"
     const val DASHBOARD_VISUAL_THEME = "dashboard_visual_theme_v1"
+    /** Last settings tab shown in the dashboard settings screen. */
+    const val SETTINGS_SECTION = "settings_section_v1"
 }

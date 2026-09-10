@@ -4,31 +4,19 @@ import android.content.Context
 import com.gabrielpc.enginesoundsimulator.AppPreferenceStores
 
 data class CatalogGainSettings(
-    val applyLufsNormalization: Boolean = true,
-    val applyIphoneAcousticAdjustment: Boolean = true,
-    val manualLoudnessEnabled: Boolean = false,
+    val applyLufsNormalization: Boolean = false,
+    val applyIphoneAcousticAdjustment: Boolean = false,
+    val manualLoudnessEnabled: Boolean = true,
     val savedApplyLufsNormalization: Boolean = true,
     val savedApplyIphoneAcousticAdjustment: Boolean = true,
 ) {
-    fun normalized(): CatalogGainSettings = this
-
-    fun withManualLoudnessEnabled(enabled: Boolean): CatalogGainSettings {
-        if (enabled) {
-            return copy(
-                manualLoudnessEnabled = true,
-                savedApplyLufsNormalization = applyLufsNormalization,
-                savedApplyIphoneAcousticAdjustment = applyIphoneAcousticAdjustment,
-                applyLufsNormalization = false,
-                applyIphoneAcousticAdjustment = false,
-            )
-        }
-
-        return copy(
-            manualLoudnessEnabled = false,
-            applyLufsNormalization = savedApplyLufsNormalization,
-            applyIphoneAcousticAdjustment = savedApplyIphoneAcousticAdjustment,
-        )
-    }
+    // Manual per-car trim is the only loudness stage the dashboard exposes, so it always owns the
+    // master gain and the catalog-wide LUFS/iPhone stages stay bypassed.
+    fun normalized(): CatalogGainSettings = copy(
+        manualLoudnessEnabled = true,
+        applyLufsNormalization = false,
+        applyIphoneAcousticAdjustment = false,
+    )
 }
 
 enum class CatalogGainEntryStatus {
@@ -57,9 +45,9 @@ internal class CatalogGainSettingsRepository(context: Context) {
 
     fun load(): CatalogGainSettings {
         return CatalogGainSettings(
-            applyLufsNormalization = preferences.getBoolean(KEY_APPLY_LUFS, true),
-            applyIphoneAcousticAdjustment = preferences.getBoolean(KEY_APPLY_IPHONE, true),
-            manualLoudnessEnabled = preferences.getBoolean(KEY_MANUAL_ENABLED, false),
+            applyLufsNormalization = preferences.getBoolean(KEY_APPLY_LUFS, false),
+            applyIphoneAcousticAdjustment = preferences.getBoolean(KEY_APPLY_IPHONE, false),
+            manualLoudnessEnabled = preferences.getBoolean(KEY_MANUAL_ENABLED, true),
             savedApplyLufsNormalization = preferences.getBoolean(KEY_SAVED_APPLY_LUFS, true),
             savedApplyIphoneAcousticAdjustment = preferences.getBoolean(KEY_SAVED_APPLY_IPHONE, true),
         ).normalized()

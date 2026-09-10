@@ -897,6 +897,28 @@ class DriveController(context: Context) {
         }
     }
 
+    fun adjustAllModdedManualLoudnessDb(deltaDb: Double) {
+        if (audioEngine.isLoudnessCalibrationRunning() || audioEngine.isAcousticDiagnosticRunning()) {
+            return
+        }
+
+        calibrationProfiles().forEach { profile ->
+            EngineSoundPerspective.entries.forEach { perspective ->
+                val key = LoudnessCalibrationKey(profile.id, profile.packGroup, perspective)
+                val currentDb = manualLoudnessRepository.loadDb(key)
+                val nextDb = (currentDb + deltaDb).coerceIn(
+                    ManualLoudnessTableEntry.MIN_DB,
+                    ManualLoudnessTableEntry.MAX_DB,
+                )
+                manualLoudnessRepository.saveDb(key, nextDb)
+            }
+        }
+
+        refreshManualLoudnessPreviewParameters()
+        refreshManualLoudnessTable()
+        syncMasterOutputGainToAudioEngine()
+    }
+
     fun setManualLoudnessPreviewExterior(profileId: String, exterior: Boolean) {
         val profile = calibrationProfiles().firstOrNull { it.id == profileId } ?: return
         manualLoudnessRepository.savePreviewExterior(profile.id, profile.packGroup, exterior)
@@ -1424,11 +1446,11 @@ class DriveController(context: Context) {
             if (carNavigationIndex > 0) {
                 carNavigationIndex--
                 val profileId = carNavigationHistory[carNavigationIndex]
-                installedProfiles().firstOrNull { it.id == profileId }?.let(::applySelectedCar)
+                profilesInCurrentPackGroup().firstOrNull { it.id == profileId }?.let(::applySelectedCar)
                 return
             }
 
-            val installed = installedProfiles()
+            val installed = profilesInCurrentPackGroup()
             if (installed.size <= 1) {
                 return
             }
@@ -1449,7 +1471,7 @@ class DriveController(context: Context) {
     fun selectNextCar() {
         synchronized(lifecycleLock) {
             if (audioEngine.isExclusiveAudioOperationRunning()) return
-            val installed = installedProfiles()
+            val installed = profilesInCurrentPackGroup()
             if (installed.isEmpty()) {
                 return
             }
@@ -1471,7 +1493,7 @@ class DriveController(context: Context) {
     fun selectShuffleCar() {
         synchronized(lifecycleLock) {
             if (audioEngine.isExclusiveAudioOperationRunning()) return
-            val installed = installedProfiles()
+            val installed = profilesInCurrentPackGroup()
             if (installed.isEmpty()) {
                 return
             }
@@ -1853,6 +1875,11 @@ class DriveController(context: Context) {
 
     private fun installedProfiles(): List<FmodBankProfile> =
         installedProfileCache.get()
+
+    private fun profilesInCurrentPackGroup(): List<FmodBankProfile> {
+        val packGroup = selectedProfile.get().packGroup
+        return installedProfiles().filter { it.packGroup == packGroup }
+    }
 
     private fun calibrationProfiles(): List<FmodBankProfile> =
         installedProfiles().filter { it.packGroup == FmodBankProfiles.moddedCarsPackId }

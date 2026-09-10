@@ -1094,6 +1094,7 @@ internal fun SettingsScreen(
     onManualLoudnessPreviewChange: (String, Boolean) -> Unit,
     onManualLoudnessPreviewExteriorChange: (String, Boolean) -> Unit,
     onStopManualLoudnessPreviews: () -> Unit,
+    onAdjustAllModdedManualLoudnessDb: (Double) -> Unit,
     onRestoreManualLoudnessDefaults: () -> Unit,
     onExportManualLoudnessPreset: () -> Unit,
     onStartAcousticDiagnostic: (String?) -> Unit,
@@ -1301,6 +1302,7 @@ internal fun SettingsScreen(
                 onAdjustmentDbChange = onManualLoudnessDbChange,
                 onPreviewChange = onManualLoudnessPreviewChange,
                 onPreviewExteriorChange = onManualLoudnessPreviewExteriorChange,
+                onAdjustAllModdedManualLoudnessDb = onAdjustAllModdedManualLoudnessDb,
                 onRestoreManualLoudnessDefaults = onRestoreManualLoudnessDefaults,
                 onExportManualLoudnessPreset = onExportManualLoudnessPreset,
                 onStopManualLoudnessPreviews = onStopManualLoudnessPreviews,
@@ -1435,6 +1437,7 @@ private fun ManualLoudnessSettingsTab(
     onAdjustmentDbChange: (String, EngineSoundPerspective, Double) -> Unit,
     onPreviewChange: (String, Boolean) -> Unit,
     onPreviewExteriorChange: (String, Boolean) -> Unit,
+    onAdjustAllModdedManualLoudnessDb: (Double) -> Unit,
     onRestoreManualLoudnessDefaults: () -> Unit,
     onExportManualLoudnessPreset: () -> Unit,
     onStopManualLoudnessPreviews: () -> Unit,
@@ -1451,6 +1454,7 @@ private fun ManualLoudnessSettingsTab(
         onAdjustmentDbChange = onAdjustmentDbChange,
         onPreviewChange = onPreviewChange,
         onPreviewExteriorChange = onPreviewExteriorChange,
+        onAdjustAllModdedManualLoudnessDb = onAdjustAllModdedManualLoudnessDb,
         onRestoreManualLoudnessDefaults = onRestoreManualLoudnessDefaults,
         onExportManualLoudnessPreset = onExportManualLoudnessPreset,
         modifier = modifier
@@ -1567,6 +1571,7 @@ private fun ManualLoudnessAdjustmentPanel(
     onAdjustmentDbChange: (String, EngineSoundPerspective, Double) -> Unit,
     onPreviewChange: (String, Boolean) -> Unit,
     onPreviewExteriorChange: (String, Boolean) -> Unit,
+    onAdjustAllModdedManualLoudnessDb: (Double) -> Unit,
     onRestoreManualLoudnessDefaults: () -> Unit,
     onExportManualLoudnessPreset: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1577,6 +1582,9 @@ private fun ManualLoudnessAdjustmentPanel(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        ManualLoudnessBulkAdjustRow(
+            onAdjustAllModdedManualLoudnessDb = onAdjustAllModdedManualLoudnessDb,
+        )
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -1634,6 +1642,63 @@ private fun ManualLoudnessAdjustmentPanel(
                 Text("EXPORT PRESET", color = AccentSoft, fontWeight = FontWeight.Black, fontSize = 12.sp)
             }
         }
+    }
+}
+
+@Composable
+private fun ManualLoudnessBulkAdjustRow(
+    onAdjustAllModdedManualLoudnessDb: (Double) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "ALL MODDED CARS",
+            color = Accent,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.weight(1f),
+        )
+        ManualLoudnessBulkAdjustButton(
+            label = "-5",
+            onClick = { onAdjustAllModdedManualLoudnessDb(-5.0) },
+        )
+        ManualLoudnessBulkAdjustButton(
+            label = "-1",
+            onClick = { onAdjustAllModdedManualLoudnessDb(-1.0) },
+        )
+        ManualLoudnessBulkAdjustButton(
+            label = "+1",
+            onClick = { onAdjustAllModdedManualLoudnessDb(1.0) },
+        )
+        ManualLoudnessBulkAdjustButton(
+            label = "+5",
+            onClick = { onAdjustAllModdedManualLoudnessDb(5.0) },
+        )
+    }
+}
+
+@Composable
+private fun ManualLoudnessBulkAdjustButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.width(70.dp),
+        border = BorderStroke(1.dp, Outline),
+        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 10.dp),
+    ) {
+        Text(
+            text = label,
+            color = Accent,
+            fontWeight = FontWeight.Black,
+            fontSize = 15.sp,
+        )
     }
 }
 

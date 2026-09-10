@@ -210,7 +210,10 @@ private object DashboardLayoutDefaults {
 }
 
 private object CarStageTapDefaults {
-    val sideStripWidth = 58.dp
+    val sideStripWidth = 116.dp
+    val navigationButtonHeight = 232.dp
+    val navigationIconSize = 48.dp
+    val navigationArrowFontSize = 84.sp
     val favoriteCornerHeight = 88.dp
 }
 
@@ -441,6 +444,7 @@ class MainActivity : ComponentActivity() {
                                 onManualLoudnessPreviewChange = controller::setManualLoudnessPreviewActive,
                                 onManualLoudnessPreviewExteriorChange = controller::setManualLoudnessPreviewExterior,
                                 onStopManualLoudnessPreviews = controller::stopManualLoudnessPreviews,
+                                onAdjustAllModdedManualLoudnessDb = controller::adjustAllModdedManualLoudnessDb,
                                 onRestoreManualLoudnessDefaults = controller::restoreManualLoudnessDefaults,
                                 onExportManualLoudnessPreset = controller::exportManualLoudnessPreset,
                                 onStartAcousticDiagnostic = { code ->
@@ -766,6 +770,7 @@ private fun MotorSoundDashboard(
     onManualLoudnessPreviewChange: (String, Boolean) -> Unit,
     onManualLoudnessPreviewExteriorChange: (String, Boolean) -> Unit,
     onStopManualLoudnessPreviews: () -> Unit,
+    onAdjustAllModdedManualLoudnessDb: (Double) -> Unit,
     onRestoreManualLoudnessDefaults: () -> Unit,
     onExportManualLoudnessPreset: () -> Unit,
     onStartAcousticDiagnostic: (String?) -> Unit,
@@ -1014,6 +1019,7 @@ private fun MotorSoundDashboard(
                             onManualLoudnessPreviewChange = onManualLoudnessPreviewChange,
                             onManualLoudnessPreviewExteriorChange = onManualLoudnessPreviewExteriorChange,
                             onStopManualLoudnessPreviews = onStopManualLoudnessPreviews,
+                            onAdjustAllModdedManualLoudnessDb = onAdjustAllModdedManualLoudnessDb,
                             onRestoreManualLoudnessDefaults = onRestoreManualLoudnessDefaults,
                             onExportManualLoudnessPreset = onExportManualLoudnessPreset,
                             onStartAcousticDiagnostic = onStartAcousticDiagnostic,
@@ -2666,11 +2672,9 @@ private fun CarStage(
                 modifier = Modifier.align(Alignment.CenterStart),
             )
             Column(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(top = CarStageTapDefaults.favoriteCornerHeight),
+                modifier = Modifier.align(Alignment.CenterEnd),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 CarSelectorSideIconZone(
                     imageVector = Icons.Filled.Shuffle,
@@ -2681,7 +2685,6 @@ private fun CarStage(
                     label = "›",
                     contentDescription = "Next car",
                     onClick = onNextCar,
-                    compact = true,
                 )
             }
             CarFavoriteStarButton(
@@ -2774,7 +2777,8 @@ private fun CarSelectorSideIconZone(
 ) {
     Box(
         modifier = modifier
-            .size(CarStageTapDefaults.sideStripWidth)
+            .width(CarStageTapDefaults.sideStripWidth)
+            .height(CarStageTapDefaults.navigationButtonHeight)
             .clip(CircleShape)
             .background(HardwareBackdrop.copy(alpha = 0.92f))
             .clickable(
@@ -2789,7 +2793,7 @@ private fun CarSelectorSideIconZone(
             imageVector = imageVector,
             contentDescription = null,
             tint = OnSurface,
-            modifier = Modifier.size(24.dp),
+            modifier = Modifier.size(CarStageTapDefaults.navigationIconSize),
         )
     }
 }
@@ -2800,19 +2804,11 @@ private fun CarSelectorSideTapZone(
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    compact: Boolean = false,
 ) {
     Box(
         modifier = modifier
-            .then(
-                if (compact) {
-                    Modifier.size(CarStageTapDefaults.sideStripWidth)
-                } else {
-                    Modifier
-                        .fillMaxHeight()
-                        .width(CarStageTapDefaults.sideStripWidth)
-                },
-            )
+            .width(CarStageTapDefaults.sideStripWidth)
+            .height(CarStageTapDefaults.navigationButtonHeight)
             .clickable(
                 onClick = onClick,
                 indication = null,
@@ -2832,7 +2828,8 @@ private fun CarSelectorArrowGlyph(
 ) {
     Box(
         modifier = modifier
-            .size(CarStageTapDefaults.sideStripWidth)
+            .width(CarStageTapDefaults.sideStripWidth)
+            .height(CarStageTapDefaults.navigationButtonHeight)
             .clip(CircleShape)
             .background(HardwareBackdrop.copy(alpha = 0.92f)),
         contentAlignment = Alignment.Center,
@@ -2840,7 +2837,7 @@ private fun CarSelectorArrowGlyph(
         Text(
             text = label,
             color = OnSurface,
-            fontSize = 42.sp,
+            fontSize = CarStageTapDefaults.navigationArrowFontSize,
             fontWeight = FontWeight.Light,
             textAlign = TextAlign.Center,
         )

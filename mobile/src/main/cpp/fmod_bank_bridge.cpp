@@ -863,8 +863,8 @@ public:
 
     std::string pumpLoudnessCalibration() {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (!calibrationMode_ || studio_ == nullptr || bank_ == nullptr) {
-            return "FMOD loudness calibration car is not loaded.";
+        if (!calibrationMode_ || studio_ == nullptr) {
+            return "FMOD loudness calibration is not active.";
         }
 
         const FMOD_RESULT result = studio_->update();
@@ -984,7 +984,7 @@ public:
             constexpr int sampleCount = kFmodOutputRate / 10;
             constexpr double startFrequency = 1200.0;
             constexpr double endFrequency = 6000.0;
-            constexpr double amplitude = 0.18;
+            constexpr double amplitude = 0.32;
             std::vector<float> samples(sampleCount);
             double phase = 0.0;
             for (int index = 0; index < sampleCount; ++index) {

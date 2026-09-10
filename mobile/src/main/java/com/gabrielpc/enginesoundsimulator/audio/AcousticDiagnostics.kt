@@ -131,6 +131,7 @@ data class AcousticAdjustmentState(
 data class AcousticDiagnosticSummary(
     val validCount: Int = 0,
     val failedCount: Int = 0,
+    val lenientRecoverableCount: Int = 0,
     val staleCount: Int = 0,
     val missingCount: Int = 0,
     val totalCount: Int = 0,
@@ -166,9 +167,34 @@ internal data class AcousticDiagnosticEvaluation(
 internal object AcousticDiagnosticMath {
     const val MINIMUM_SNR_DB = 10.0
     const val MAXIMUM_PEAK_DB_FS = -1.0
-    const val MAXIMUM_AMBIENT_DRIFT_DB = 3.0
+    const val MAXIMUM_AMBIENT_DRIFT_DB = 6.0
     const val CATALOG_TOLERANCE_DB = 1.5
+    const val AMBIENT_DRIFT_FAILURE =
+        "O ruído ambiente variou mais de ${MAXIMUM_AMBIENT_DRIFT_DB.toInt()} dB."
     private const val MINIMUM_ENERGY = 1e-15
+    private const val LENIENT_MINIMUM_CORRECTED_DB = -100.0
+
+    fun canAcceptLenient(record: AcousticDiagnosticRecord): Boolean {
+        if (record.valid) {
+            return false
+        }
+        if (record.failureReason != AMBIENT_DRIFT_FAILURE &&
+            record.failureReason != "O ruído ambiente variou mais de 3 dB."
+        ) {
+            return false
+        }
+        if (record.correctedWeightedDb <= LENIENT_MINIMUM_CORRECTED_DB) {
+            return false
+        }
+        if (record.snrDb < MINIMUM_SNR_DB) {
+            return false
+        }
+        if (record.peakDbFs > MAXIMUM_PEAK_DB_FS) {
+            return false
+        }
+
+        return true
+    }
 
     fun evaluate(metrics: AcousticMeasurementMetrics): AcousticDiagnosticEvaluation {
         val ambientWeighted = averageEnergy(
@@ -197,7 +223,7 @@ internal object AcousticDiagnosticMath {
             snrDb < MINIMUM_SNR_DB -> "SNR abaixo de 10 dB."
             peakDbFs > MAXIMUM_PEAK_DB_FS -> "Pico acima de -1 dBFS."
             abs(ambientBeforeDb - ambientAfterDb) > MAXIMUM_AMBIENT_DRIFT_DB ->
-                "O ruído ambiente variou mais de 3 dB."
+                AMBIENT_DRIFT_FAILURE
             else -> null
         }
 
@@ -346,6 +372,15 @@ internal class AcousticDiagnosticRepository(context: Context) {
 
     @Synchronized
     fun completeSession(sessionId: String) {
+        recomputeSessionAdjustments(sessionId)
+        preferences.edit()
+            .putString(KEY_LATEST_SESSION, sessionId)
+            .remove(KEY_CHECKPOINT)
+            .commit()
+    }
+
+    @Synchronized
+    fun recomputeSessionAdjustments(sessionId: String) {
         val validRecords = records(sessionId).filter(AcousticDiagnosticRecord::valid)
         val median = AcousticDiagnosticMath.median(validRecords.map(AcousticDiagnosticRecord::correctedWeightedDb))
         val editor = preferences.edit()
@@ -359,7 +394,32 @@ internal class AcousticDiagnosticRepository(context: Context) {
                 editor.putString(recordKey(sessionId, record.key), recordToJson(updated).toString())
             }
         }
-        editor.putString(KEY_LATEST_SESSION, sessionId).remove(KEY_CHECKPOINT).commit()
+        editor.commit()
+    }
+
+    @Synchronized
+    fun acceptLenientRecords(): Int {
+        val sessionId = latestCompletedSessionId() ?: return 0
+        val recoverable = records(sessionId).filter(AcousticDiagnosticMath::canAcceptLenient)
+        if (recoverable.isEmpty()) {
+            return 0
+        }
+        val editor = preferences.edit()
+        recoverable.forEach { record ->
+            editor.putString(
+                recordKey(sessionId, record.key),
+                recordToJson(
+                    record.copy(
+                        valid = true,
+                        failureReason = null,
+                    ),
+                ).toString(),
+            )
+        }
+        editor.commit()
+        recomputeSessionAdjustments(sessionId)
+
+        return recoverable.size
     }
 
     @Synchronized
@@ -443,6 +503,7 @@ internal class AcousticDiagnosticRepository(context: Context) {
         return AcousticDiagnosticSummary(
             validCount = valid.size,
             failedCount = currentRecords.count { !it.valid },
+            lenientRecoverableCount = currentRecords.count(AcousticDiagnosticMath::canAcceptLenient),
             staleCount = if (currentTargets.isEmpty()) 0 else records.count { it !in currentRecords },
             missingCount = if (currentTargets.isEmpty()) 0 else currentTargets.keys.count { it !in recordsByKey },
             totalCount = if (currentTargets.isEmpty()) records.size else currentTargets.size,

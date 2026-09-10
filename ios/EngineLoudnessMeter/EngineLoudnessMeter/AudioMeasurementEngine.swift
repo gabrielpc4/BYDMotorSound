@@ -167,8 +167,9 @@ final class AudioMeasurementEngine {
                 let sample = Double(channels[channel][index])
                 frameSamples[channel] = sample
                 frameEnergy += sample * sample
-                if abs(sample) > abs(latencySample) { latencySample = sample }
+                latencySample += sample
             }
+            latencySample /= Double(max(1, buffer.format.channelCount))
             let sampleNanos = startNanos + UInt64(Double(index) * nanosPerFrame)
             liveEnergy += frameEnergy / Double(buffer.format.channelCount)
             measurement?.consume(samples: frameSamples, at: sampleNanos)
@@ -333,6 +334,9 @@ private final class ActiveMeasurement {
 }
 
 private final class ActiveLatencyCapture {
+    private static let capturePrerollNanos: UInt64 = 250_000_000
+    private static let captureTailNanos: UInt64 = 1_200_000_000
+
     let schedule: MeterProtocol.LatencySchedule
     private let sampleRate: Double
     private var capturedSamples: [[Float]]
@@ -348,7 +352,8 @@ private final class ActiveLatencyCapture {
     func consume(sample: Double, at nanos: UInt64) {
         for index in schedule.chirpTimesNanos.indices {
             let start = schedule.chirpTimesNanos[index]
-            guard nanos >= start, nanos <= start + 1_000_000_000 else { continue }
+            let captureStart = start > Self.capturePrerollNanos ? start - Self.capturePrerollNanos : 0
+            guard nanos >= captureStart, nanos <= start + Self.captureTailNanos else { continue }
             if firstSampleTimes[index] == nil { firstSampleTimes[index] = nanos }
             capturedSamples[index].append(Float(sample))
         }

@@ -40,6 +40,7 @@ internal class IphoneAcousticMeterClient(
     context: Context,
     private val repository: IphoneAcousticMeterRepository,
     private val cancellationRequested: AtomicBoolean,
+    private val onLog: IphoneCalibrationLogger? = null,
 ) : AutoCloseable {
     private val appContext = context.applicationContext
     private val bluetoothManager = appContext.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -135,16 +136,40 @@ internal class IphoneAcousticMeterClient(
         }
     }
 
+    fun probeNearbyMeter(): Boolean {
+        logBlePrerequisites()
+        log(
+            IphoneCalibrationLogLevel.INFO,
+            "Probing for iPhone meter (up to ${SCAN_TIMEOUT_SECONDS}s). Open Engine Loudness Meter on the phone.",
+        )
+        return runCatching {
+            val device = scanForMeter()
+            log(IphoneCalibrationLogLevel.OK, "Probe found iPhone meter at ${device.address}.")
+            true
+        }.getOrElse { error ->
+            log(
+                IphoneCalibrationLogLevel.WARN,
+                error.message ?: "Probe did not find an iPhone meter.",
+            )
+            false
+        }
+    }
+
     fun connectAndAuthenticate(deviceAddress: String?, pairingCode: String?): ConnectedIphoneMeter {
+        logBlePrerequisites()
+        log(IphoneCalibrationLogLevel.INFO, "Connecting to iPhone meter…")
         val device = resolveDevice(deviceAddress)
         connectedAddress = device.address
+        log(IphoneCalibrationLogLevel.INFO, "Opening GATT to ${device.address}.")
         gatt = device.connectGatt(appContext, false, callback, BluetoothDevice.TRANSPORT_LE)
         waitUntil(READY_TIMEOUT_SECONDS) { ready.get() }
         failure.get()?.let(::error)
         if (!ready.get()) error("Timed out while connecting to the iPhone meter.")
+        log(IphoneCalibrationLogLevel.OK, "GATT ready (MTU $negotiatedMtu).")
 
         val hello = request(IphoneAcousticMeterProtocol.Hello(sequence())) as? IphoneAcousticMeterProtocol.HelloResponse
             ?: error("The iPhone did not answer the protocol handshake.")
+        log(IphoneCalibrationLogLevel.OK, "Handshake OK: ${hello.meterModel}.")
         val savedLink = repository.loadLink()
         val existing = savedLink?.takeIf {
             hello.hasPairingToken && it.meterInstanceId == hello.meterInstanceId.toString()
@@ -157,6 +182,7 @@ internal class IphoneAcousticMeterClient(
                     error("The saved iPhone link is corrupt. Pair again.")
                 }
         } else {
+            log(IphoneCalibrationLogLevel.INFO, "Pairing with six-digit code.")
             val code = pairingCode?.filter(Char::isDigit)?.toIntOrNull()
                 ?: error("Enter the six-digit code shown on the iPhone.")
             val paired = request(IphoneAcousticMeterProtocol.PairRequest(sequence(), code))
@@ -184,32 +210,56 @@ internal class IphoneAcousticMeterClient(
                 tokenHex = IphoneAcousticMeterProtocol.hex(token),
             ),
         )
+        log(IphoneCalibrationLogLevel.OK, "iPhone link saved for ${hello.meterModel}.")
 
         return ConnectedIphoneMeter(hello.meterInstanceId.toString(), hello.meterModel)
     }
 
     fun synchronizeClocks(): BleClockAlignment {
-        val samples = mutableListOf<BleClockSample>()
-        repeat(BleClockSynchronizer.EXCHANGE_COUNT) {
+        log(IphoneCalibrationLogLevel.INFO, "Synchronizing BLE clocks…")
+        var lastAlignment: BleClockAlignment? = null
+        repeat(CLOCK_SYNC_ATTEMPTS) { attempt ->
             checkCancelled()
-            val sendNanos = SystemClock.elapsedRealtimeNanos()
-            val response = request(IphoneAcousticMeterProtocol.ClockPing(sequence(), sendNanos))
-                as? IphoneAcousticMeterProtocol.ClockPong
-                ?: error("The iPhone did not answer clock synchronization.")
-            samples += BleClockSample(
-                androidSendNanos = response.androidSendNanos,
-                iphoneReceiveNanos = response.iphoneReceiveNanos,
-                iphoneSendNanos = response.iphoneSendNanos,
-                androidReceiveNanos = SystemClock.elapsedRealtimeNanos(),
+            val samples = mutableListOf<BleClockSample>()
+            repeat(BleClockSynchronizer.EXCHANGE_COUNT) {
+                checkCancelled()
+                val sendNanos = SystemClock.elapsedRealtimeNanos()
+                val response = request(IphoneAcousticMeterProtocol.ClockPing(sequence(), sendNanos))
+                    as? IphoneAcousticMeterProtocol.ClockPong
+                    ?: error("The iPhone did not answer clock synchronization.")
+                samples += BleClockSample(
+                    androidSendNanos = response.androidSendNanos,
+                    iphoneReceiveNanos = response.iphoneReceiveNanos,
+                    iphoneSendNanos = response.iphoneSendNanos,
+                    androidReceiveNanos = SystemClock.elapsedRealtimeNanos(),
+                )
+            }
+            val alignment = BleClockSynchronizer.align(samples)
+                ?: error("Not enough clock samples were received from the iPhone.")
+            lastAlignment = alignment
+            val uncertaintyMs = alignment.uncertaintyNanos / 1e6
+            if (alignment.valid) {
+                log(
+                    IphoneCalibrationLogLevel.OK,
+                    "Clock sync OK on attempt ${attempt + 1}: uncertainty %.1f ms.".format(uncertaintyMs),
+                )
+                return alignment
+            }
+            log(
+                IphoneCalibrationLogLevel.WARN,
+                "Clock sync attempt ${attempt + 1} uncertainty %.1f ms (max %.0f ms).".format(
+                    uncertaintyMs,
+                    BleClockAlignment.MAX_UNCERTAINTY_NANOS / 1e6,
+                ),
             )
         }
-        val alignment = BleClockSynchronizer.align(samples)
-            ?: error("Not enough clock samples were received from the iPhone.")
-        if (!alignment.valid) {
-            error("Bluetooth clock uncertainty is %.1f ms; maximum is 20 ms.".format(alignment.uncertaintyNanos / 1e6))
-        }
-
-        return alignment
+        val uncertaintyMs = requireNotNull(lastAlignment).uncertaintyNanos / 1e6
+        error(
+            "Bluetooth clock uncertainty is %.1f ms; maximum is %.0f ms.".format(
+                uncertaintyMs,
+                BleClockAlignment.MAX_UNCERTAINTY_NANOS / 1e6,
+            ),
+        )
     }
 
     fun armMeasurement(request: IphoneAcousticMeterProtocol.ArmMeasurement) {
@@ -355,11 +405,17 @@ internal class IphoneAcousticMeterClient(
         if (!adapter.isEnabled) error("Turn Bluetooth on before measuring with the iPhone.")
         val cleanAddress = address?.takeIf(String::isNotBlank)
         if (cleanAddress != null) {
+            log(IphoneCalibrationLogLevel.INFO, "Using saved/selected address $cleanAddress.")
             return runCatching { adapter.getRemoteDevice(cleanAddress) }.getOrElse {
+                log(
+                    IphoneCalibrationLogLevel.WARN,
+                    "Saved address $cleanAddress is unavailable; scanning for the meter.",
+                )
                 scanForMeter()
             }
         }
 
+        log(IphoneCalibrationLogLevel.INFO, "Scanning for iPhone meter service UUID.")
         return scanForMeter()
     }
 
@@ -386,17 +442,51 @@ internal class IphoneAcousticMeterClient(
             callback,
         )
         return try {
-            val device = try {
-                result.poll(SCAN_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            } catch (_: InterruptedException) {
-                Thread.currentThread().interrupt()
-                throw AcousticDiagnosticCancelledException()
+            val deadlineMs = SystemClock.elapsedRealtime() + TimeUnit.SECONDS.toMillis(SCAN_TIMEOUT_SECONDS)
+            var lastProgressLogMs = 0L
+            var device: BluetoothDevice? = null
+            while (SystemClock.elapsedRealtime() < deadlineMs && device == null) {
+                checkCancelled()
+                failure.get()?.let(::error)
+                device = try {
+                    result.poll(500L, TimeUnit.MILLISECONDS)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw AcousticDiagnosticCancelledException()
+                }
+                val now = SystemClock.elapsedRealtime()
+                if (device == null && now - lastProgressLogMs >= 3_000L) {
+                    log(IphoneCalibrationLogLevel.INFO, "Still scanning for iPhone meter…")
+                    lastProgressLogMs = now
+                }
             }
             failure.get()?.let(::error)
-            device ?: error("No iPhone running Engine Loudness Meter was found.")
+            if (device == null) {
+                error("No iPhone running Engine Loudness Meter was found.")
+            }
+            log(IphoneCalibrationLogLevel.OK, "Found iPhone meter at ${device.address}.")
+            device
         } finally {
             scanner.stopScan(callback)
         }
+    }
+
+    private fun logBlePrerequisites() {
+        val adapter = bluetoothManager.adapter
+        if (adapter == null || !adapter.isEnabled) {
+            log(IphoneCalibrationLogLevel.ERROR, "Bluetooth is turned off.")
+            return
+        }
+        if (Build.VERSION.SDK_INT <= 30) {
+            log(
+                IphoneCalibrationLogLevel.INFO,
+                "On Android 10, BLE scan needs location permission and Location usually ON in car settings.",
+            )
+        }
+    }
+
+    private fun log(level: IphoneCalibrationLogLevel, message: String) {
+        onLog?.invoke(level, message)
     }
 
     private fun waitUntil(timeoutSeconds: Long, predicate: () -> Boolean) {
@@ -433,6 +523,7 @@ internal class IphoneAcousticMeterClient(
         const val LATENCY_TIMEOUT_SECONDS = 15L
         const val WRITE_TIMEOUT_SECONDS = 5L
         const val SCAN_TIMEOUT_SECONDS = 15L
+        const val CLOCK_SYNC_ATTEMPTS = 3
     }
 }
 

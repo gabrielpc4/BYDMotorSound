@@ -14,4 +14,10 @@ internal object RuntimeFeatureFlags {
 
     /** Enables supercharger-specific load rules, mixer category, and embedded-channel mute/solo. */
     const val MIX_SUPERCHARGER = true
+
+    /** LUFS batch calibration, iPhone acoustic diagnostics, and catalog gain controls. */
+    const val ENABLE_LEGACY_LOUDNESS_PIPELINE = false
+
+    /** High-rate drive session TSV capture overlay and recording loop. */
+    const val ENABLE_DRIVE_CAPTURE = false
 }

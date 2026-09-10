@@ -33,6 +33,7 @@ internal class FmodAcousticDiagnosticRunner(
     private val cancellationRequested: AtomicBoolean,
     private val onProgress: (AcousticDiagnosticProgress) -> Unit,
     private val onRecordsChanged: () -> Unit,
+    private val onLog: IphoneCalibrationLogger? = null,
 ) {
     private val appContext = context.applicationContext
     private val profiles = profiles.filter { it.packGroup == FmodBankProfiles.moddedCarsPackId }
@@ -42,11 +43,16 @@ internal class FmodAcousticDiagnosticRunner(
 
     fun run(): AcousticDiagnosticRunResult {
         if (profiles.isEmpty()) {
+            log(IphoneCalibrationLogLevel.ERROR, "No installed modded cars are available.")
             return AcousticDiagnosticRunResult(fatal = true, lastError = "No installed cars are available.")
         }
         val targets = buildTargets()
         val total = profiles.size * EngineSoundPerspective.entries.size
         val skipped = total - targets.size
+        log(
+            IphoneCalibrationLogLevel.INFO,
+            "Calibration queue: ${targets.size} measurable pairs ($skipped skipped without LUFS).",
+        )
         val checkpoint = if (resume) {
             diagnosticRepository.checkpoint()
                 ?: return AcousticDiagnosticRunResult(fatal = true, lastError = "No interrupted acoustic session exists.")
@@ -67,6 +73,10 @@ internal class FmodAcousticDiagnosticRunner(
         var lastError: String? = null
         if (targets.isEmpty()) {
             diagnosticRepository.clearCheckpoint()
+            log(
+                IphoneCalibrationLogLevel.ERROR,
+                "No car/perspective pair has a valid LUFS normalization.",
+            )
             return AcousticDiagnosticRunResult(
                 fatal = true,
                 skippedCount = skipped,
@@ -74,6 +84,7 @@ internal class FmodAcousticDiagnosticRunner(
             )
         }
         if (pending.isEmpty()) {
+            log(IphoneCalibrationLogLevel.OK, "All queued pairs are already calibrated for this session.")
             diagnosticRepository.completeSession(checkpoint.sessionId)
             onRecordsChanged()
             return AcousticDiagnosticRunResult(
@@ -96,12 +107,18 @@ internal class FmodAcousticDiagnosticRunner(
         )
 
         val bridge = NativeFmodBankBridge()
-        val meter = IphoneAcousticMeterClient(appContext, meterRepository, cancellationRequested)
+        val meter = IphoneAcousticMeterClient(
+            appContext,
+            meterRepository,
+            cancellationRequested,
+            onLog = onLog,
+        )
         var fmodInitialized = false
         var connectedMeter: ConnectedIphoneMeter? = null
         try {
             checkCancelled()
             connectedMeter = meter.connectAndAuthenticate(deviceAddress, pairingCode)
+            log(IphoneCalibrationLogLevel.OK, "Connected to ${connectedMeter.model}.")
             onProgress(
                 AcousticDiagnosticProgress(
                     status = AcousticDiagnosticStatus.PREPARING,
@@ -113,6 +130,7 @@ internal class FmodAcousticDiagnosticRunner(
             )
             val shared = bankResolver.sharedBankFiles()
             try {
+                log(IphoneCalibrationLogLevel.INFO, "Initializing silent FMOD measurement session.")
                 org.fmod.FMOD.init(appContext)
                 fmodInitialized = true
             } catch (error: Throwable) {
@@ -127,7 +145,15 @@ internal class FmodAcousticDiagnosticRunner(
             )?.let { throw AcousticDiagnosticFatalException(it) }
             bridge.setMasterOutputGain(1f)
             bridge.setCalibrationOutputMuted(true)
-            val latency = measureAcousticLatency(bridge, meter)
+            log(IphoneCalibrationLogLevel.INFO, "Measuring acoustic latency with chirps.")
+            val latency = measureAcousticLatencyWithRetry(bridge, meter)
+            log(
+                IphoneCalibrationLogLevel.OK,
+                "Acoustic latency %.1f ms (confidence %.2f).".format(
+                    latency.latencyNanos / 1e6,
+                    latency.confidence,
+                ),
+            )
             val resumedVolume = diagnosticRepository.records(checkpoint.sessionId)
                 .firstOrNull()?.androidMediaVolumeIndex
             val expectedMediaVolume = resumedVolume
@@ -138,6 +164,7 @@ internal class FmodAcousticDiagnosticRunner(
                 checkCancelled()
                 val persistedTargets = mutableSetOf<LoudnessCalibrationKey>()
                 try {
+                    log(IphoneCalibrationLogLevel.INFO, "Loading ${profile.displayName} for measurement.")
                     val files = bankResolver.bankFiles(profile)
                     val physics = bankResolver.physics(profile)
                     bridge.loadCalibrationCar(
@@ -150,6 +177,10 @@ internal class FmodAcousticDiagnosticRunner(
                     val stimulus = LoudnessCalibrationStimulusFactory.create(physics)
                     profileTargets.forEach { target ->
                         checkCancelled()
+                        log(
+                            IphoneCalibrationLogLevel.INFO,
+                            "Measuring ${profile.displayName} ${target.key.perspective.name}.",
+                        )
                         onProgress(
                             AcousticDiagnosticProgress(
                                 status = AcousticDiagnosticStatus.RUNNING,
@@ -192,6 +223,12 @@ internal class FmodAcousticDiagnosticRunner(
                         if (!record.valid) {
                             failed++
                             lastError = "${profile.displayName} ${target.key.perspective.name}: ${record.failureReason}"
+                            log(IphoneCalibrationLogLevel.WARN, lastError ?: "Measurement failed.")
+                        } else {
+                            log(
+                                IphoneCalibrationLogLevel.OK,
+                                "${profile.displayName} ${target.key.perspective.name} measured.",
+                            )
                         }
                     }
                 } catch (error: Throwable) {
@@ -199,6 +236,7 @@ internal class FmodAcousticDiagnosticRunner(
                         throw error
                     }
                     val reason = error.message ?: error.javaClass.simpleName
+                    log(IphoneCalibrationLogLevel.ERROR, "${profile.displayName}: $reason")
                     profileTargets.filterNot { it.key in persistedTargets }.forEach { target ->
                         val record = failedRecord(
                             meterInfo = connectedMeter,
@@ -220,6 +258,10 @@ internal class FmodAcousticDiagnosticRunner(
             }
             diagnosticRepository.completeSession(checkpoint.sessionId)
             onRecordsChanged()
+            log(
+                IphoneCalibrationLogLevel.OK,
+                "Calibration finished: $completed done, $failed failed, $skipped skipped.",
+            )
 
             return AcousticDiagnosticRunResult(
                 completedCount = completed,
@@ -228,6 +270,7 @@ internal class FmodAcousticDiagnosticRunner(
                 lastError = lastError,
             )
         } catch (_: AcousticDiagnosticCancelledException) {
+            log(IphoneCalibrationLogLevel.WARN, "Calibration cancelled.")
             meter.cancelRemote()
             return AcousticDiagnosticRunResult(
                 cancelled = true,
@@ -237,6 +280,10 @@ internal class FmodAcousticDiagnosticRunner(
                 lastError = lastError,
             )
         } catch (error: AcousticDiagnosticFatalException) {
+            log(
+                IphoneCalibrationLogLevel.ERROR,
+                error.message ?: "FMOD acoustic measurement initialization failed.",
+            )
             meter.cancelRemote()
             return AcousticDiagnosticRunResult(
                 fatal = true,
@@ -246,6 +293,10 @@ internal class FmodAcousticDiagnosticRunner(
                 lastError = error.message ?: "FMOD acoustic measurement initialization failed.",
             )
         } catch (error: Throwable) {
+            log(
+                IphoneCalibrationLogLevel.ERROR,
+                error.message ?: error.javaClass.simpleName,
+            )
             meter.cancelRemote()
             return AcousticDiagnosticRunResult(
                 interrupted = true,
@@ -290,6 +341,25 @@ internal class FmodAcousticDiagnosticRunner(
         }.sortedBy { abs(it.normalizationDb) }
     }
 
+    private fun measureAcousticLatencyWithRetry(
+        bridge: NativeFmodBankBridge,
+        meter: IphoneAcousticMeterClient,
+    ): AcousticLatencyMeasurement {
+        var lastFailure: Throwable? = null
+        repeat(LATENCY_MEASUREMENT_ATTEMPTS) { attempt ->
+            checkCancelled()
+            runCatching { return measureAcousticLatency(bridge, meter) }
+                .onFailure { failure ->
+                    lastFailure = failure
+                    log(
+                        IphoneCalibrationLogLevel.WARN,
+                        "Latency attempt ${attempt + 1}/$LATENCY_MEASUREMENT_ATTEMPTS failed: ${failure.message}",
+                    )
+                }
+        }
+        throw lastFailure ?: AcousticDiagnosticFatalException("Acoustic latency measurement failed.")
+    }
+
     private fun measureAcousticLatency(
         bridge: NativeFmodBankBridge,
         meter: IphoneAcousticMeterClient,
@@ -312,12 +382,18 @@ internal class FmodAcousticDiagnosticRunner(
         bridge.setCalibrationOutputMuted(false)
         try {
             chirpAndroidTimes.forEach { scheduled ->
-                waitUntil(scheduled, meter)
+                waitUntil(scheduled, meter, bridge = bridge)
                 bridge.playAcousticLatencyChirp()?.let(::error)
-                bridge.pumpLoudnessCalibration().takeIf { it != null && !it.contains("car is not loaded") }
-                    ?.let(::error)
+                pumpCalibrationOutput(bridge, meter)
+                val chirpEnd = scheduled + CHIRP_DURATION_NANOS
+                while (SystemClock.elapsedRealtimeNanos() < chirpEnd) {
+                    checkCancelled()
+                    meter.ensureConnected()
+                    pumpCalibrationOutput(bridge, meter)
+                    LockSupport.parkNanos(CONTROL_PERIOD_NANOS)
+                }
             }
-            waitUntil(chirpAndroidTimes.last() + CHIRP_CAPTURE_TAIL_NANOS, meter)
+            waitUntil(chirpAndroidTimes.last() + CHIRP_CAPTURE_TAIL_NANOS, meter, bridge = bridge)
         } finally {
             bridge.setCalibrationOutputMuted(true)
         }
@@ -326,12 +402,44 @@ internal class FmodAcousticDiagnosticRunner(
             detected - scheduled
         }.filter { it in MIN_ACOUSTIC_LATENCY_NANOS..MAX_ACOUSTIC_LATENCY_NANOS }
         val latency = medianLong(latencies)
-            ?: error("The iPhone could not identify all three acoustic chirps.")
+            ?: error(
+                "The iPhone could not identify all three acoustic chirps " +
+                    "(confidence %.2f, %d/%d in range).".format(
+                        result.confidence,
+                        latencies.size,
+                        IphoneAcousticMeterProtocol.CHIRP_COUNT,
+                    ),
+            )
+        val spreadMs = if (latencies.size >= 2) {
+            (latencies.max() - latencies.min()) / 1e6
+        } else {
+            0.0
+        }
+        val latenciesConsistent = latencies.size == IphoneAcousticMeterProtocol.CHIRP_COUNT &&
+            spreadMs <= MAX_LATENCY_SPREAD_MS
+        if (result.confidence < MINIMUM_CHIRP_CONFIDENCE && !latenciesConsistent) {
+            error(
+                "Acoustic latency chirps were too weak or noisy " +
+                    "(confidence %.2f, spread %.0f ms).".format(result.confidence, spreadMs),
+            )
+        }
         if (result.confidence < MINIMUM_CHIRP_CONFIDENCE) {
-            error("Acoustic latency chirps were too weak or noisy.")
+            log(
+                IphoneCalibrationLogLevel.WARN,
+                "Low chirp confidence %.2f but all three latencies agree within %.0f ms; accepting."
+                    .format(result.confidence, spreadMs),
+            )
         }
 
         return AcousticLatencyMeasurement(latency, result.confidence)
+    }
+
+    private fun pumpCalibrationOutput(
+        bridge: NativeFmodBankBridge,
+        meter: IphoneAcousticMeterClient,
+    ) {
+        meter.ensureConnected()
+        bridge.pumpLoudnessCalibration()?.let(::error)
     }
 
     private fun measureWithRetry(
@@ -607,13 +715,17 @@ internal class FmodAcousticDiagnosticRunner(
         targetNanos: Long,
         meter: IphoneAcousticMeterClient,
         volumeMonitor: MediaVolumeMonitor? = null,
+        bridge: NativeFmodBankBridge? = null,
     ) {
         while (true) {
             checkCancelled()
             meter.ensureConnected()
             volumeMonitor?.observe()
+            bridge?.let { pumpCalibrationOutput(it, meter) }
             val remaining = targetNanos - SystemClock.elapsedRealtimeNanos()
-            if (remaining <= 0L) return
+            if (remaining <= 0L) {
+                return
+            }
             LockSupport.parkNanos(remaining.coerceAtMost(CONTROL_PERIOD_NANOS))
         }
     }
@@ -632,6 +744,10 @@ internal class FmodAcousticDiagnosticRunner(
     }
 
     private fun nextProtocolSequence(): Int = (measurementSequence.getAndIncrement() and 0xffff).toInt()
+
+    private fun log(level: IphoneCalibrationLogLevel, message: String) {
+        onLog?.invoke(level, message)
+    }
 
     private data class Target(
         val profile: FmodBankProfile,
@@ -665,10 +781,13 @@ internal class FmodAcousticDiagnosticRunner(
         const val SWEEP_DURATION_NANOS = 5_000_000_000L
         const val ARM_LEAD_NANOS = 2_000_000_000L
         const val CHIRP_INTERVAL_NANOS = 900_000_000L
+        const val CHIRP_DURATION_NANOS = 120_000_000L
         const val CHIRP_CAPTURE_TAIL_NANOS = 600_000_000L
         const val MIN_ACOUSTIC_LATENCY_NANOS = 5_000_000L
         const val MAX_ACOUSTIC_LATENCY_NANOS = 1_000_000_000L
-        const val MINIMUM_CHIRP_CONFIDENCE = 0.55
+        const val MINIMUM_CHIRP_CONFIDENCE = 0.40
+        const val MAX_LATENCY_SPREAD_MS = 80.0
+        const val LATENCY_MEASUREMENT_ATTEMPTS = 3
         const val SAMPLE_READY_TIMEOUT_NANOS = 30_000_000_000L
         const val MEASUREMENT_RESULT_TIMEOUT_SECONDS = 15L
         const val MEASUREMENT_ATTEMPTS = 2

@@ -383,7 +383,8 @@ internal data class BleClockAlignment(
     fun iphoneTime(androidTimeNanos: Long): Long = androidTimeNanos + iphoneMinusAndroidNanos
 
     companion object {
-        const val MAX_UNCERTAINTY_NANOS = 20_000_000L
+        // Automotive head units (including BYD DiLink) often see higher BLE jitter than phones.
+        const val MAX_UNCERTAINTY_NANOS = 60_000_000L
     }
 }
 

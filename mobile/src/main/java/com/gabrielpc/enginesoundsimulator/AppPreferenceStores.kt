@@ -15,6 +15,8 @@ internal object AppPreferenceStores {
     const val LOUDNESS_NORMALIZATION = "loudness_normalization_v1"
     const val IPHONE_ACOUSTIC_METER = "iphone_acoustic_meter_v1"
     const val ACOUSTIC_DIAGNOSTICS = "acoustic_diagnostics_v1"
+    const val CATALOG_GAIN_SETTINGS = "catalog_gain_settings_v1"
+    const val MANUAL_LOUDNESS = "manual_loudness_v1"
     /** Last GLOBAL/SPECIFIC tab selected in the mixer panel. */
     const val MIXER_GAIN_SCOPE = "mixer_gain_scope_v1"
     const val BACKFIRE_SETTINGS = "backfire_settings_v1"

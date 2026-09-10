@@ -59,6 +59,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface as MaterialSurface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -129,6 +130,11 @@ import com.gabrielpc.enginesoundsimulator.audio.LoudnessCalibrationStatus
 import com.gabrielpc.enginesoundsimulator.audio.LoudnessNormalizationSummary
 import com.gabrielpc.enginesoundsimulator.audio.LoudnessNormalizationState
 import com.gabrielpc.enginesoundsimulator.audio.LoudnessNormalizationValidity
+import com.gabrielpc.enginesoundsimulator.audio.CatalogGainEntryStatus
+import com.gabrielpc.enginesoundsimulator.audio.CatalogGainSettings
+import com.gabrielpc.enginesoundsimulator.audio.CatalogGainTableEntry
+import com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessRepository
+import com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessTableEntry
 import com.gabrielpc.enginesoundsimulator.audio.FmodSourceState
 import com.gabrielpc.enginesoundsimulator.audio.FmodUpdateRate
 import com.gabrielpc.enginesoundsimulator.drive.GearProfileSelection
@@ -1072,7 +1078,25 @@ internal fun SettingsScreen(
     acousticDiagnosticProgress: AcousticDiagnosticProgress,
     iphoneMeterLinked: Boolean,
     iphoneMeterSelected: Boolean,
+    iphoneCalibrationLogLines: List<String>,
     onAssociateIphoneMeter: () -> Unit,
+    onForgetIphoneMeter: () -> Unit,
+    onClearIphoneCalibration: () -> Unit,
+    onRecoverLenientAcousticMeasurements: () -> Unit,
+    onClearIphoneCalibrationLog: () -> Unit,
+    catalogGainSettings: CatalogGainSettings,
+    catalogGainTable: List<CatalogGainTableEntry>,
+    onCatalogGainSettingsChange: (CatalogGainSettings) -> Unit,
+    manualLoudnessTable: List<ManualLoudnessTableEntry>,
+    onManualLoudnessEnabledChange: (Boolean) -> Unit,
+    onManualLoudnessDbChange: (String, EngineSoundPerspective, Double) -> Unit,
+    onManualLoudnessPreviewChange: (String, Boolean) -> Unit,
+    onManualLoudnessPreviewExteriorChange: (String, Boolean) -> Unit,
+    onStopManualLoudnessPreviews: () -> Unit,
+    onSaveManualLoudnessAsDefault: () -> Unit,
+    onExportManualLoudnessPreset: () -> Unit,
+    clubReferenceMediaPlaying: Boolean,
+    onToggleClubReferenceMedia: () -> Unit,
     onStartAcousticDiagnostic: (String?) -> Unit,
     onResumeAcousticDiagnostic: () -> Unit,
     onCancelAcousticDiagnostic: () -> Unit,
@@ -1273,24 +1297,18 @@ internal fun SettingsScreen(
                     onPreview = onPreviewBackfireSample,
                 )
             }
-            SettingsSection.LOUDNESS -> LoudnessNormalizationSettingsPanel(
-                summary = loudnessNormalizationSummary,
-                progress = loudnessCalibrationProgress,
-                onCalibrateAllCars = { showCalibrationConfirmation = true },
-                onResume = onResumeLoudnessCalibration,
-                onCancel = onCancelLoudnessCalibration,
-                acousticSummary = acousticDiagnosticSummary,
-                acousticProgress = acousticDiagnosticProgress,
-                iphoneMeterLinked = iphoneMeterLinked,
-                iphoneMeterSelected = iphoneMeterSelected,
-                iphonePairingCode = iphonePairingCode,
-                onIphonePairingCodeChange = { value ->
-                    iphonePairingCode = value.filter(Char::isDigit).take(6)
-                },
-                onAssociateIphoneMeter = onAssociateIphoneMeter,
-                onMeasureWithIphone = { showAcousticConfirmation = true },
-                onResumeAcousticDiagnostic = onResumeAcousticDiagnostic,
-                onCancelAcousticDiagnostic = onCancelAcousticDiagnostic,
+            SettingsSection.LOUDNESS -> ManualLoudnessSettingsTab(
+                settings = catalogGainSettings,
+                tableEntries = manualLoudnessTable,
+                onManualEnabledChange = onManualLoudnessEnabledChange,
+                onAdjustmentDbChange = onManualLoudnessDbChange,
+                onPreviewChange = onManualLoudnessPreviewChange,
+                onPreviewExteriorChange = onManualLoudnessPreviewExteriorChange,
+                onSaveManualLoudnessAsDefault = onSaveManualLoudnessAsDefault,
+                onExportManualLoudnessPreset = onExportManualLoudnessPreset,
+                onStopManualLoudnessPreviews = onStopManualLoudnessPreviews,
+                clubReferenceMediaPlaying = clubReferenceMediaPlaying,
+                onToggleClubReferenceMedia = onToggleClubReferenceMedia,
                 modifier = Modifier.weight(1f),
             )
             SettingsSection.BANK_IMPORT -> BankImportDiagnosticsPanel(
@@ -1410,33 +1428,171 @@ private enum class SettingsSection {
 }
 
 @Composable
-private fun LoudnessNormalizationSettingsPanel(
-    summary: LoudnessNormalizationSummary,
-    progress: LoudnessCalibrationProgress,
-    onCalibrateAllCars: () -> Unit,
-    onResume: () -> Unit,
-    onCancel: () -> Unit,
-    acousticSummary: AcousticDiagnosticSummary,
-    acousticProgress: AcousticDiagnosticProgress,
-    iphoneMeterLinked: Boolean,
-    iphoneMeterSelected: Boolean,
-    iphonePairingCode: String,
-    onIphonePairingCodeChange: (String) -> Unit,
-    onAssociateIphoneMeter: () -> Unit,
-    onMeasureWithIphone: () -> Unit,
-    onResumeAcousticDiagnostic: () -> Unit,
-    onCancelAcousticDiagnostic: () -> Unit,
+private fun ManualLoudnessSettingsTab(
+    settings: CatalogGainSettings,
+    tableEntries: List<ManualLoudnessTableEntry>,
+    onManualEnabledChange: (Boolean) -> Unit,
+    onAdjustmentDbChange: (String, EngineSoundPerspective, Double) -> Unit,
+    onPreviewChange: (String, Boolean) -> Unit,
+    onPreviewExteriorChange: (String, Boolean) -> Unit,
+    onSaveManualLoudnessAsDefault: () -> Unit,
+    onExportManualLoudnessPreset: () -> Unit,
+    onStopManualLoudnessPreviews: () -> Unit,
+    clubReferenceMediaPlaying: Boolean,
+    onToggleClubReferenceMedia: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    DisposableEffect(Unit) {
+        onDispose {
+            onStopManualLoudnessPreviews()
+            if (clubReferenceMediaPlaying) {
+                onToggleClubReferenceMedia()
+            }
+        }
+    }
+
+    ManualLoudnessAdjustmentPanel(
+        settings = settings,
+        tableEntries = tableEntries,
+        onManualEnabledChange = onManualEnabledChange,
+        onAdjustmentDbChange = onAdjustmentDbChange,
+        onPreviewChange = onPreviewChange,
+        onPreviewExteriorChange = onPreviewExteriorChange,
+        onSaveManualLoudnessAsDefault = onSaveManualLoudnessAsDefault,
+        onExportManualLoudnessPreset = onExportManualLoudnessPreset,
+        clubReferenceMediaPlaying = clubReferenceMediaPlaying,
+        onToggleClubReferenceMedia = onToggleClubReferenceMedia,
         modifier = modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Text("ENGINE LOUDNESS NORMALIZATION", color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Black)
+    )
+}
+
+@Composable
+private fun CatalogGainControlsPanel(
+    settings: CatalogGainSettings,
+    tableEntries: List<CatalogGainTableEntry>,
+    tablePerspective: EngineSoundPerspective,
+    onTablePerspectiveChange: (EngineSoundPerspective) -> Unit,
+    onSettingsChange: (CatalogGainSettings) -> Unit,
+) {
+    val filteredRows = tableEntries.filter { it.perspective == tablePerspective }
+    val catalogTogglesEnabled = !settings.manualLoudnessEnabled
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("CALIBRATED GAIN CONTROLS", color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Black)
         Text(
-            "Measures each installed modded engine in CABIN and EXTERIOR PURE, then matches perceived engine loudness without changing Android media volume. Original cars are excluded.",
+            "Turn catalog-wide LUFS normalization and iPhone acoustic adjustments on or off without deleting stored measurements.",
+            color = Muted,
+            fontSize = 13.sp,
+            lineHeight = 17.sp,
+        )
+        CatalogGainToggleRow(
+            label = "APPLY LUFS NORMALIZATION",
+            checked = settings.applyLufsNormalization,
+            enabled = catalogTogglesEnabled,
+            onCheckedChange = { enabled ->
+                onSettingsChange(settings.copy(applyLufsNormalization = enabled))
+            },
+        )
+        CatalogGainToggleRow(
+            label = "APPLY IPHONE ACOUSTIC ADJUSTMENT",
+            checked = settings.applyIphoneAcousticAdjustment,
+            enabled = catalogTogglesEnabled,
+            onCheckedChange = { enabled ->
+                onSettingsChange(settings.copy(applyIphoneAcousticAdjustment = enabled))
+            },
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            EngineSoundPerspective.entries.forEach { perspective ->
+                val selected = tablePerspective == perspective
+                OutlinedButton(
+                    onClick = { onTablePerspectiveChange(perspective) },
+                    modifier = Modifier.weight(1f),
+                    border = BorderStroke(1.dp, if (selected) Accent else Outline),
+                ) {
+                    Text(
+                        perspective.name,
+                        color = if (selected) Accent else Muted,
+                        fontWeight = FontWeight.Black,
+                    )
+                }
+            }
+        }
+        CatalogGainTableSection(
+            title = "LUFS NORMALIZATION BY CAR",
+            rows = filteredRows,
+            valueDb = { it.lufsNormalizationDb },
+            status = { it.lufsStatus },
+        )
+        CatalogGainTableSection(
+            title = "IPHONE ACOUSTIC ADJUSTMENT BY CAR",
+            rows = filteredRows,
+            valueDb = { it.iphoneAcousticAdjustmentDb },
+            status = { it.iphoneStatus },
+        )
+    }
+}
+
+@Composable
+private fun CatalogGainToggleRow(
+    label: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Outline, skinShape(8.dp))
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            color = if (enabled) {
+                OnSurface
+            } else {
+                Muted
+            },
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Black,
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled,
+        )
+    }
+}
+
+@Composable
+private fun ManualLoudnessAdjustmentPanel(
+    settings: CatalogGainSettings,
+    tableEntries: List<ManualLoudnessTableEntry>,
+    onManualEnabledChange: (Boolean) -> Unit,
+    onAdjustmentDbChange: (String, EngineSoundPerspective, Double) -> Unit,
+    onPreviewChange: (String, Boolean) -> Unit,
+    onPreviewExteriorChange: (String, Boolean) -> Unit,
+    onSaveManualLoudnessAsDefault: () -> Unit,
+    onExportManualLoudnessPreset: () -> Unit,
+    clubReferenceMediaPlaying: Boolean,
+    onToggleClubReferenceMedia: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var editingProfileId by remember { mutableStateOf<String?>(null) }
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("MANUAL LOUDNESS ADJUSTMENT", color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Black)
+        Text(
+            "Per-car volume trim from -20 dB to +20 dB. When enabled, LUFS and iPhone catalog adjustments are bypassed and their previous on/off state is restored when you turn manual mode off.",
             color = Muted,
             fontSize = 13.sp,
             lineHeight = 17.sp,
@@ -1445,99 +1601,350 @@ private fun LoudnessNormalizationSettingsPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .border(1.dp, Outline, skinShape(8.dp))
-                .padding(18.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+                .padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            LoudnessCount("CALIBRATED", "${summary.validCount} / ${summary.totalCount}", Success)
-            LoudnessCount("STALE", summary.staleCount.toString(), Warning)
-            LoudnessCount("MISSING", summary.missingCount.toString(), Muted)
-            LoudnessCount(
-                "TARGET",
-                summary.targetLufs?.let { String.format(Locale.US, "%.1f LUFS", it) } ?: "—",
-                AccentSoft,
-            )
-        }
-        if (progress.status != LoudnessCalibrationStatus.IDLE) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, Outline, skinShape(8.dp))
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = when (progress.status) {
-                        LoudnessCalibrationStatus.INTERRUPTED -> "INTERRUPTED CALIBRATION"
-                        LoudnessCalibrationStatus.RUNNING -> "CALIBRATING"
-                        LoudnessCalibrationStatus.COMPLETED -> "CALIBRATION COMPLETE"
-                        LoudnessCalibrationStatus.CANCELLED -> "CALIBRATION CANCELLED"
-                        LoudnessCalibrationStatus.FAILED -> "CALIBRATION FAILED"
-                        LoudnessCalibrationStatus.IDLE -> ""
-                    },
-                    color = if (progress.status == LoudnessCalibrationStatus.FAILED) Danger else Accent,
-                    fontSize = 14.sp,
+                    "ENABLE MANUAL LOUDNESS ADJUSTMENT",
+                    color = OnSurface,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Black,
+                    modifier = Modifier.weight(1f),
                 )
-                if (progress.totalCount > 0) {
-                    Text(
-                        buildString {
-                            append("${progress.completedCount} / ${progress.totalCount} processed")
-                            if (progress.skippedCount > 0) {
-                                append(" · ${progress.skippedCount} skipped")
-                            }
-                            append(" · ${progress.failedCount} failed")
-                        },
-                        color = OnSurface,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    LinearProgressIndicator(
-                        progress = { progress.fraction },
-                        modifier = Modifier.fillMaxWidth(),
-                        color = Accent,
-                        trackColor = MeterTrack,
-                    )
-                }
-                progress.lastError?.let { error ->
-                    Text(error, color = Warning, fontSize = 12.sp)
-                }
+                Switch(
+                    checked = settings.manualLoudnessEnabled,
+                    onCheckedChange = onManualEnabledChange,
+                )
+            }
+            OutlinedButton(
+                onClick = onToggleClubReferenceMedia,
+                border = BorderStroke(
+                    1.dp,
+                    if (clubReferenceMediaPlaying) {
+                        Accent
+                    } else {
+                        Outline
+                    },
+                ),
+            ) {
+                Text(
+                    if (clubReferenceMediaPlaying) {
+                        "STOP CLUB"
+                    } else {
+                        "IN THE CLUB"
+                    },
+                    color = if (clubReferenceMediaPlaying) {
+                        Accent
+                    } else {
+                        AccentSoft
+                    },
+                    fontWeight = FontWeight.Black,
+                    fontSize = 12.sp,
+                )
             }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Button(
-                onClick = onCalibrateAllCars,
-                enabled = !progress.isRunning && summary.totalCount > 0,
+            OutlinedButton(
+                onClick = onSaveManualLoudnessAsDefault,
                 modifier = Modifier.weight(1f),
             ) {
-                Text("CALIBRATE MODDED CARS", fontWeight = FontWeight.Black)
+                Text("SAVE AS DEFAULT", color = AccentSoft, fontWeight = FontWeight.Black, fontSize = 12.sp)
             }
-            if (progress.canResume) {
-                OutlinedButton(onClick = onResume, modifier = Modifier.weight(1f)) {
-                    Text("RESUME CALIBRATION", color = Accent, fontWeight = FontWeight.Black)
-                }
+            OutlinedButton(
+                onClick = onExportManualLoudnessPreset,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("EXPORT PRESET", color = AccentSoft, fontWeight = FontWeight.Black, fontSize = 12.sp)
             }
-            if (progress.isRunning) {
-                OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
-                    Text("CANCEL", color = Danger, fontWeight = FontWeight.Black)
+        }
+        Text(
+            "Export writes manual_loudness_preset.json to the app files folder. Share that file to bake factory defaults into a future build.",
+            color = Muted,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+        )
+        if (settings.manualLoudnessEnabled) {
+            Text(
+                "Tap EDIT to unlock a car slider. PLAY runs one RPM sweep and stops. INT/EXT keep separate saved values.",
+                color = Muted,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, Outline, skinShape(8.dp))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            if (tableEntries.isEmpty()) {
+                Text("No modded cars installed.", color = Muted, fontSize = 12.sp)
+            } else {
+                tableEntries.forEach { row ->
+                    ManualLoudnessCarRow(
+                        entry = row,
+                        enabled = settings.manualLoudnessEnabled,
+                        sliderEnabled = settings.manualLoudnessEnabled &&
+                            (editingProfileId == row.profileId || row.previewActive),
+                        isEditing = editingProfileId == row.profileId,
+                        onToggleEdit = {
+                            editingProfileId = if (editingProfileId == row.profileId) {
+                                null
+                            } else {
+                                row.profileId
+                            }
+                        },
+                        onAdjustmentDbChange = { db ->
+                            onAdjustmentDbChange(row.profileId, row.activePerspective, db)
+                        },
+                        onPreviewChange = { active ->
+                            onPreviewChange(row.profileId, active)
+                        },
+                        onPreviewExteriorChange = { exterior ->
+                            onPreviewExteriorChange(row.profileId, exterior)
+                        },
+                    )
                 }
             }
         }
-        HorizontalDivider(color = Outline)
-        AcousticDiagnosticSettingsPanel(
-            summary = acousticSummary,
-            progress = acousticProgress,
-            iphoneMeterLinked = iphoneMeterLinked,
-            iphoneMeterSelected = iphoneMeterSelected,
-            pairingCode = iphonePairingCode,
-            onPairingCodeChange = onIphonePairingCodeChange,
-            onAssociate = onAssociateIphoneMeter,
-            onMeasure = onMeasureWithIphone,
-            onResume = onResumeAcousticDiagnostic,
-            onCancel = onCancelAcousticDiagnostic,
+    }
+}
+
+@Composable
+private fun ManualLoudnessCarRow(
+    entry: ManualLoudnessTableEntry,
+    enabled: Boolean,
+    sliderEnabled: Boolean,
+    isEditing: Boolean,
+    onToggleEdit: () -> Unit,
+    onAdjustmentDbChange: (Double) -> Unit,
+    onPreviewChange: (Boolean) -> Unit,
+    onPreviewExteriorChange: (Boolean) -> Unit,
+) {
+    val context = LocalContext.current
+    val bankResolver = remember(context) { FmodBankResolver(context.applicationContext) }
+    val profile = remember(entry.profileId) {
+        FmodBankProfiles.all.firstOrNull { profile -> profile.id == entry.profileId }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (profile != null) {
+                CarPreviewThumbnail(
+                    profile = profile,
+                    audioAssetResolver = bankResolver,
+                    contentDescription = entry.carName,
+                    modifier = Modifier
+                        .width(72.dp)
+                        .height(48.dp),
+                )
+            }
+            Text(
+                entry.carName,
+                color = if (enabled) {
+                    OnSurface
+                } else {
+                    Muted
+                },
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Black,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                String.format(
+                    Locale.US,
+                    "%s %+.1f dB",
+                    if (entry.previewExterior) {
+                        "EXT"
+                    } else {
+                        "INT"
+                    },
+                    entry.activeAdjustmentDb,
+                ),
+                color = if (enabled) {
+                    AccentSoft
+                } else {
+                    Muted
+                },
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            OutlinedButton(
+                onClick = { onPreviewExteriorChange(!entry.previewExterior) },
+                enabled = enabled,
+                border = BorderStroke(
+                    1.dp,
+                    if (entry.previewExterior) {
+                        Accent
+                    } else {
+                        Outline
+                    },
+                ),
+            ) {
+                Text(
+                    "EXT",
+                    color = if (entry.previewExterior) {
+                        Accent
+                    } else {
+                        AccentSoft
+                    },
+                    fontWeight = FontWeight.Black,
+                    fontSize = 12.sp,
+                )
+            }
+            OutlinedButton(
+                onClick = onToggleEdit,
+                enabled = enabled,
+                border = BorderStroke(
+                    1.dp,
+                    if (isEditing) {
+                        Accent
+                    } else {
+                        Outline
+                    },
+                ),
+            ) {
+                Text(
+                    if (isEditing) {
+                        "DONE"
+                    } else {
+                        "EDIT"
+                    },
+                    color = if (isEditing) {
+                        Accent
+                    } else {
+                        AccentSoft
+                    },
+                    fontWeight = FontWeight.Black,
+                    fontSize = 12.sp,
+                )
+            }
+            OutlinedButton(
+                onClick = { onPreviewChange(!entry.previewActive) },
+                enabled = enabled,
+                border = BorderStroke(
+                    1.dp,
+                    if (entry.previewActive) {
+                        Accent
+                    } else {
+                        Outline
+                    },
+                ),
+            ) {
+                Text(
+                    if (entry.previewActive) {
+                        "PLAYING"
+                    } else {
+                        "PLAY"
+                    },
+                    color = if (entry.previewActive) {
+                        Accent
+                    } else {
+                        AccentSoft
+                    },
+                    fontWeight = FontWeight.Black,
+                )
+            }
+        }
+        Slider(
+            value = ManualLoudnessRepository.sliderPercentFromDb(entry.activeAdjustmentDb),
+            onValueChange = { percent ->
+                onAdjustmentDbChange(ManualLoudnessRepository.sliderDbFromPercent(percent))
+            },
+            enabled = sliderEnabled,
+            valueRange = 0f..ManualLoudnessTableEntry.SLIDER_STEPS.toFloat(),
+            steps = ManualLoudnessTableEntry.SLIDER_STEPS - 1,
+            colors = SliderDefaults.colors(
+                thumbColor = if (sliderEnabled) Accent else Muted,
+                activeTrackColor = if (sliderEnabled) Accent else Outline,
+                inactiveTrackColor = Outline,
+                disabledThumbColor = Muted,
+                disabledActiveTrackColor = Outline,
+                disabledInactiveTrackColor = Outline,
+            ),
         )
+    }
+}
+
+@Composable
+private fun CatalogGainTableSection(
+    title: String,
+    rows: List<CatalogGainTableEntry>,
+    valueDb: (CatalogGainTableEntry) -> Double?,
+    status: (CatalogGainTableEntry) -> CatalogGainEntryStatus,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Outline, skinShape(8.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(title, color = AccentSoft, fontSize = 13.sp, fontWeight = FontWeight.Black)
+        if (rows.isEmpty()) {
+            Text("No modded cars installed.", color = Muted, fontSize = 12.sp)
+        } else {
+            rows.forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        row.carName,
+                        color = OnSurface,
+                        fontSize = 12.sp,
+                        modifier = Modifier.weight(1f),
+                    )
+                    val rowStatus = status(row)
+                    Text(
+                        formatCatalogGainDb(valueDb(row), rowStatus),
+                        color = when (rowStatus) {
+                            CatalogGainEntryStatus.ACTIVE -> Success
+                            CatalogGainEntryStatus.STALE, CatalogGainEntryStatus.FAILED -> Warning
+                            CatalogGainEntryStatus.MISSING, CatalogGainEntryStatus.SKIPPED -> Muted
+                        },
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.padding(start = 12.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun formatCatalogGainDb(valueDb: Double?, entryStatus: CatalogGainEntryStatus): String {
+    if (entryStatus == CatalogGainEntryStatus.ACTIVE && valueDb != null) {
+        return String.format(Locale.US, "%+.1f dB", valueDb)
+    }
+
+    return catalogGainStatusLabel(entryStatus)
+}
+
+private fun catalogGainStatusLabel(status: CatalogGainEntryStatus): String {
+    return when (status) {
+        CatalogGainEntryStatus.ACTIVE -> "ACTIVE"
+        CatalogGainEntryStatus.MISSING -> "MISSING"
+        CatalogGainEntryStatus.STALE -> "STALE"
+        CatalogGainEntryStatus.FAILED -> "FAILED"
+        CatalogGainEntryStatus.SKIPPED -> "SKIPPED"
     }
 }
 
@@ -1547,9 +1954,14 @@ private fun AcousticDiagnosticSettingsPanel(
     progress: AcousticDiagnosticProgress,
     iphoneMeterLinked: Boolean,
     iphoneMeterSelected: Boolean,
+    calibrationLogLines: List<String>,
     pairingCode: String,
     onPairingCodeChange: (String) -> Unit,
     onAssociate: () -> Unit,
+    onForget: () -> Unit,
+    onClearCalibration: () -> Unit,
+    onRecoverLenient: () -> Unit,
+    onClearLog: () -> Unit,
     onMeasure: () -> Unit,
     onResume: () -> Unit,
     onCancel: () -> Unit,
@@ -1664,6 +2076,13 @@ private fun AcousticDiagnosticSettingsPanel(
             },
         )
     }
+    var showForgetIphoneConfirmation by remember { mutableStateOf(false) }
+    var showClearCalibrationConfirmation by remember { mutableStateOf(false) }
+    var showRecoverLenientConfirmation by remember { mutableStateOf(false) }
+    val hasIphoneCalibrationData = progress.canResume ||
+        summary.validCount > 0 ||
+        summary.failedCount > 0 ||
+        progress.status != AcousticDiagnosticStatus.IDLE
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedButton(
             onClick = onAssociate,
@@ -1690,6 +2109,196 @@ private fun AcousticDiagnosticSettingsPanel(
                 Text("CANCEL", color = Danger, fontWeight = FontWeight.Black)
             }
         }
+    }
+    if (iphoneMeterLinked || iphoneMeterSelected || hasIphoneCalibrationData) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (iphoneMeterLinked || iphoneMeterSelected) {
+                OutlinedButton(
+                    onClick = { showForgetIphoneConfirmation = true },
+                    enabled = !progress.isRunning,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("FORGET IPHONE", color = Danger, fontWeight = FontWeight.Black)
+                }
+            }
+            if (hasIphoneCalibrationData) {
+                OutlinedButton(
+                    onClick = { showClearCalibrationConfirmation = true },
+                    enabled = !progress.isRunning,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("CLEAR CALIBRATION", color = Warning, fontWeight = FontWeight.Black)
+                }
+            }
+        }
+    }
+    if (summary.lenientRecoverableCount > 0 && !progress.isRunning) {
+        OutlinedButton(
+            onClick = { showRecoverLenientConfirmation = true },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                "RECOVER ${summary.lenientRecoverableCount} MEASUREMENTS",
+                color = AccentSoft,
+                fontWeight = FontWeight.Black,
+            )
+        }
+    }
+    if (showForgetIphoneConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showForgetIphoneConfirmation = false },
+            title = { Text("Forget iPhone?", color = OnSurface, fontWeight = FontWeight.Black) },
+            text = {
+                Text(
+                    "Clears the saved iPhone link and companion Bluetooth association in this app. " +
+                        "Use this after unpairing the phone in the car settings.",
+                    color = Muted,
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showForgetIphoneConfirmation = false
+                        onForget()
+                    },
+                ) {
+                    Text("FORGET", color = Danger, fontWeight = FontWeight.Black)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showForgetIphoneConfirmation = false }) {
+                    Text("CANCEL", color = AccentSoft)
+                }
+            },
+        )
+    }
+    if (showClearCalibrationConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showClearCalibrationConfirmation = false },
+            title = { Text("Clear iPhone calibration?", color = OnSurface, fontWeight = FontWeight.Black) },
+            text = {
+                Text(
+                    "Deletes every iPhone volume measurement, acoustic adjustment, and interrupted session. " +
+                        "The Bluetooth link to the iPhone is kept.",
+                    color = Muted,
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearCalibrationConfirmation = false
+                        onClearCalibration()
+                    },
+                ) {
+                    Text("CLEAR", color = Danger, fontWeight = FontWeight.Black)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearCalibrationConfirmation = false }) {
+                    Text("CANCEL", color = AccentSoft)
+                }
+            },
+        )
+    }
+    if (showRecoverLenientConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showRecoverLenientConfirmation = false },
+            title = { Text("Recover stored measurements?", color = OnSurface, fontWeight = FontWeight.Black) },
+            text = {
+                Text(
+                    "Uses measurements already saved on this head unit. Accepts ${summary.lenientRecoverableCount} " +
+                        "pairs that failed only because ambient noise drifted between the before/after silence windows, " +
+                        "as long as SNR and peak were still healthy. No iPhone replay is needed.",
+                    color = Muted,
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showRecoverLenientConfirmation = false
+                        onRecoverLenient()
+                    },
+                ) {
+                    Text("RECOVER", color = AccentSoft, fontWeight = FontWeight.Black)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRecoverLenientConfirmation = false }) {
+                    Text("CANCEL", color = AccentSoft)
+                }
+            },
+        )
+    }
+    IphoneVolumeCalibrationConsolePanel(
+        logLines = calibrationLogLines,
+        onClear = onClearLog,
+    )
+}
+
+@Composable
+private fun IphoneVolumeCalibrationConsolePanel(
+    logLines: List<String>,
+    onClear: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "IPHONE VOLUME CALIBRATION CONSOLE",
+            color = Accent,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Black,
+        )
+        Text(
+            text = "CLEAR",
+            color = AccentSoft,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Black,
+            modifier = Modifier
+                .clip(softFillShape(5.dp))
+                .border(1.dp, Outline, softFillShape(5.dp))
+                .clickable(onClick = onClear)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+        )
+    }
+    MaterialSurface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 160.dp, max = 260.dp)
+            .border(1.dp, Outline, skinShape(8.dp)),
+        color = Color.Black.copy(alpha = 0.35f),
+        shape = skinShape(8.dp),
+    ) {
+        val logScrollState = rememberScrollState()
+        LaunchedEffect(logLines.size, logLines.lastOrNull()) {
+            logScrollState.scrollTo(logScrollState.maxValue)
+        }
+        Text(
+            text = if (logLines.isEmpty()) {
+                "No calibration events yet. Pair the iPhone, then tap CALIBRATE WITH IPHONE."
+            } else {
+                logLines.joinToString("\n")
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(logScrollState)
+                .padding(14.dp),
+            color = if (logLines.any { it.contains(" ERR") }) Warning else AccentSoft,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+        )
     }
 }
 

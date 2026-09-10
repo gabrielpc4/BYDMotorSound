@@ -26,6 +26,18 @@ class AppVolumeAndMixGainsTest {
             0.0001f,
         )
         assertEquals(0f, composeMasterOutputGain(0f, 4f, 5f), 0.0001f)
+        assertEquals(
+            1.5f,
+            composeMasterOutputGain(
+                appVolumeLinear = 1.5f,
+                normalizationLinear = 0.5f,
+                carSpecificOverallLinear = 1f,
+                acousticAdjustmentLinear = 0.8f,
+                applyLufsNormalization = false,
+                applyIphoneAcousticAdjustment = false,
+            ),
+            0.0001f,
+        )
     }
 
     @Test

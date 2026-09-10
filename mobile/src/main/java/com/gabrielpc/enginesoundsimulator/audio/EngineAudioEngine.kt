@@ -72,6 +72,17 @@ class EngineAudioEngine(context: Context) {
             AcousticDiagnosticProgress(status = AcousticDiagnosticStatus.INTERRUPTED)
         },
     )
+    private val manualLoudnessPreviewThread = AtomicReference<Thread?>(null)
+    private val manualPreviewCancellationRequested = AtomicBoolean(false)
+    private val manualPreviewActiveProfileIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val manualPreviewExteriorProfileIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val manualPreviewProfilesById = AtomicReference<Map<String, FmodBankProfile>>(emptyMap())
+    private val manualPreviewAdjustmentDbFor =
+        AtomicReference<(FmodBankProfile, EngineSoundPerspective) -> Double>({ _, _ -> 0.0 })
+    private val manualPreviewAppVolumeLinear = AtomicReference(1f)
+    private val manualPreviewRestartNormalAudio = AtomicBoolean(false)
+    @Volatile
+    private var manualPreviewCompletionListener: ((String) -> Unit)? = null
     private val nativeSources = AtomicReference<List<FmodSourceState>>(emptyList())
     private val masterOutputLinear = AtomicReference(0f)
     private val mixerDiagnosticsActive = AtomicBoolean(false)
@@ -165,8 +176,72 @@ class EngineAudioEngine(context: Context) {
 
     fun isAcousticDiagnosticRunning(): Boolean = acousticDiagnosticThread.get()?.isAlive == true
 
+    fun isManualLoudnessPreviewRunning(): Boolean =
+        manualLoudnessPreviewThread.get()?.isAlive == true
+
+    fun manualLoudnessPreviewActiveProfileIds(): Set<String> =
+        manualPreviewActiveProfileIds.toSet()
+
     fun isExclusiveAudioOperationRunning(): Boolean =
-        isLoudnessCalibrationRunning() || isAcousticDiagnosticRunning()
+        isLoudnessCalibrationRunning() ||
+            isAcousticDiagnosticRunning() ||
+            isManualLoudnessPreviewRunning()
+
+    internal fun updateManualLoudnessPreviewParameters(
+        profilesById: Map<String, FmodBankProfile>,
+        previewExteriorProfileIds: Set<String>,
+        adjustmentDbFor: (FmodBankProfile, EngineSoundPerspective) -> Double,
+        appVolumeLinear: Float,
+    ) {
+        manualPreviewProfilesById.set(profilesById)
+        manualPreviewExteriorProfileIds.clear()
+        manualPreviewExteriorProfileIds.addAll(previewExteriorProfileIds)
+        manualPreviewAdjustmentDbFor.set(adjustmentDbFor)
+        manualPreviewAppVolumeLinear.set(appVolumeLinear.coerceAtLeast(0f))
+    }
+
+    fun setManualLoudnessPreviewExterior(profileId: String, exterior: Boolean) {
+        if (exterior) {
+            manualPreviewExteriorProfileIds.add(profileId)
+        } else {
+            manualPreviewExteriorProfileIds.remove(profileId)
+        }
+    }
+
+    fun manualLoudnessPreviewExteriorProfileIds(): Set<String> =
+        manualPreviewExteriorProfileIds.toSet()
+
+    fun setManualLoudnessPreviewCompletionListener(listener: ((String) -> Unit)?) {
+        manualPreviewCompletionListener = listener
+    }
+
+    fun isManualLoudnessExclusiveAudioRunning(): Boolean =
+        isManualLoudnessPreviewRunning()
+
+    fun setManualLoudnessPreviewActive(profileId: String, active: Boolean): Boolean =
+        synchronized(lifecycleLock) {
+            if (isLoudnessCalibrationRunning() || isAcousticDiagnosticRunning()) {
+                return@synchronized false
+            }
+            if (active) {
+                manualPreviewActiveProfileIds.add(profileId)
+                ensureManualLoudnessPreviewRunningLocked()
+            } else {
+                manualPreviewActiveProfileIds.remove(profileId)
+                if (manualPreviewActiveProfileIds.isEmpty()) {
+                    stopManualLoudnessPreviewLocked(restartNormalAudio = true)
+                }
+            }
+
+            true
+        }
+
+    fun stopAllManualLoudnessPreviews() {
+        synchronized(lifecycleLock) {
+            manualPreviewActiveProfileIds.clear()
+            stopManualLoudnessPreviewLocked(restartNormalAudio = true)
+        }
+    }
 
     fun setFmodUpdateRateHz(rateHz: Int) {
         fmodUpdateRateHz.set(FmodUpdateRate.normalize(rateHz))
@@ -421,6 +496,8 @@ class EngineAudioEngine(context: Context) {
         synchronized(lifecycleLock) {
             interruptLoudnessCalibrationLocked(explicit = false, restartNormalAudio = false)
             interruptAcousticDiagnosticLocked(explicit = false, restartNormalAudio = false)
+            manualPreviewActiveProfileIds.clear()
+            stopManualLoudnessPreviewLocked(restartNormalAudio = false)
             stopLocked()
         }
     }
@@ -504,15 +581,35 @@ class EngineAudioEngine(context: Context) {
         deviceAddress: String?,
         pairingCode: String?,
         onRecordsChanged: () -> Unit,
+        onLog: IphoneCalibrationLogger? = null,
     ): Boolean = synchronized(lifecycleLock) {
-        if (isExclusiveAudioOperationRunning()) return@synchronized false
+        if (isExclusiveAudioOperationRunning()) {
+            onLog?.invoke(
+                IphoneCalibrationLogLevel.ERROR,
+                "Another exclusive audio operation is already running.",
+            )
+            return@synchronized false
+        }
         if (resume && acousticDiagnosticRepository.checkpoint() == null) {
+            onLog?.invoke(IphoneCalibrationLogLevel.ERROR, "No interrupted acoustic session exists.")
             acousticDiagnosticProgress.set(AcousticDiagnosticProgress())
             return@synchronized false
         }
         val normalAudioWasActive = running.get() && controlThread.get()?.isAlive == true
+        onLog?.invoke(
+            IphoneCalibrationLogLevel.INFO,
+            if (normalAudioWasActive) {
+                "Stopping live engine audio before calibration."
+            } else {
+                "Starting calibration with engine audio already stopped."
+            },
+        )
         stopLocked()
         if (controlThread.get()?.isAlive == true) {
+            onLog?.invoke(
+                IphoneCalibrationLogLevel.ERROR,
+                "Normal FMOD playback did not stop in time for acoustic measurement.",
+            )
             acousticDiagnosticProgress.set(
                 AcousticDiagnosticProgress(
                     status = AcousticDiagnosticStatus.FAILED,
@@ -523,6 +620,10 @@ class EngineAudioEngine(context: Context) {
             return@synchronized false
         }
         if (!runCatching(::requestFocus).getOrDefault(false)) {
+            onLog?.invoke(
+                IphoneCalibrationLogLevel.ERROR,
+                "Audio focus was not granted for acoustic measurement.",
+            )
             acousticDiagnosticProgress.set(
                 AcousticDiagnosticProgress(
                     status = AcousticDiagnosticStatus.FAILED,
@@ -545,6 +646,7 @@ class EngineAudioEngine(context: Context) {
                     deviceAddress = deviceAddress,
                     pairingCode = pairingCode,
                     onRecordsChanged = onRecordsChanged,
+                    onLog = onLog,
                 )
             },
             "fmod-iphone-acoustic-diagnostic",
@@ -696,6 +798,101 @@ class EngineAudioEngine(context: Context) {
         thread.interrupt()
     }
 
+    private fun ensureManualLoudnessPreviewRunningLocked() {
+        if (manualLoudnessPreviewThread.get()?.isAlive == true) {
+            return
+        }
+        if (manualPreviewActiveProfileIds.isEmpty()) {
+            return
+        }
+
+        val normalAudioWasActive = running.get() && controlThread.get()?.isAlive == true
+        manualPreviewRestartNormalAudio.set(normalAudioWasActive)
+        stopLocked()
+        if (controlThread.get()?.isAlive == true) {
+            manualPreviewActiveProfileIds.clear()
+            if (normalAudioWasActive) {
+                startLocked()
+            }
+            return
+        }
+        if (!runCatching(::requestFocus).getOrDefault(false)) {
+            manualPreviewActiveProfileIds.clear()
+            if (normalAudioWasActive) {
+                startLocked()
+            }
+            return
+        }
+        focusHeld.set(true)
+        manualPreviewCancellationRequested.set(false)
+        val thread = Thread(
+            { runManualLoudnessPreview() },
+            "fmod-manual-loudness-preview",
+        ).apply { isDaemon = true }
+        manualLoudnessPreviewThread.set(thread)
+        runCatching(thread::start).onFailure {
+            manualLoudnessPreviewThread.compareAndSet(thread, null)
+            manualPreviewActiveProfileIds.clear()
+            abandonFocusIfHeld()
+            if (normalAudioWasActive) {
+                startLocked()
+            }
+        }
+    }
+
+    private fun stopManualLoudnessPreviewLocked(restartNormalAudio: Boolean) {
+        val thread = manualLoudnessPreviewThread.get() ?: return
+        manualPreviewCancellationRequested.set(true)
+        thread.interrupt()
+        if (thread !== Thread.currentThread()) {
+            joinThread(thread, CONTROL_JOIN_TIMEOUT_MS)
+        }
+        if (!thread.isAlive) {
+            manualLoudnessPreviewThread.compareAndSet(thread, null)
+        }
+        manualPreviewCancellationRequested.set(false)
+        if (restartNormalAudio && manualPreviewRestartNormalAudio.getAndSet(false)) {
+            startLocked()
+        }
+    }
+
+    private fun runManualLoudnessPreview() {
+        val runner = ManualLoudnessPreviewRunner(
+            context = appContext,
+            profilesById = manualPreviewProfilesById.get(),
+            perspectiveForProfileId = { profileId ->
+                if (manualPreviewExteriorProfileIds.contains(profileId)) {
+                    EngineSoundPerspective.EXTERIOR
+                } else {
+                    EngineSoundPerspective.CABIN
+                }
+            },
+            activeProfileIds = manualPreviewActiveProfileIds::toSet,
+            adjustmentDbFor = manualPreviewAdjustmentDbFor.get(),
+            appVolumeLinearProvider = manualPreviewAppVolumeLinear::get,
+            cancellationRequested = manualPreviewCancellationRequested,
+            onProfileSweepCompleted = { profileId ->
+                synchronized(lifecycleLock) {
+                    manualPreviewActiveProfileIds.remove(profileId)
+                    manualPreviewCompletionListener?.invoke(profileId)
+                    if (manualPreviewActiveProfileIds.isEmpty()) {
+                        stopManualLoudnessPreviewLocked(restartNormalAudio = true)
+                    }
+                }
+            },
+        )
+        runCatching(runner::run)
+        synchronized(lifecycleLock) {
+            manualLoudnessPreviewThread.compareAndSet(Thread.currentThread(), null)
+            val shouldRestart = manualPreviewRestartNormalAudio.getAndSet(false)
+            manualPreviewCancellationRequested.set(false)
+            abandonFocusIfHeld()
+            if (shouldRestart && manualPreviewActiveProfileIds.isEmpty()) {
+                startLocked()
+            }
+        }
+    }
+
     private fun runLoudnessCalibration(
         profiles: List<FmodBankProfile>,
         resume: Boolean,
@@ -756,6 +953,7 @@ class EngineAudioEngine(context: Context) {
         deviceAddress: String?,
         pairingCode: String?,
         onRecordsChanged: () -> Unit,
+        onLog: IphoneCalibrationLogger?,
     ) {
         val result = runCatching {
             FmodAcousticDiagnosticRunner(
@@ -770,8 +968,13 @@ class EngineAudioEngine(context: Context) {
                 cancellationRequested = acousticDiagnosticCancellationRequested,
                 onProgress = acousticDiagnosticProgress::set,
                 onRecordsChanged = onRecordsChanged,
+                onLog = onLog,
             ).run()
         }.getOrElse { error ->
+            onLog?.invoke(
+                IphoneCalibrationLogLevel.ERROR,
+                error.message ?: error.javaClass.simpleName,
+            )
             AcousticDiagnosticRunResult(fatal = true, lastError = error.message ?: error.javaClass.simpleName)
         }
         synchronized(lifecycleLock) {
@@ -782,6 +985,17 @@ class EngineAudioEngine(context: Context) {
                 result.fatal -> AcousticDiagnosticStatus.FAILED
                 else -> AcousticDiagnosticStatus.COMPLETED
             }
+            onLog?.invoke(
+                when (status) {
+                    AcousticDiagnosticStatus.COMPLETED -> IphoneCalibrationLogLevel.OK
+                    AcousticDiagnosticStatus.CANCELLED -> IphoneCalibrationLogLevel.WARN
+                    AcousticDiagnosticStatus.FAILED -> IphoneCalibrationLogLevel.ERROR
+                    AcousticDiagnosticStatus.INTERRUPTED -> IphoneCalibrationLogLevel.WARN
+                    else -> IphoneCalibrationLogLevel.INFO
+                },
+                "Session ended: $status." +
+                    (result.lastError?.let { " $it" } ?: ""),
+            )
             acousticDiagnosticProgress.set(
                 latest.copy(
                     status = status,

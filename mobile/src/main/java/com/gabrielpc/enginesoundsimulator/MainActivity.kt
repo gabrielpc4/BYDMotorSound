@@ -143,7 +143,9 @@ import com.gabrielpc.enginesoundsimulator.audio.CarSubtitleCatalog
 import com.gabrielpc.enginesoundsimulator.audio.FmodBankResolver
 import com.gabrielpc.enginesoundsimulator.audio.MediaShiftButtonCoordinator
 import com.gabrielpc.enginesoundsimulator.audio.IphoneAcousticMeterProtocol
+import com.gabrielpc.enginesoundsimulator.audio.IphoneCalibrationLogLevel
 import com.gabrielpc.enginesoundsimulator.audio.BackfirePreviewPlayer
+import com.gabrielpc.enginesoundsimulator.audio.ClubReferenceMediaPlayer
 import com.gabrielpc.enginesoundsimulator.simulation.AutomaticTransmissionMode
 import com.gabrielpc.enginesoundsimulator.simulation.DrivetrainState
 import com.gabrielpc.enginesoundsimulator.simulation.TransmissionPosition
@@ -219,14 +221,20 @@ class MainActivity : ComponentActivity() {
     private val choreographer by lazy(LazyThreadSafetyMode.NONE) { Choreographer.getInstance() }
     private var driveState by mutableStateOf<DriveSnapshot?>(null)
     private var uiMonitoringActive by mutableStateOf(false)
-    private var driveCaptureActive by mutableStateOf(false)
-    private var driveCapturePath by mutableStateOf<String?>(null)
     private val backfirePreviewPlayer by lazy(LazyThreadSafetyMode.NONE) { BackfirePreviewPlayer(this) }
+    private val clubReferenceMediaPlayer by lazy(LazyThreadSafetyMode.NONE) { ClubReferenceMediaPlayer(this) }
+    private var clubReferenceMediaPlaying by mutableStateOf(false)
     private var legacyIphoneScanRequested = false
     private val companionChooserLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult(),
     ) { result ->
-        if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
+        if (result.resultCode != Activity.RESULT_OK) {
+            logIphoneCalibration(
+                IphoneCalibrationLogLevel.WARN,
+                "Companion chooser closed without a device (result=${result.resultCode}).",
+            )
+            return@registerForActivityResult
+        }
         val address = if (Build.VERSION.SDK_INT >= 33) {
             result.data
                 ?.getParcelableExtra(CompanionDeviceManager.EXTRA_ASSOCIATION, AssociationInfo::class.java)
@@ -240,18 +248,43 @@ class MainActivity : ComponentActivity() {
                 else -> null
             }
         }
-        address?.let(controller::selectIphoneAcousticMeter)
+        if (address == null) {
+            logIphoneCalibration(
+                IphoneCalibrationLogLevel.ERROR,
+                "Companion chooser returned OK but no Bluetooth address was found.",
+            )
+        } else {
+            logIphoneCalibration(IphoneCalibrationLogLevel.OK, "Companion chooser selected $address.")
+            controller.selectIphoneAcousticMeter(address)
+        }
     }
     private val bluetoothPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { grants ->
+        grants.forEach { (permission, granted) ->
+            val label = permission.substringAfterLast('.')
+            if (granted) {
+                logIphoneCalibration(IphoneCalibrationLogLevel.OK, "$label permission granted.")
+            } else {
+                logIphoneCalibration(IphoneCalibrationLogLevel.ERROR, "$label permission denied.")
+            }
+        }
         if (grants.values.all { it }) {
             if (legacyIphoneScanRequested) {
                 legacyIphoneScanRequested = false
+                logIphoneCalibration(
+                    IphoneCalibrationLogLevel.INFO,
+                    "Legacy BLE scan path selected after permission grant.",
+                )
                 controller.selectIphoneAcousticMeter("")
             } else {
                 beginIphoneMeterAssociation()
             }
+        } else {
+            logIphoneCalibration(
+                IphoneCalibrationLogLevel.ERROR,
+                "Pairing stopped because required permissions were denied.",
+            )
         }
     }
 
@@ -388,40 +421,64 @@ class MainActivity : ComponentActivity() {
                                 onSoundPerspectiveChange = controller::setSoundPerspective,
                                 onCalibrateAllCars = {
                                     backfirePreviewPlayer.release()
+                                    clubReferenceMediaPlayer.stop()
+                                    clubReferenceMediaPlaying = false
+                                    controller.stopManualLoudnessPreviews()
                                     controller.startLoudnessCalibration(resume = false)
                                 },
                                 onResumeLoudnessCalibration = {
                                     backfirePreviewPlayer.release()
+                                    clubReferenceMediaPlayer.stop()
+                                    clubReferenceMediaPlaying = false
+                                    controller.stopManualLoudnessPreviews()
                                     controller.startLoudnessCalibration(resume = true)
                                 },
                                 onCancelLoudnessCalibration = controller::cancelLoudnessCalibration,
                                 onAssociateIphoneMeter = ::associateIphoneMeter,
+                                onForgetIphoneMeter = ::forgetIphoneMeter,
+                                onClearIphoneCalibration = controller::clearIphoneCalibration,
+                                onRecoverLenientAcousticMeasurements = {
+                                    controller.recoverLenientAcousticMeasurements()
+                                },
+                                onClearIphoneCalibrationLog = controller::clearIphoneCalibrationLog,
+                                onCatalogGainSettingsChange = controller::setCatalogGainSettings,
+                                manualLoudnessTable = state.manualLoudnessTable,
+                                onManualLoudnessEnabledChange = controller::setManualLoudnessEnabled,
+                                onManualLoudnessDbChange = controller::setManualLoudnessDb,
+                                onRestoreManualLoudnessToDefault = controller::restoreCurrentManualLoudnessToDefault,
+                                onManualLoudnessPreviewChange = { profileId, active ->
+                                    if (active) {
+                                        clubReferenceMediaPlayer.stop()
+                                        clubReferenceMediaPlaying = false
+                                    }
+                                    controller.setManualLoudnessPreviewActive(profileId, active)
+                                },
+                                onManualLoudnessPreviewExteriorChange = controller::setManualLoudnessPreviewExterior,
+                                onStopManualLoudnessPreviews = controller::stopManualLoudnessPreviews,
+                                onSaveManualLoudnessAsDefault = controller::saveManualLoudnessAsDefault,
+                                onExportManualLoudnessPreset = controller::exportManualLoudnessPreset,
+                                clubReferenceMediaPlaying = clubReferenceMediaPlaying,
+                                onToggleClubReferenceMedia = {
+                                    controller.stopManualLoudnessPreviews()
+                                    val result = clubReferenceMediaPlayer.toggle()
+                                    clubReferenceMediaPlaying = result.playing
+                                },
                                 onStartAcousticDiagnostic = { code ->
                                     backfirePreviewPlayer.release()
+                                    clubReferenceMediaPlayer.stop()
+                                    clubReferenceMediaPlaying = false
+                                    controller.stopManualLoudnessPreviews()
                                     controller.startAcousticDiagnostic(code, resume = false)
                                 },
                                 onResumeAcousticDiagnostic = {
                                     backfirePreviewPlayer.release()
+                                    clubReferenceMediaPlayer.stop()
+                                    clubReferenceMediaPlaying = false
+                                    controller.stopManualLoudnessPreviews()
                                     controller.startAcousticDiagnostic(null, resume = true)
                                 },
                                 onCancelAcousticDiagnostic = controller::cancelAcousticDiagnostic,
                                 onDismissUserMessage = controller::dismissUserMessage,
-                            )
-                            DriveCaptureOverlay(
-                                capturing = driveCaptureActive,
-                                lastPath = driveCapturePath,
-                                onToggle = {
-                                    if (driveCaptureActive) {
-                                        driveCapturePath = controller.stopDriveCapture()
-                                        driveCaptureActive = false
-                                    } else {
-                                        driveCapturePath = controller.startDriveCapture()
-                                        driveCaptureActive = true
-                                    }
-                                },
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(top = 88.dp, end = 20.dp),
                             )
                             if (state.loudnessCalibrationProgress.isRunning) {
                                 LoudnessCalibrationModal(
@@ -469,10 +526,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        if (driveCaptureActive) {
-            controller.stopDriveCapture()
-        }
         backfirePreviewPlayer.release()
+        clubReferenceMediaPlayer.release()
         if (isFinishing) {
             (application as EngineSoundsApplication).shutdownEngine()
         }
@@ -484,17 +539,33 @@ class MainActivity : ComponentActivity() {
         if (!hasFocus) releaseManualControls()
     }
 
+    private fun logIphoneCalibration(level: IphoneCalibrationLogLevel, message: String) {
+        controller.logIphoneCalibration(level, message)
+    }
+
     private fun associateIphoneMeter() {
-        if (Build.VERSION.SDK_INT < 26 &&
-            checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
-        ) {
-            legacyIphoneScanRequested = true
+        logIphoneCalibration(IphoneCalibrationLogLevel.INFO, "PAIR IPHONE tapped.")
+        logIphoneCalibration(
+            IphoneCalibrationLogLevel.INFO,
+            "Android API ${Build.VERSION.SDK_INT}; linked=${controller.isIphoneMeterLinked()}; " +
+                "selected=${controller.isIphoneMeterSelected()}.",
+        )
+        if (needsLegacyBleLocationPermission() && !hasFineLocationPermission()) {
+            legacyIphoneScanRequested = Build.VERSION.SDK_INT < 26
+            logIphoneCalibration(
+                IphoneCalibrationLogLevel.INFO,
+                "Requesting ACCESS_FINE_LOCATION for BLE discovery.",
+            )
             bluetoothPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
             return
         }
         if (Build.VERSION.SDK_INT >= 31) {
             val permissions = arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
             if (permissions.any { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }) {
+                logIphoneCalibration(
+                    IphoneCalibrationLogLevel.INFO,
+                    "Requesting Bluetooth scan/connect permissions.",
+                )
                 bluetoothPermissionLauncher.launch(permissions)
                 return
             }
@@ -502,16 +573,50 @@ class MainActivity : ComponentActivity() {
         beginIphoneMeterAssociation()
     }
 
+    private fun needsLegacyBleLocationPermission(): Boolean {
+        return Build.VERSION.SDK_INT <= 30
+    }
+
+    private fun hasFineLocationPermission(): Boolean {
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun shouldSkipCompanionDeviceAssociation(): Boolean {
+        // DiLink and other automotive builds through Android 11 accept associate() but never
+        // invoke onDeviceFound/onFailure, leaving pairing stuck after "scan requested".
+        return Build.VERSION.SDK_INT <= 30
+    }
+
     private fun beginIphoneMeterAssociation() {
         if (Build.VERSION.SDK_INT < 26) {
+            logIphoneCalibration(
+                IphoneCalibrationLogLevel.INFO,
+                "API < 26: using legacy BLE scan path.",
+            )
             controller.selectIphoneAcousticMeter("")
+            return
+        }
+        if (shouldSkipCompanionDeviceAssociation()) {
+            logIphoneCalibration(
+                IphoneCalibrationLogLevel.INFO,
+                "Skipping companion chooser on API ${Build.VERSION.SDK_INT}; using direct BLE scan.",
+            )
+            selectIphoneMeterFallbackScan()
             return
         }
         val manager = getSystemService(CompanionDeviceManager::class.java)
         if (manager == null) {
+            logIphoneCalibration(
+                IphoneCalibrationLogLevel.WARN,
+                "CompanionDeviceManager unavailable on this head unit.",
+            )
             selectIphoneMeterFallbackScan()
             return
         }
+        logIphoneCalibration(
+            IphoneCalibrationLogLevel.INFO,
+            "Starting companion association for service ${IphoneAcousticMeterProtocol.SERVICE_UUID}.",
+        )
         val filter = BluetoothLeDeviceFilter.Builder()
             .setScanFilter(
                 ScanFilter.Builder()
@@ -523,36 +628,72 @@ class MainActivity : ComponentActivity() {
             .addDeviceFilter(filter)
             .setSingleDevice(true)
             .build()
-        manager.associate(
-            request,
-            object : CompanionDeviceManager.Callback() {
-                override fun onDeviceFound(chooserLauncher: android.content.IntentSender) {
-                    companionChooserLauncher.launch(IntentSenderRequest.Builder(chooserLauncher).build())
-                }
+        runCatching {
+            manager.associate(
+                request,
+                object : CompanionDeviceManager.Callback() {
+                    override fun onDeviceFound(chooserLauncher: android.content.IntentSender) {
+                        logIphoneCalibration(
+                            IphoneCalibrationLogLevel.OK,
+                            "Companion scan found a device; opening system chooser.",
+                        )
+                        companionChooserLauncher.launch(IntentSenderRequest.Builder(chooserLauncher).build())
+                    }
 
-                override fun onFailure(error: CharSequence?) {
-                    selectIphoneMeterFallbackScan()
-                }
-            },
-            Handler(Looper.getMainLooper()),
-        )
+                    override fun onFailure(error: CharSequence?) {
+                        logIphoneCalibration(
+                            IphoneCalibrationLogLevel.WARN,
+                            "Companion association failed: ${error ?: "unknown error"}.",
+                        )
+                        selectIphoneMeterFallbackScan()
+                    }
+                },
+                Handler(Looper.getMainLooper()),
+            )
+            logIphoneCalibration(IphoneCalibrationLogLevel.INFO, "Companion association scan requested.")
+        }.onFailure { error ->
+            logIphoneCalibration(
+                IphoneCalibrationLogLevel.ERROR,
+                "Companion association threw ${error::class.java.simpleName}: ${error.message ?: "no message"}.",
+            )
+            selectIphoneMeterFallbackScan()
+        }
     }
 
     private fun selectIphoneMeterFallbackScan() {
         // Some BYD builds omit the companion chooser. An empty address explicitly selects the
         // permission-backed service UUID scan used by the worker.
-        if (Build.VERSION.SDK_INT <= 30 &&
-            checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
-        ) {
+        logIphoneCalibration(IphoneCalibrationLogLevel.INFO, "Falling back to direct service-UUID BLE scan.")
+        if (needsLegacyBleLocationPermission() && !hasFineLocationPermission()) {
             legacyIphoneScanRequested = true
+            logIphoneCalibration(
+                IphoneCalibrationLogLevel.INFO,
+                "Fallback still needs ACCESS_FINE_LOCATION; requesting it now.",
+            )
             bluetoothPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
         } else {
             controller.selectIphoneAcousticMeter("")
+            logIphoneCalibration(
+                IphoneCalibrationLogLevel.OK,
+                "Ready to pair. Enter the six-digit iPhone code, then tap CALIBRATE WITH IPHONE.",
+            )
         }
     }
 
+    private fun forgetIphoneMeter() {
+        logIphoneCalibration(IphoneCalibrationLogLevel.INFO, "FORGET IPHONE tapped.")
+        controller.forgetIphoneMeter()
+        clearIphoneCompanionAssociations()
+        logIphoneCalibration(
+            IphoneCalibrationLogLevel.OK,
+            "Bluetooth pairing reset in the app. Tap PAIR IPHONE to link again.",
+        )
+    }
+
     private fun clearIphoneCompanionAssociations() {
-        if (Build.VERSION.SDK_INT < 26) return
+        if (Build.VERSION.SDK_INT < 26) {
+            return
+        }
         val manager = getSystemService(CompanionDeviceManager::class.java) ?: return
         runCatching {
             if (Build.VERSION.SDK_INT >= 33) {
@@ -640,6 +781,22 @@ private fun MotorSoundDashboard(
     onResumeLoudnessCalibration: () -> Unit,
     onCancelLoudnessCalibration: () -> Unit,
     onAssociateIphoneMeter: () -> Unit,
+    onForgetIphoneMeter: () -> Unit,
+    onClearIphoneCalibration: () -> Unit,
+    onRecoverLenientAcousticMeasurements: () -> Unit,
+    onClearIphoneCalibrationLog: () -> Unit,
+    onCatalogGainSettingsChange: (com.gabrielpc.enginesoundsimulator.audio.CatalogGainSettings) -> Unit,
+    manualLoudnessTable: List<com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessTableEntry>,
+    onManualLoudnessEnabledChange: (Boolean) -> Unit,
+    onManualLoudnessDbChange: (String, com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective, Double) -> Unit,
+    onRestoreManualLoudnessToDefault: () -> Unit,
+    onManualLoudnessPreviewChange: (String, Boolean) -> Unit,
+    onManualLoudnessPreviewExteriorChange: (String, Boolean) -> Unit,
+    onStopManualLoudnessPreviews: () -> Unit,
+    onSaveManualLoudnessAsDefault: () -> Unit,
+    onExportManualLoudnessPreset: () -> Unit,
+    clubReferenceMediaPlaying: Boolean,
+    onToggleClubReferenceMedia: () -> Unit,
     onStartAcousticDiagnostic: (String?) -> Unit,
     onResumeAcousticDiagnostic: () -> Unit,
     onCancelAcousticDiagnostic: () -> Unit,
@@ -774,9 +931,9 @@ private fun MotorSoundDashboard(
                                     DashboardClassicAudioControlsStack(
                                         state = state,
                                         onCruisingShiftOffsetForTachMaxRpmChange = onCruisingShiftOffsetForTachMaxRpmChange,
-                                        onEngineExternalChange = onEngineExternalChange,
-                                        onEnginePureChange = onEnginePureChange,
                                         onCruisingLogicChange = onCruisingLogicChange,
+                                        onManualLoudnessDbChange = onManualLoudnessDbChange,
+                                        onRestoreManualLoudnessToDefault = onRestoreManualLoudnessToDefault,
                                         onEffectOverrideChange = onEffectOverrideChange,
                                         onOverrideGainChange = onOverrideGainChange,
                                         gearProfileSelection = state.gearProfileSelection,
@@ -808,20 +965,32 @@ private fun MotorSoundDashboard(
                                     )
                                 }
                             }
-                            Tachometer(
-                                drivetrain = state.drivetrain,
-                                transmissionPosition = state.transmissionPosition,
-                                manualShiftModeEnabled = state.manualShiftModeEnabled,
-                                cruisingLogicEnabled = state.cruisingLogicEnabled,
-                                cruisingShiftRangeOverlayEnabled = state.tachometerCruisingShiftRangeOverlayEnabled,
-                                maxRpm = state.drivetrain.tachometerMaximumRpm,
-                                redlineRpm = state.drivetrain.redlineRpm,
+                            Column(
                                 modifier = Modifier
                                     .align(Alignment.CenterEnd)
                                     .width(maxWidth * DashboardLayoutDefaults.TACHOMETER_OVERLAY_WIDTH_FRACTION)
                                     .fillMaxHeight()
                                     .padding(start = 16.dp, bottom = 6.dp),
-                            )
+                                horizontalAlignment = Alignment.End,
+                            ) {
+                                Tachometer(
+                                    drivetrain = state.drivetrain,
+                                    transmissionPosition = state.transmissionPosition,
+                                    manualShiftModeEnabled = state.manualShiftModeEnabled,
+                                    cruisingLogicEnabled = state.cruisingLogicEnabled,
+                                    cruisingShiftRangeOverlayEnabled = state.tachometerCruisingShiftRangeOverlayEnabled,
+                                    maxRpm = state.drivetrain.tachometerMaximumRpm,
+                                    redlineRpm = state.drivetrain.redlineRpm,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth(),
+                                )
+                                DashboardEnginePerspectiveControls(
+                                    state = state,
+                                    onEngineExternalChange = onEngineExternalChange,
+                                    onEnginePureChange = onEnginePureChange,
+                                )
+                            }
                         }
                         DashboardMainScreen.MIXER -> MixerDashboardScreen(
                             state = state,
@@ -861,7 +1030,25 @@ private fun MotorSoundDashboard(
                             acousticDiagnosticProgress = state.acousticDiagnosticProgress,
                             iphoneMeterLinked = state.iphoneMeterLinked,
                             iphoneMeterSelected = state.iphoneMeterSelected,
+                            iphoneCalibrationLogLines = state.iphoneCalibrationLogLines,
                             onAssociateIphoneMeter = onAssociateIphoneMeter,
+                            onForgetIphoneMeter = onForgetIphoneMeter,
+                            onClearIphoneCalibration = onClearIphoneCalibration,
+                            onRecoverLenientAcousticMeasurements = onRecoverLenientAcousticMeasurements,
+                            onClearIphoneCalibrationLog = onClearIphoneCalibrationLog,
+                            catalogGainSettings = state.catalogGainSettings,
+                            catalogGainTable = state.catalogGainTable,
+                            onCatalogGainSettingsChange = onCatalogGainSettingsChange,
+                            manualLoudnessTable = manualLoudnessTable,
+                            onManualLoudnessEnabledChange = onManualLoudnessEnabledChange,
+                            onManualLoudnessDbChange = onManualLoudnessDbChange,
+                            onManualLoudnessPreviewChange = onManualLoudnessPreviewChange,
+                            onManualLoudnessPreviewExteriorChange = onManualLoudnessPreviewExteriorChange,
+                            onStopManualLoudnessPreviews = onStopManualLoudnessPreviews,
+                            onSaveManualLoudnessAsDefault = onSaveManualLoudnessAsDefault,
+                            onExportManualLoudnessPreset = onExportManualLoudnessPreset,
+                            clubReferenceMediaPlaying = clubReferenceMediaPlaying,
+                            onToggleClubReferenceMedia = onToggleClubReferenceMedia,
                             onStartAcousticDiagnostic = onStartAcousticDiagnostic,
                             onResumeAcousticDiagnostic = onResumeAcousticDiagnostic,
                             onCancelAcousticDiagnostic = onCancelAcousticDiagnostic,
@@ -930,53 +1117,6 @@ private fun MotorSoundDashboard(
                 }
 
             }
-        }
-    }
-}
-
-@Composable
-private fun DriveCaptureOverlay(
-    capturing: Boolean,
-    lastPath: String?,
-    onToggle: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val fileName = lastPath?.substringAfterLast('/')
-    Column(
-        modifier = modifier.width(220.dp),
-        horizontalAlignment = Alignment.End,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .clip(softFillShape(12.dp))
-                .background(if (capturing) Danger else Surface)
-                .clickable(onClick = onToggle)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(if (capturing) OnSurface else Danger),
-            )
-            Text(
-                text = if (capturing) "STOP CAPTURE" else "START CAPTURE",
-                color = OnSurface,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 0.6.sp,
-            )
-        }
-        if (fileName != null) {
-            Text(
-                text = fileName,
-                color = Muted,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-            )
         }
     }
 }
@@ -1551,9 +1691,9 @@ private object DashboardClassicEffectLayout {
 private fun DashboardClassicAudioControlsStack(
     state: DriveSnapshot,
     onCruisingShiftOffsetForTachMaxRpmChange: (Int, Int) -> Unit,
-    onEngineExternalChange: (Boolean) -> Unit,
-    onEnginePureChange: (Boolean) -> Unit,
     onCruisingLogicChange: (Boolean) -> Unit,
+    onManualLoudnessDbChange: (String, com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective, Double) -> Unit,
+    onRestoreManualLoudnessToDefault: () -> Unit,
     onEffectOverrideChange: (EffectSoundKind, Boolean) -> Unit,
     onOverrideGainChange: (EffectSoundKind, Float) -> Unit,
     gearProfileSelection: GearProfileSelection,
@@ -1567,13 +1707,16 @@ private fun DashboardClassicAudioControlsStack(
         DashboardEngineControls(
             state = state,
             onCruisingShiftOffsetForTachMaxRpmChange = onCruisingShiftOffsetForTachMaxRpmChange,
-            onEngineExternalChange = onEngineExternalChange,
-            onEnginePureChange = onEnginePureChange,
             onCruisingLogicChange = onCruisingLogicChange,
         )
         DashboardGearProfileControls(
             selection = gearProfileSelection,
             onSelectionChange = onGearProfileSelectionChange,
+        )
+        DashboardManualVolumeControl(
+            state = state,
+            onManualLoudnessDbChange = onManualLoudnessDbChange,
+            onRestoreManualLoudnessToDefault = onRestoreManualLoudnessToDefault,
         )
         DashboardEffectControls(
             state = state,
@@ -1584,15 +1727,42 @@ private fun DashboardClassicAudioControlsStack(
 }
 
 @Composable
-private fun DashboardEngineControls(
+private fun DashboardEnginePerspectiveControls(
     state: DriveSnapshot,
-    onCruisingShiftOffsetForTachMaxRpmChange: (Int, Int) -> Unit,
     onEngineExternalChange: (Boolean) -> Unit,
     onEnginePureChange: (Boolean) -> Unit,
-    onCruisingLogicChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val external = state.soundPerspective == com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective.EXTERIOR
+    val layout = DashboardEngineControlsLayout
+    val rowHeight = layout.rowHeight
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(layout.columnGap, Alignment.End),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("ENGINE", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        DashboardColumnTextCell("EXTERNAL", external, rowHeight)
+        DashboardSwitchCell(rowHeight, external, Outline) {
+            onEngineExternalChange(!external)
+        }
+        DashboardColumnTextCell("PURE", state.exteriorPureAudio, rowHeight)
+        DashboardSwitchCell(rowHeight, state.exteriorPureAudio, Outline) {
+            onEnginePureChange(!state.exteriorPureAudio)
+        }
+    }
+}
+
+@Composable
+private fun DashboardEngineControls(
+    state: DriveSnapshot,
+    onCruisingShiftOffsetForTachMaxRpmChange: (Int, Int) -> Unit,
+    onCruisingLogicChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val layout = DashboardEngineControlsLayout
     val rowHeight = layout.rowHeight
 
@@ -1601,51 +1771,6 @@ private fun DashboardEngineControls(
         horizontalArrangement = Arrangement.spacedBy(layout.columnGap),
         verticalAlignment = Alignment.Bottom,
     ) {
-        Box(
-            modifier = Modifier
-                .height(rowHeight)
-                .wrapContentWidth()
-                .padding(bottom = 12.dp),
-            contentAlignment = Alignment.BottomStart,
-        ) {
-            Text("ENGINE", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-        }
-        Column(
-            horizontalAlignment = Alignment.End,
-            modifier = Modifier
-                .wrapContentWidth()
-                .padding(layout.columnPadding),
-        ) {
-            DashboardColumnTextCell("EXTERNAL", external, rowHeight)
-        }
-        Column(
-            horizontalAlignment = Alignment.Start,
-            modifier = Modifier
-                .wrapContentWidth()
-                .padding(layout.columnPadding),
-        ) {
-            DashboardSwitchCell(rowHeight, external, Outline) {
-                onEngineExternalChange(!external)
-            }
-        }
-        Column(
-            horizontalAlignment = Alignment.End,
-            modifier = Modifier
-                .wrapContentWidth()
-                .padding(layout.columnPadding),
-        ) {
-            DashboardColumnTextCell("PURE", state.exteriorPureAudio, rowHeight)
-        }
-        Column(
-            horizontalAlignment = Alignment.Start,
-            modifier = Modifier
-                .wrapContentWidth()
-                .padding(layout.columnPadding),
-        ) {
-            DashboardSwitchCell(rowHeight, state.exteriorPureAudio, Outline) {
-                onEnginePureChange(!state.exteriorPureAudio)
-            }
-        }
         Column(
             horizontalAlignment = Alignment.End,
             modifier = Modifier
@@ -1676,6 +1801,104 @@ private fun DashboardEngineControls(
                     }
                 },
                 modifier = Modifier.width(layout.cruisingOffsetSliderWidth),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DashboardManualVolumeControl(
+    state: DriveSnapshot,
+    onManualLoudnessDbChange: (String, com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective, Double) -> Unit,
+    onRestoreManualLoudnessToDefault: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val layout = DashboardClassicEffectLayout
+    val rowHeight = 42.dp
+    val adjustmentDb = state.manualLoudnessAdjustmentDb
+    val defaultDb = state.manualLoudnessDefaultDb
+    val perspective = state.soundPerspective
+    val perspectiveLabel = if (perspective == com.gabrielpc.enginesoundsimulator.audio.EngineSoundPerspective.EXTERIOR) {
+        "EXT"
+    } else {
+        "INT"
+    }
+    val atDefault = com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessRepository
+        .sliderPercentFromDb(adjustmentDb) ==
+        com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessRepository
+            .sliderPercentFromDb(defaultDb)
+    val sliderColors = SliderDefaults.colors(
+        thumbColor = Accent,
+        activeTrackColor = Accent,
+        inactiveTrackColor = Outline,
+        activeTickColor = Background,
+        inactiveTickColor = Accent,
+    )
+
+    Row(
+        modifier = modifier.wrapContentWidth(),
+        horizontalArrangement = Arrangement.spacedBy(layout.columnGap),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(layout.effectLabelColumnWidth)
+                .height(rowHeight),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Text(
+                text = "VOLUME",
+                color = Accent,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Box(
+            modifier = Modifier
+                .width(78.dp)
+                .height(rowHeight),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Text(
+                text = String.format(
+                    Locale.US,
+                    "%s %+.1f dB",
+                    perspectiveLabel,
+                    adjustmentDb,
+                ),
+                color = OnSurface,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Slider(
+            value = com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessRepository.sliderPercentFromDb(adjustmentDb),
+            onValueChange = { percent ->
+                val db = com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessRepository.sliderDbFromPercent(percent)
+                onManualLoudnessDbChange(state.selectedCarId, perspective, db)
+            },
+            valueRange = 0f..com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessTableEntry.SLIDER_STEPS.toFloat(),
+            steps = com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessTableEntry.SLIDER_STEPS - 1,
+            colors = sliderColors,
+            modifier = Modifier
+                .width(220.dp)
+                .padding(layout.columnPadding),
+        )
+        if (!atDefault) {
+            Text(
+                text = "DEFAULT",
+                color = Accent,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .width(72.dp)
+                    .height(38.dp)
+                    .clip(skinShape(6.dp))
+                    .background(SurfaceRaised)
+                    .border(1.dp, Outline, skinShape(6.dp))
+                    .clickable(onClick = onRestoreManualLoudnessToDefault)
+                    .padding(top = 10.dp),
             )
         }
     }

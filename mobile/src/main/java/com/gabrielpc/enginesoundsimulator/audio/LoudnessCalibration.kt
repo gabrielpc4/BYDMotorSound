@@ -180,11 +180,25 @@ internal fun composeMasterOutputGain(
     normalizationLinear: Float,
     carSpecificOverallLinear: Float,
     acousticAdjustmentLinear: Float = 1f,
+    applyLufsNormalization: Boolean = true,
+    applyIphoneAcousticAdjustment: Boolean = true,
+    manualAdjustmentLinear: Float = 1f,
+    applyManualAdjustment: Boolean = false,
 ): Float {
     val components = listOf(
         appVolumeLinear,
-        normalizationLinear,
-        acousticAdjustmentLinear,
+        if (applyManualAdjustment) {
+            manualAdjustmentLinear
+        } else if (applyLufsNormalization) {
+            normalizationLinear
+        } else {
+            1f
+        },
+        if (applyManualAdjustment || !applyIphoneAcousticAdjustment) {
+            1f
+        } else {
+            acousticAdjustmentLinear
+        },
         carSpecificOverallLinear,
     )
     if (components.any { !it.isFinite() }) return 0f

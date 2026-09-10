@@ -1653,6 +1653,19 @@ private object DashboardClassicEffectLayout {
     val presetColumnWidth = 76.dp
     val columnGap = 8.dp
     val columnPadding = 3.dp
+    val switchColumnWidth = 64.dp + columnPadding * 2
+    val effectControlsTrailingWidth =
+        columnGap + switchColumnWidth + columnGap + (presetColumnWidth * 4) + (columnGap * 3)
+}
+
+private object DashboardManualVolumeLayout {
+    val rowHeight = 42.dp
+    val buttonHeight = 38.dp
+    val columnGap = DashboardClassicEffectLayout.columnGap
+    val valueWidth = 90.dp
+    val buttonWidth = 70.dp
+    val valueFontSize = 15.sp
+    val buttonFontSize = 15.sp
 }
 
 @Composable
@@ -1818,27 +1831,26 @@ private fun DashboardManualVolumeControl(
     modifier: Modifier = Modifier,
 ) {
     val layout = DashboardClassicEffectLayout
-    val rowHeight = 42.dp
+    val volumeLayout = DashboardManualVolumeLayout
+    val rowHeight = volumeLayout.rowHeight
     val adjustmentDb = state.manualLoudnessAdjustmentDb
     val perspective = state.soundPerspective
     val minDb = com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessTableEntry.MIN_DB
     val maxDb = com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessTableEntry.MAX_DB
 
-    fun canAdjustBy(deltaDb: Double): Boolean {
-        return adjustmentDb + deltaDb >= minDb && adjustmentDb + deltaDb <= maxDb
+    fun canAdjustBy(deltaSteps: Int): Boolean {
+        val nextDb = manualVolumeDbAfterStep(adjustmentDb, deltaSteps)
+        return nextDb >= minDb && nextDb <= maxDb
     }
 
-    fun adjustBy(deltaDb: Double) {
-        val clampedDb = (adjustmentDb + deltaDb).coerceIn(minDb, maxDb)
-        val snappedDb = com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessRepository.sliderDbFromPercent(
-            com.gabrielpc.enginesoundsimulator.audio.ManualLoudnessRepository.sliderPercentFromDb(clampedDb),
-        )
-        onManualLoudnessDbChange(state.selectedCarId, perspective, snappedDb)
+    fun adjustBy(deltaSteps: Int) {
+        val nextDb = manualVolumeDbAfterStep(adjustmentDb, deltaSteps).coerceIn(minDb, maxDb)
+        onManualLoudnessDbChange(state.selectedCarId, perspective, nextDb)
     }
 
     Row(
         modifier = modifier.wrapContentWidth(),
-        horizontalArrangement = Arrangement.spacedBy(layout.columnGap),
+        horizontalArrangement = Arrangement.spacedBy(volumeLayout.columnGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -1856,38 +1868,84 @@ private fun DashboardManualVolumeControl(
         }
         DashboardVolumeStepButton(
             label = "-5",
-            enabled = canAdjustBy(-5.0),
-            onClick = { adjustBy(-5.0) },
+            enabled = canAdjustBy(-5),
+            onClick = { adjustBy(-5) },
+            layout = volumeLayout,
         )
         DashboardVolumeStepButton(
             label = "-1",
-            enabled = canAdjustBy(-1.0),
-            onClick = { adjustBy(-1.0) },
+            enabled = canAdjustBy(-1),
+            onClick = { adjustBy(-1) },
+            layout = volumeLayout,
         )
         Box(
             modifier = Modifier
-                .width(72.dp)
+                .width(volumeLayout.valueWidth)
                 .height(rowHeight),
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = String.format(Locale.US, "%+.1f dB", adjustmentDb),
+                text = formatDashboardManualVolumeDb(adjustmentDb),
                 color = OnSurface,
-                fontSize = 12.sp,
+                fontSize = volumeLayout.valueFontSize,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
             )
         }
         DashboardVolumeStepButton(
             label = "+1",
-            enabled = canAdjustBy(1.0),
-            onClick = { adjustBy(1.0) },
+            enabled = canAdjustBy(1),
+            onClick = { adjustBy(1) },
+            layout = volumeLayout,
         )
         DashboardVolumeStepButton(
             label = "+5",
-            enabled = canAdjustBy(5.0),
-            onClick = { adjustBy(5.0) },
+            enabled = canAdjustBy(5),
+            onClick = { adjustBy(5) },
+            layout = volumeLayout,
         )
+    }
+}
+
+private fun isManualVolumeHalfStepDb(db: Double): Boolean {
+    val fractional = kotlin.math.abs(db - kotlin.math.truncate(db))
+    return kotlin.math.abs(fractional - 0.5) < 0.01
+}
+
+private fun manualVolumeDbAfterStep(currentDb: Double, deltaSteps: Int): Double {
+    val halfStep = isManualVolumeHalfStepDb(currentDb)
+    val anchor = if (halfStep) {
+        if (deltaSteps > 0) {
+            kotlin.math.ceil(currentDb)
+        } else {
+            kotlin.math.floor(currentDb)
+        }
+    } else {
+        currentDb
+    }
+    val consumedSteps = if (halfStep) {
+        1
+    } else {
+        0
+    }
+    val remainingSteps = kotlin.math.abs(deltaSteps) - consumedSteps
+    val direction = if (deltaSteps > 0) {
+        1
+    } else {
+        -1
+    }
+
+    return anchor + direction * remainingSteps
+}
+
+private fun formatDashboardManualVolumeDb(db: Double): String {
+    val roundedTenth = kotlin.math.round(db * 10.0) / 10.0
+    val isWhole = kotlin.math.abs(roundedTenth - kotlin.math.round(roundedTenth)) < 0.001
+
+    return if (isWhole) {
+        String.format(Locale.US, "%+.0f dB", roundedTenth)
+    } else {
+        String.format(Locale.US, "%+.1f dB", roundedTenth)
     }
 }
 
@@ -1896,6 +1954,7 @@ private fun DashboardVolumeStepButton(
     label: String,
     enabled: Boolean,
     onClick: () -> Unit,
+    layout: DashboardManualVolumeLayout,
     modifier: Modifier = Modifier,
 ) {
     val textColor = if (enabled) {
@@ -1911,25 +1970,28 @@ private fun DashboardVolumeStepButton(
 
     Box(
         modifier = modifier
-            .width(44.dp)
-            .height(42.dp),
+            .width(layout.buttonWidth)
+            .height(layout.rowHeight),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = label,
-            color = textColor,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(38.dp)
+                .height(layout.buttonHeight)
                 .clip(skinShape(6.dp))
                 .background(SurfaceRaised)
                 .border(1.dp, borderColor, skinShape(6.dp))
-                .clickable(enabled = enabled, onClick = onClick)
-                .padding(top = 10.dp),
-        )
+                .clickable(enabled = enabled, onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = label,
+                color = textColor,
+                fontSize = layout.buttonFontSize,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
 

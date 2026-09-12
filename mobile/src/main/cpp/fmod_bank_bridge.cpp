@@ -482,6 +482,7 @@ bool parseGuid(const std::string& text, FMOD_GUID* output) {
 
 constexpr char kSkylineProfileId[] = "assetto-nissan-skyline-r34";
 constexpr char kSkylineBlockedOffmidSample[] = "rb26_ex_5_offmid";
+constexpr char kBlockedStepExtSample[] = "stepext";
 
 std::string lowercaseCopy(const char* name) {
     std::string lowered(name == nullptr ? "" : name);
@@ -505,6 +506,40 @@ bool isBlockedSkylineSubSound(const char* name) {
         return true;
     }
     return lowered.find(kSkylineBlockedOffmidSample) != std::string::npos;
+}
+
+bool isBlockedStepExtSound(const char* name) {
+    if (name == nullptr || name[0] == '\0') {
+        return false;
+    }
+
+    const std::string lowered = lowercaseCopy(name);
+    if (lowered.find(kBlockedStepExtSample) != std::string::npos) {
+        return true;
+    }
+
+    return lowered.find("step_ext") != std::string::npos;
+}
+
+bool isBlockedSubSoundName(const char* name, bool skylineProfile) {
+    if (isBlockedStepExtSound(name)) {
+        return true;
+    }
+
+    if (!skylineProfile) {
+        return false;
+    }
+
+    return isBlockedSkylineSubSound(name);
+}
+
+std::atomic<bool> gBlockedSubSoundSkylineProfile{false};
+
+bool matchesArmedBlockedSubSound(const char* name) {
+    return isBlockedSubSoundName(
+        name,
+        gBlockedSubSoundSkylineProfile.load(std::memory_order_relaxed)
+    );
 }
 
 bool isSuperchargerSoundName(const std::string& name) {
@@ -545,11 +580,12 @@ static constexpr float kSuperchargerProbeReleaseThreshold = 0.05f;
 static constexpr float kSuperchargerProbeRpmMargin = 300.0f;
 static constexpr float kSuperchargerProbeMaxAccelSeconds = 4.0f;
 
-void muteBlockedSkylineChannelsInGroup(FMOD::ChannelGroup* group) {
-    if (group == nullptr) {
-        return;
+int muteMatchingChannelsInGroup(FMOD::ChannelGroup* group, bool (*matches)(const char*)) {
+    if (group == nullptr || matches == nullptr) {
+        return 0;
     }
 
+    int mutedCount = 0;
     int channelCount = 0;
     group->getNumChannels(&channelCount);
     for (int index = 0; index < channelCount; ++index) {
@@ -568,13 +604,25 @@ void muteBlockedSkylineChannelsInGroup(FMOD::ChannelGroup* group) {
             continue;
         }
 
-        if (!isBlockedSkylineSubSound(soundName)) {
+        if (!matches(soundName)) {
             continue;
         }
 
         channel->setVolume(0.0f);
         channel->setMute(true);
-        channel->stop();
+        mutedCount += 1;
+
+        float audibility = 0.0f;
+        channel->getAudibility(&audibility);
+        if (audibility > 0.002f) {
+            __android_log_print(
+                ANDROID_LOG_ERROR,
+                kLogTag,
+                "BlockedSubSound STILL_AUDIBLE sound=%s audibility=%.3f",
+                soundName,
+                audibility
+            );
+        }
     }
 
     int groupCount = 0;
@@ -582,9 +630,11 @@ void muteBlockedSkylineChannelsInGroup(FMOD::ChannelGroup* group) {
     for (int index = 0; index < groupCount; ++index) {
         FMOD::ChannelGroup* child = nullptr;
         if (group->getGroup(index, &child) == FMOD_OK) {
-            muteBlockedSkylineChannelsInGroup(child);
+            mutedCount += muteMatchingChannelsInGroup(child, matches);
         }
     }
+
+    return mutedCount;
 }
 
 
@@ -1259,6 +1309,10 @@ public:
         if (result != FMOD_OK) {
             return resultText(result, "Studio::System::update");
         }
+
+        // SOUND_PLAYED fires during Studio::update, before the new channel is visitable.
+        // Mute on this same tick so stepext cannot leak into the next mix block.
+        silenceBlockedSubSoundsLocked(cleanRpm, cleanThrottle);
         return {};
     }
 
@@ -1608,8 +1662,8 @@ public:
                 embeddedSuperchargerState_ = EmbeddedSuperchargerState::Present;
             }
             recent.callbackVoiceCount = std::min(recent.callbackVoiceCount + 1, 32767);
-            if (loadedProfileId_ == kSkylineProfileId && isBlockedSkylineSubSound(name)) {
-                muteBlockedSkylineSubSoundsInEventLocked(event);
+            if (isBlockedSubSoundName(name, loadedProfileId_ == kSkylineProfileId)) {
+                armBlockedSubSoundLocked(event.name, name);
             }
             if (diagnosticsEnabled) {
                 voiceSerial = nextVoiceSerial_++;
@@ -1618,6 +1672,10 @@ public:
                 voiceStartTimes_[voiceSerial] = callbackTime;
             }
         } else if (type == FMOD_STUDIO_EVENT_CALLBACK_SOUND_STOPPED) {
+            if (isBlockedSubSoundName(name, loadedProfileId_ == kSkylineProfileId)) {
+                const int live = blockedSubSoundLiveCount_.load(std::memory_order_relaxed);
+                blockedSubSoundLiveCount_.store(std::max(0, live - 1), std::memory_order_relaxed);
+            }
             recent.callbackVoiceCount = std::max(0, recent.callbackVoiceCount - 1);
             if (diagnosticsEnabled && !recent.activeVoiceSerials.empty()) {
                 voiceSerial = recent.activeVoiceSerials.front();
@@ -2515,19 +2573,95 @@ private:
         active_ = false;
         exteriorPureAudio_ = false;
         perspective_ = 0;
+        resetBlockedSubSoundStateLocked();
     }
 
-    void muteBlockedSkylineSubSoundsInEventLocked(EventSlot& event) {
+    void resetBlockedSubSoundStateLocked() {
+        blockedSubSoundLiveCount_.store(0, std::memory_order_relaxed);
+        lastBlockedSubSoundEvent_.clear();
+        lastBlockedSubSoundSilenceLogMs_ = 0;
+        gBlockedSubSoundSkylineProfile.store(false, std::memory_order_relaxed);
+    }
+
+    void armBlockedSubSoundLocked(const std::string& eventName, const char* soundName) {
+        const bool skylineProfile = loadedProfileId_ == kSkylineProfileId;
+        gBlockedSubSoundSkylineProfile.store(skylineProfile, std::memory_order_relaxed);
+        lastBlockedSubSoundEvent_ = eventName;
+        blockedSubSoundLiveCount_.fetch_add(1, std::memory_order_relaxed);
+        __android_log_print(
+            ANDROID_LOG_WARN,
+            kLogTag,
+            "BlockedSubSound PLAYED event=%s sound=%s live=%d",
+            eventName.c_str(),
+            soundName == nullptr ? "<unnamed>" : soundName,
+            blockedSubSoundLiveCount_.load(std::memory_order_relaxed)
+        );
+    }
+
+    int muteMatchingSubSoundsInEventLocked(EventSlot& event, bool (*matches)(const char*)) {
         if (event.instance == nullptr) {
-            return;
+            return 0;
         }
 
         FMOD::ChannelGroup* root = nullptr;
         if (event.instance->getChannelGroup(&root) != FMOD_OK || root == nullptr) {
+            return 0;
+        }
+
+        return muteMatchingChannelsInGroup(root, matches);
+    }
+
+    int silenceBlockedSubSoundsInEventLocked(const std::string& eventName) {
+        if (eventName.empty()) {
+            return 0;
+        }
+
+        const auto iterator = slots_.find(eventName);
+        if (iterator == slots_.end() || iterator->second == nullptr) {
+            return 0;
+        }
+
+        return muteMatchingSubSoundsInEventLocked(*iterator->second, matchesArmedBlockedSubSound);
+    }
+
+    void silenceBlockedSubSoundsLocked(float rpm, float throttle) {
+        if (blockedSubSoundLiveCount_.load(std::memory_order_relaxed) <= 0) {
             return;
         }
 
-        muteBlockedSkylineChannelsInGroup(root);
+        gBlockedSubSoundSkylineProfile.store(
+            loadedProfileId_ == kSkylineProfileId,
+            std::memory_order_relaxed
+        );
+
+        int mutedCount = 0;
+        mutedCount += silenceBlockedSubSoundsInEventLocked(lastBlockedSubSoundEvent_);
+        if (lastBlockedSubSoundEvent_ != "engine_int") {
+            mutedCount += silenceBlockedSubSoundsInEventLocked("engine_int");
+        }
+        if (lastBlockedSubSoundEvent_ != "engine_ext") {
+            mutedCount += silenceBlockedSubSoundsInEventLocked("engine_ext");
+        }
+
+        if (mutedCount <= 0) {
+            return;
+        }
+
+        const int nowMs = static_cast<int>(monotonicSeconds() * 1000.0);
+        if (nowMs - lastBlockedSubSoundSilenceLogMs_ < 250) {
+            return;
+        }
+
+        lastBlockedSubSoundSilenceLogMs_ = nowMs;
+        __android_log_print(
+            ANDROID_LOG_WARN,
+            kLogTag,
+            "BlockedSubSound silenced voices=%d event=%s rpm=%.0f throttle=%.2f",
+            mutedCount,
+            lastBlockedSubSoundEvent_.c_str(),
+            rpm,
+            throttle
+        );
     }
 
     void closeLocked() {
@@ -2600,6 +2734,7 @@ private:
         active_ = false;
         hasTurbo_ = false;
         hasEmbeddedSupercharger_.store(false, std::memory_order_relaxed);
+        resetBlockedSubSoundStateLocked();
         embeddedSuperchargerState_ = EmbeddedSuperchargerState::Probing;
         superchargerProbeWasAccelerating_ = false;
         superchargerProbeAccelSeconds_ = 0.0f;
@@ -3405,6 +3540,9 @@ private:
     float shiftOverrideGain_ = 1.0f;
     float backfireOverrideGain_ = 1.0f;
     std::atomic<bool> hasEmbeddedSupercharger_{false};
+    std::atomic<int> blockedSubSoundLiveCount_{0};
+    std::string lastBlockedSubSoundEvent_;
+    int lastBlockedSubSoundSilenceLogMs_ = 0;
     EmbeddedSuperchargerState embeddedSuperchargerState_ = EmbeddedSuperchargerState::Probing;
     bool superchargerProbeWasAccelerating_ = false;
     float superchargerProbeAccelSeconds_ = 0.0f;

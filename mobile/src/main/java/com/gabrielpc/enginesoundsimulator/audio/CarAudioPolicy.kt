@@ -15,4 +15,12 @@ internal object CarAudioPolicy {
 
         return soundName.contains("rb26_ex_5_offmid", ignoreCase = true)
     }
+
+    fun isBlockedStepExtSoundName(soundName: String): Boolean {
+        if (soundName.contains("stepext", ignoreCase = true)) {
+            return true
+        }
+
+        return soundName.contains("step_ext", ignoreCase = true)
+    }
 }

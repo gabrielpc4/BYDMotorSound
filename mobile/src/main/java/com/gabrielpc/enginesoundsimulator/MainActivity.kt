@@ -447,6 +447,7 @@ class MainActivity : ComponentActivity() {
                                 onStopManualLoudnessPreviews = controller::stopManualLoudnessPreviews,
                                 onAdjustAllModdedManualLoudnessDb = controller::adjustAllModdedManualLoudnessDb,
                                 onRestoreManualLoudnessDefaults = controller::restoreManualLoudnessDefaults,
+                                onSaveManualLoudnessAsDefault = controller::saveManualLoudnessAsDefault,
                                 onExportManualLoudnessPreset = controller::exportManualLoudnessPreset,
                                 onStartAcousticDiagnostic = { code ->
                                     backfirePreviewPlayer.release()
@@ -773,6 +774,7 @@ private fun MotorSoundDashboard(
     onStopManualLoudnessPreviews: () -> Unit,
     onAdjustAllModdedManualLoudnessDb: (Double) -> Unit,
     onRestoreManualLoudnessDefaults: () -> Unit,
+    onSaveManualLoudnessAsDefault: () -> Unit,
     onExportManualLoudnessPreset: () -> Unit,
     onStartAcousticDiagnostic: (String?) -> Unit,
     onResumeAcousticDiagnostic: () -> Unit,
@@ -886,7 +888,9 @@ private fun MotorSoundDashboard(
                         ) {
                             val carStageWidth = maxWidth * DashboardLayoutDefaults.CLASSIC_CAR_STAGE_WIDTH_FRACTION
                             Column(
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .width(carStageWidth)
+                                    .fillMaxHeight(),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 CarStage(
@@ -897,12 +901,16 @@ private fun MotorSoundDashboard(
                                     onSelectCar = onSelectCar,
                                     onToggleCarFavorite = onToggleCarFavorite,
                                     modifier = Modifier
-                                        .align(Alignment.Start)
-                                        .width(carStageWidth)
+                                        .fillMaxWidth()
                                         .weight(1f),
                                 )
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            start = DashboardLayoutDefaults.classicContentStartPadding,
+                                            bottom = 2.dp,
+                                        ),
                                     verticalAlignment = Alignment.Bottom,
                                 ) {
                                     DashboardClassicAudioControlsStack(
@@ -910,30 +918,21 @@ private fun MotorSoundDashboard(
                                         onManualLoudnessDbChange = onManualLoudnessDbChange,
                                         onEffectOverrideChange = onEffectOverrideChange,
                                         onOverrideGainChange = onOverrideGainChange,
-                                        modifier = Modifier.padding(
-                                            start = DashboardLayoutDefaults.classicContentStartPadding,
-                                            bottom = 2.dp,
-                                        ),
                                     )
                                     ClassicDriveControls(
                                         state = state,
                                         onThrottle = onThrottle,
                                         onBrake = onBrake,
                                         onSimulatedRegen = onSimulatedRegen,
-                                        onToggleSimulatedPedalLatch = { onToggleSimulatedPedalLatch(!state.simulatedPedalsLatched) },
+                                        onToggleSimulatedPedalLatch = {
+                                            onToggleSimulatedPedalLatch(!state.simulatedPedalsLatched)
+                                        },
                                         onTransmissionPositionChange = onTransmissionPositionChange,
                                         onManualUpshift = onManualUpshift,
                                         onManualDownshift = onManualDownshift,
                                         modifier = Modifier
                                             .weight(1f)
                                             .padding(start = 28.dp),
-                                    )
-                                    DashboardMixerLauncherButton(
-                                        onClick = { mainScreen = DashboardMainScreen.MIXER },
-                                        modifier = Modifier.padding(
-                                            end = DashboardLayoutDefaults.classicContentEndPadding,
-                                            bottom = 12.dp,
-                                        ),
                                     )
                                 }
                             }
@@ -957,15 +956,27 @@ private fun MotorSoundDashboard(
                                         .weight(1f)
                                         .fillMaxWidth(),
                                 )
-                                DashboardTachometerAccessoryControls(
-                                    state = state,
-                                    gearProfileSelection = state.gearProfileSelection,
-                                    onCruisingShiftOffsetForTachMaxRpmChange = onCruisingShiftOffsetForTachMaxRpmChange,
-                                    onCruisingLogicChange = onCruisingLogicChange,
-                                    onGearProfileSelectionChange = onGearProfileSelectionChange,
-                                    onEngineExternalChange = onEngineExternalChange,
-                                    onEnginePureChange = onEnginePureChange,
-                                )
+                                Row(
+                                    modifier = Modifier.wrapContentWidth(
+                                        align = Alignment.End,
+                                        unbounded = true,
+                                    ),
+                                    verticalAlignment = Alignment.Bottom,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    DashboardTachometerAccessoryControls(
+                                        state = state,
+                                        gearProfileSelection = state.gearProfileSelection,
+                                        onCruisingShiftOffsetForTachMaxRpmChange = onCruisingShiftOffsetForTachMaxRpmChange,
+                                        onCruisingLogicChange = onCruisingLogicChange,
+                                        onGearProfileSelectionChange = onGearProfileSelectionChange,
+                                        onEngineExternalChange = onEngineExternalChange,
+                                        onEnginePureChange = onEnginePureChange,
+                                    )
+                                    DashboardMixerLauncherButton(
+                                        onClick = { mainScreen = DashboardMainScreen.MIXER },
+                                    )
+                                }
                             }
                         }
                         DashboardMainScreen.MIXER -> MixerDashboardScreen(
@@ -1022,6 +1033,7 @@ private fun MotorSoundDashboard(
                             onStopManualLoudnessPreviews = onStopManualLoudnessPreviews,
                             onAdjustAllModdedManualLoudnessDb = onAdjustAllModdedManualLoudnessDb,
                             onRestoreManualLoudnessDefaults = onRestoreManualLoudnessDefaults,
+                            onSaveManualLoudnessAsDefault = onSaveManualLoudnessAsDefault,
                             onExportManualLoudnessPreset = onExportManualLoudnessPreset,
                             onStartAcousticDiagnostic = onStartAcousticDiagnostic,
                             onResumeAcousticDiagnostic = onResumeAcousticDiagnostic,

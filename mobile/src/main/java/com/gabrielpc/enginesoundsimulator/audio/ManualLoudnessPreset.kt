@@ -11,6 +11,7 @@ import java.util.Locale
 internal object ManualLoudnessPreset {
     const val PRESET_VERSION = 1
     const val EXPORT_FILE_NAME = "manual_loudness_preset.json"
+    const val USER_DEFAULT_FILE_NAME = "manual_loudness_user_default.json"
     const val FACTORY_ASSET_NAME = "manual_loudness_factory_defaults.json"
 
     fun exportCurrent(
@@ -23,6 +24,46 @@ internal object ManualLoudnessPreset {
         val exportFile = presetFile(context, EXPORT_FILE_NAME)
         exportFile.writeText(preset.toString(2))
         return exportFile
+    }
+
+    fun saveAsUserDefault(
+        context: Context,
+        repository: ManualLoudnessRepository,
+        profiles: List<FmodBankProfile>,
+        manualLoudnessEnabled: Boolean,
+        dashboardUsesExterior: Boolean,
+    ): File {
+        profiles.forEach { profile ->
+            repository.savePreviewExterior(
+                profileId = profile.id,
+                packGroup = profile.packGroup,
+                exterior = dashboardUsesExterior,
+            )
+        }
+
+        val preset = buildPreset(
+            repository = repository,
+            profiles = profiles,
+            manualLoudnessEnabled = manualLoudnessEnabled,
+            previewExteriorForAll = dashboardUsesExterior,
+        )
+        val defaultFile = presetFile(context, USER_DEFAULT_FILE_NAME)
+        defaultFile.writeText(preset.toString(2))
+        return defaultFile
+    }
+
+    fun hasUserDefaults(context: Context): Boolean {
+        return presetFile(context, USER_DEFAULT_FILE_NAME).isFile
+    }
+
+    fun restoreEffectiveDefaults(context: Context, repository: ManualLoudnessRepository) {
+        val userDefaults = loadUserDefaults(context)
+        if (userDefaults != null) {
+            applyPreset(repository, userDefaults)
+            return
+        }
+
+        restoreFactoryDefaults(context, repository)
     }
 
     fun restoreFactoryDefaults(context: Context, repository: ManualLoudnessRepository) {
@@ -97,9 +138,13 @@ internal object ManualLoudnessPreset {
         repository: ManualLoudnessRepository,
         profiles: List<FmodBankProfile>,
         manualLoudnessEnabled: Boolean,
+        previewExteriorForAll: Boolean? = null,
     ): JSONObject {
         val cars = JSONArray()
         profiles.forEach { profile ->
+            val previewExterior = previewExteriorForAll
+                ?: repository.loadPreviewExterior(profile.id, profile.packGroup)
+
             cars.put(
                 JSONObject()
                     .put("profileId", profile.id)
@@ -118,7 +163,7 @@ internal object ManualLoudnessPreset {
                     )
                     .put(
                         "previewExterior",
-                        repository.loadPreviewExterior(profile.id, profile.packGroup),
+                        previewExterior,
                     ),
             )
         }
@@ -139,7 +184,7 @@ internal object ManualLoudnessPreset {
         packGroup: String,
         perspective: EngineSoundPerspective,
     ): Double {
-        val preset = loadFactoryDefaults(context) ?: return 0.0
+        val preset = loadEffectiveDefaults(context) ?: return 0.0
         val cars = preset.optJSONArray("cars") ?: return 0.0
         for (index in 0 until cars.length()) {
             val car = cars.optJSONObject(index) ?: continue
@@ -155,6 +200,21 @@ internal object ManualLoudnessPreset {
         }
 
         return 0.0
+    }
+
+    fun loadEffectiveDefaults(context: Context): JSONObject? {
+        return loadUserDefaults(context) ?: loadFactoryDefaults(context)
+    }
+
+    fun loadUserDefaults(context: Context): JSONObject? {
+        val userDefaultFile = presetFile(context, USER_DEFAULT_FILE_NAME)
+        if (!userDefaultFile.isFile) {
+            return null
+        }
+
+        return runCatching {
+            JSONObject(userDefaultFile.readText())
+        }.getOrNull()
     }
 
     fun loadFactoryDefaults(context: Context): JSONObject? {

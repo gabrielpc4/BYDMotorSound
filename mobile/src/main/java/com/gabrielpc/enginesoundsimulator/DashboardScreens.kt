@@ -1096,6 +1096,7 @@ internal fun SettingsScreen(
     onStopManualLoudnessPreviews: () -> Unit,
     onAdjustAllModdedManualLoudnessDb: (Double) -> Unit,
     onRestoreManualLoudnessDefaults: () -> Unit,
+    onSaveManualLoudnessAsDefault: () -> Unit,
     onExportManualLoudnessPreset: () -> Unit,
     onStartAcousticDiagnostic: (String?) -> Unit,
     onResumeAcousticDiagnostic: () -> Unit,
@@ -1304,6 +1305,7 @@ internal fun SettingsScreen(
                 onPreviewExteriorChange = onManualLoudnessPreviewExteriorChange,
                 onAdjustAllModdedManualLoudnessDb = onAdjustAllModdedManualLoudnessDb,
                 onRestoreManualLoudnessDefaults = onRestoreManualLoudnessDefaults,
+                onSaveManualLoudnessAsDefault = onSaveManualLoudnessAsDefault,
                 onExportManualLoudnessPreset = onExportManualLoudnessPreset,
                 onStopManualLoudnessPreviews = onStopManualLoudnessPreviews,
                 modifier = Modifier
@@ -1439,6 +1441,7 @@ private fun ManualLoudnessSettingsTab(
     onPreviewExteriorChange: (String, Boolean) -> Unit,
     onAdjustAllModdedManualLoudnessDb: (Double) -> Unit,
     onRestoreManualLoudnessDefaults: () -> Unit,
+    onSaveManualLoudnessAsDefault: () -> Unit,
     onExportManualLoudnessPreset: () -> Unit,
     onStopManualLoudnessPreviews: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1456,6 +1459,7 @@ private fun ManualLoudnessSettingsTab(
         onPreviewExteriorChange = onPreviewExteriorChange,
         onAdjustAllModdedManualLoudnessDb = onAdjustAllModdedManualLoudnessDb,
         onRestoreManualLoudnessDefaults = onRestoreManualLoudnessDefaults,
+        onSaveManualLoudnessAsDefault = onSaveManualLoudnessAsDefault,
         onExportManualLoudnessPreset = onExportManualLoudnessPreset,
         modifier = modifier
             .fillMaxWidth()
@@ -1573,6 +1577,7 @@ private fun ManualLoudnessAdjustmentPanel(
     onPreviewExteriorChange: (String, Boolean) -> Unit,
     onAdjustAllModdedManualLoudnessDb: (Double) -> Unit,
     onRestoreManualLoudnessDefaults: () -> Unit,
+    onSaveManualLoudnessAsDefault: () -> Unit,
     onExportManualLoudnessPreset: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1632,14 +1637,21 @@ private fun ManualLoudnessAdjustmentPanel(
                 colors = ButtonDefaults.buttonColors(containerColor = Accent),
                 modifier = Modifier.weight(1f),
             ) {
-                Text("RESTORE DEFAULT", color = Background, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                Text("RESTORE DEFAULT", color = Background, fontWeight = FontWeight.Black, fontSize = 11.sp)
+            }
+            Button(
+                onClick = onSaveManualLoudnessAsDefault,
+                colors = ButtonDefaults.buttonColors(containerColor = Accent),
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("SAVE AS DEFAULT", color = Background, fontWeight = FontWeight.Black, fontSize = 11.sp)
             }
             OutlinedButton(
                 onClick = onExportManualLoudnessPreset,
                 modifier = Modifier.weight(1f),
                 border = BorderStroke(1.dp, Outline),
             ) {
-                Text("EXPORT PRESET", color = AccentSoft, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                Text("EXPORT PRESET", color = AccentSoft, fontWeight = FontWeight.Black, fontSize = 11.sp)
             }
         }
     }

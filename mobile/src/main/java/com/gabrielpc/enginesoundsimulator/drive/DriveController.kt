@@ -949,14 +949,42 @@ class DriveController(context: Context) {
     }
 
     fun restoreManualLoudnessDefaults() {
-        ManualLoudnessPreset.restoreFactoryDefaults(appContext, manualLoudnessRepository)
+        val restoredUserDefaults = ManualLoudnessPreset.hasUserDefaults(appContext)
+        ManualLoudnessPreset.restoreEffectiveDefaults(appContext, manualLoudnessRepository)
         refreshManualLoudnessPreviewParameters()
         refreshManualLoudnessTable()
         syncMasterOutputGainToAudioEngine()
         userMessage = UserVisibleMessage(
             id = SystemClock.elapsedRealtime(),
             title = "Manual loudness restored to defaults",
-            detail = "All cars reset to factory loudness values.",
+            detail = if (restoredUserDefaults) {
+                "All cars reset to your saved default loudness values."
+            } else {
+                "All cars reset to factory loudness values."
+            },
+            severity = UserVisibleMessageSeverity.INFO,
+        )
+    }
+
+    fun saveManualLoudnessAsDefault() {
+        val dashboardUsesExterior = selectedPerspective.get() == EngineSoundPerspective.EXTERIOR
+        val file = ManualLoudnessPreset.saveAsUserDefault(
+            context = appContext,
+            repository = manualLoudnessRepository,
+            profiles = calibrationProfiles(),
+            manualLoudnessEnabled = catalogGainSettings.get().manualLoudnessEnabled,
+            dashboardUsesExterior = dashboardUsesExterior,
+        )
+        refreshManualLoudnessPreviewParameters()
+        refreshManualLoudnessTable()
+        userMessage = UserVisibleMessage(
+            id = SystemClock.elapsedRealtime(),
+            title = "Manual loudness default saved",
+            detail = if (dashboardUsesExterior) {
+                "Saved current loudness as your default using exterior perspective. ${file.absolutePath}"
+            } else {
+                "Saved current loudness as your default using interior perspective. ${file.absolutePath}"
+            },
             severity = UserVisibleMessageSeverity.INFO,
         )
     }

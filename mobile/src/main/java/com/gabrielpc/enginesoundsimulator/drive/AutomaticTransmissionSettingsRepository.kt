@@ -25,7 +25,7 @@ internal object RacingReturnThrottlePercent {
 internal object RacingEnterMinThrottlePercent {
     const val MIN = 0
     const val MAX = 100
-    const val DEFAULT = 50
+    const val DEFAULT = 90
     const val STEP = 10
 
     fun normalize(value: Int): Int {
@@ -241,6 +241,7 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
 
     fun load(): AutomaticTransmissionSettings {
         migrateLegacyOffsetIfNeeded()
+        migrateLegacyRacingEnterMinThrottleIfNeeded()
         return AutomaticTransmissionSettings(
             cruisingLogicEnabled = preferences.getBoolean(KEY_CRUISING_LOGIC_ENABLED, true),
             allowManualOnLaunchEnabled = preferences.getBoolean(KEY_ALLOW_MANUAL_ON_LAUNCH_ENABLED, false),
@@ -256,10 +257,7 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
                 ),
             ),
             racingEnterMinThrottlePercent = RacingEnterMinThrottlePercent.normalize(
-                preferences.getInt(
-                    KEY_RACING_ENTER_MIN_THROTTLE_PERCENT,
-                    RacingEnterMinThrottlePercent.DEFAULT,
-                ),
+                loadRacingEnterMinThrottlePercent(),
             ),
             kickdownStompDeltaPercent = KickdownStompDeltaPercent.normalize(
                 preferences.getInt(
@@ -394,6 +392,36 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
         return CruisingShiftOffsetByTachMaxRpm.normalizeMap(loaded)
     }
 
+    private fun loadRacingEnterMinThrottlePercent(): Int {
+        if (!preferences.contains(KEY_RACING_ENTER_MIN_THROTTLE_PERCENT)) {
+            return RacingEnterMinThrottlePercent.DEFAULT
+        }
+
+        return preferences.getInt(
+            KEY_RACING_ENTER_MIN_THROTTLE_PERCENT,
+            RacingEnterMinThrottlePercent.DEFAULT,
+        )
+    }
+
+    private fun migrateLegacyRacingEnterMinThrottleIfNeeded() {
+        if (!preferences.contains(KEY_RACING_ENTER_MIN_THROTTLE_PERCENT)) {
+            return
+        }
+
+        val stored = preferences.getInt(
+            KEY_RACING_ENTER_MIN_THROTTLE_PERCENT,
+            RacingEnterMinThrottlePercent.DEFAULT,
+        )
+
+        if (stored != LEGACY_RACING_ENTER_MIN_THROTTLE_PERCENT) {
+            return
+        }
+
+        preferences.edit()
+            .putInt(KEY_RACING_ENTER_MIN_THROTTLE_PERCENT, RacingEnterMinThrottlePercent.DEFAULT)
+            .commit()
+    }
+
     private fun migrateLegacyOffsetIfNeeded() {
         if (CruisingShiftOffsetByTachMaxRpm.TIERS.all { preferences.contains(CruisingShiftOffsetByTachMaxRpm.preferenceKey(it)) }) {
             return
@@ -450,5 +478,6 @@ internal class AutomaticTransmissionSettingsRepository(context: Context) {
             "tachometer_cruising_shift_range_overlay_enabled"
         const val KEY_LOW_SPEED_CRAWL_RPM_HOLD_ENABLED = "low_speed_crawl_rpm_hold_enabled"
         const val LEGACY_OFFSET_RPM_KEY = "offset_rpm"
+        const val LEGACY_RACING_ENTER_MIN_THROTTLE_PERCENT = 50
     }
 }

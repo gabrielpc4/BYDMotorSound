@@ -1237,7 +1237,8 @@ class EngineAudioEngine(context: Context) {
                     bridge.setBackfireAudioEnabled(requestedBackfireAudioEnabled)
                     sentBackfireAudioEnabled = requestedBackfireAudioEnabled
                 }
-                val requestedShiftSoundOverride = shiftSoundOverride.get()
+                val requestedShiftSoundOverride = frame.usesRacingSpeedAudioGain ||
+                    shiftSoundOverride.get()
                 if (requestedShiftSoundOverride != sentShiftSoundOverride) {
                     bridge.setShiftSoundOverride(requestedShiftSoundOverride)
                     sentShiftSoundOverride = requestedShiftSoundOverride

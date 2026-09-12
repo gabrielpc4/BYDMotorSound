@@ -956,27 +956,16 @@ private fun MotorSoundDashboard(
                                         .weight(1f)
                                         .fillMaxWidth(),
                                 )
-                                Row(
-                                    modifier = Modifier.wrapContentWidth(
-                                        align = Alignment.End,
-                                        unbounded = true,
-                                    ),
-                                    verticalAlignment = Alignment.Bottom,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                ) {
-                                    DashboardTachometerAccessoryControls(
-                                        state = state,
-                                        gearProfileSelection = state.gearProfileSelection,
-                                        onCruisingShiftOffsetForTachMaxRpmChange = onCruisingShiftOffsetForTachMaxRpmChange,
-                                        onCruisingLogicChange = onCruisingLogicChange,
-                                        onGearProfileSelectionChange = onGearProfileSelectionChange,
-                                        onEngineExternalChange = onEngineExternalChange,
-                                        onEnginePureChange = onEnginePureChange,
-                                    )
-                                    DashboardMixerLauncherButton(
-                                        onClick = { mainScreen = DashboardMainScreen.MIXER },
-                                    )
-                                }
+                                DashboardTachometerAccessoryControls(
+                                    state = state,
+                                    gearProfileSelection = state.gearProfileSelection,
+                                    onCruisingShiftOffsetForTachMaxRpmChange = onCruisingShiftOffsetForTachMaxRpmChange,
+                                    onCruisingLogicChange = onCruisingLogicChange,
+                                    onGearProfileSelectionChange = onGearProfileSelectionChange,
+                                    onEngineExternalChange = onEngineExternalChange,
+                                    onEnginePureChange = onEnginePureChange,
+                                    onOpenMixer = { mainScreen = DashboardMainScreen.MIXER },
+                                )
                             }
                         }
                         DashboardMainScreen.MIXER -> MixerDashboardScreen(
@@ -1720,6 +1709,7 @@ private fun DashboardTachometerAccessoryControls(
     onGearProfileSelectionChange: (GearProfileSelection) -> Unit,
     onEngineExternalChange: (Boolean) -> Unit,
     onEnginePureChange: (Boolean) -> Unit,
+    onOpenMixer: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // The stock rows are wider than the tachometer column, so they are laid out unbounded and
@@ -1741,6 +1731,7 @@ private fun DashboardTachometerAccessoryControls(
         DashboardGearProfileControls(
             selection = gearProfileSelection,
             onSelectionChange = onGearProfileSelectionChange,
+            onOpenMixer = onOpenMixer,
         )
     }
 }
@@ -2083,6 +2074,7 @@ private fun DashboardCruisingRpmOffsetSlider(
 private fun DashboardGearProfileControls(
     selection: GearProfileSelection,
     onSelectionChange: (GearProfileSelection) -> Unit,
+    onOpenMixer: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val layout = DashboardClassicEffectLayout
@@ -2135,7 +2127,7 @@ private fun DashboardGearProfileControls(
         }
         Row(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Bottom,
             modifier = Modifier.padding(layout.columnPadding),
         ) {
             presets.forEach { preset ->
@@ -2147,6 +2139,10 @@ private fun DashboardGearProfileControls(
                     },
                 )
             }
+            DashboardMixerLauncherButton(
+                onClick = onOpenMixer,
+                modifier = Modifier.padding(start = 4.dp),
+            )
         }
     }
 }

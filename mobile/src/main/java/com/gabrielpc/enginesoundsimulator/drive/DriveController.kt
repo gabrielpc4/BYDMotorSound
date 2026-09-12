@@ -346,7 +346,6 @@ class DriveController(context: Context) {
         audioEngine.setBackfireAllowedSamples(backfireSettings.get().allowedSamples)
         applyMinimumAudioThrottleSettings(minimumAudioThrottleSettings.get())
         applySpeedAudioSettings(speedAudioSettings.get())
-        applyManualShiftSoundOverrideCoupling(manualShiftEnabled.get())
         simulation.updateAutomaticTransmissionSettings(automaticTransmissionSettings.get())
         initializeCarNavigation(selectedProfile.get().id)
     }
@@ -427,7 +426,11 @@ class DriveController(context: Context) {
             iphoneCalibrationLogLines = iphoneCalibrationConsole.snapshot(),
             backfireSettings = backfireSettings.get(),
             popsAndBangsOverride = effectSoundOverrides.get().popsAndBangsOverride,
-            shiftSoundsOverride = effectSoundOverrides.get().shiftSoundsOverride,
+            shiftSoundsOverride = SpeedAudioGainResolver.usesRacingGain(
+                manualShiftEnabled = manualShiftEnabled.get(),
+                automaticTransmissionMode = base.drivetrain.automaticTransmissionMode,
+                racingReturnArmed = base.drivetrain.racingReturnArmed,
+            ) || effectSoundOverrides.get().shiftSoundsOverride,
             hasTurbo = activePhysics.get()?.engine?.turbos?.isNotEmpty() == true,
             hasSupercharger = resolveHasSupercharger(),
             fmodUpdateRateHz = fmodUpdateRateHz.get(),
@@ -1585,11 +1588,6 @@ class DriveController(context: Context) {
         shiftModeRepository.setManualEnabled(enabled)
         manualShiftEnabled.set(enabled)
         simulation.manualShiftEnabled = enabled
-        applyManualShiftSoundOverrideCoupling(enabled)
-    }
-
-    private fun applyManualShiftSoundOverrideCoupling(manualEnabled: Boolean) {
-        setEffectOverride(EffectSoundKind.SHIFT, manualEnabled)
     }
 
     fun handleMediaShiftButton(keyCode: Int): Boolean {
